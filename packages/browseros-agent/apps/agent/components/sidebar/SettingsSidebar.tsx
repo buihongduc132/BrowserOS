@@ -95,6 +95,7 @@ const primarySettingsSections: NavSection[] = [
         feature: Feature.ALPHA_FEATURES_SUPPORT,
       },
       { name: 'BrowserOS as MCP', to: '/settings/mcp', icon: Server },
+      { name: 'ACL Rules', to: '/settings/acl', icon: ShieldAlert },
       {
         name: 'ACL Rules',
         to: '/settings/acl',

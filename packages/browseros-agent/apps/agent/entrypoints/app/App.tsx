@@ -17,6 +17,7 @@ import { AgentCommandConversation } from './agent-command/AgentCommandConversati
 import { AgentCommandHome } from './agent-command/AgentCommandHome'
 import { AgentCommandLayout } from './agent-command/agent-command-layout'
 import { AgentsPage } from './agents/AgentsPage'
+import { AclSettingsPage } from './acl-settings/AclSettingsPage'
 import { AISettingsPage } from './ai-settings/AISettingsPage'
 import { CommandSettingsPage } from './command-settings/CommandSettingsPage'
 import { CompactionSettingsPage } from './compaction-settings/CompactionSettingsPage'
