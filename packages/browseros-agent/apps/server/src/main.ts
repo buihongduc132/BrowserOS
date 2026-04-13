@@ -34,6 +34,14 @@ import { logger } from './lib/logger'
 import { metrics } from './lib/metrics'
 import { isPortInUseError } from './lib/port-binding'
 import { Sentry } from './lib/sentry'
+import { seedSoulTemplate } from './lib/soul'
+import { getOpenClawService } from './services/openclaw/openclaw-service'
+import { migrateBuiltinSkills } from './skills/migrate'
+import {
+  startSkillSync,
+  stopSkillSync,
+  syncBuiltinSkills,
+} from './skills/remote-sync'
 import { registry } from './tools/registry'
 import { VERSION } from './version'
 
