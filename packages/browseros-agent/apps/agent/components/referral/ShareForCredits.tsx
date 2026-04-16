@@ -61,6 +61,14 @@ export const ShareForCredits: FC<ShareForCreditsProps> = ({ compact }) => {
         Share BrowserOS on Twitter to earn 200 bonus credits!
       </p>
 
+      <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground text-xs">
+        <li>
+          Tweet must mention <span className="font-medium">@browserOS_ai</span>
+        </li>
+        <li>Tweet must be posted within the last 30 minutes</li>
+        <li>Each tweet can only be submitted once</li>
+      </ul>
+
       <Button variant="outline" size="sm" className="w-full gap-2" asChild>
         <a
           href={getShareOnTwitterUrl()}

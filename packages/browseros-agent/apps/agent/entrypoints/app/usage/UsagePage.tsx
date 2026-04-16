@@ -44,8 +44,10 @@ export const UsagePage: FC = () => {
   }
 
   const credits = data?.credits ?? 0
-  const total = data?.dailyLimit ?? 100
+  const total = data?.dailyLimit ?? 50
   const percentage = Math.min((credits / total) * 100, 100)
+  const bonusCredits = Math.max(0, credits - total)
+  const creditsUsed = Math.max(0, total - credits)
 
   return (
     <div className="space-y-6 p-6">
@@ -96,10 +98,21 @@ export const UsagePage: FC = () => {
           <div className="flex items-center gap-2.5 rounded-lg bg-muted/50 px-3 py-2.5">
             <Zap className="h-4 w-4 shrink-0 text-muted-foreground" />
             <div>
-              <p className="font-medium text-xs">Credits used today</p>
-              <p className="text-muted-foreground text-xs">
-                {total - credits} of {total}
-              </p>
+              {bonusCredits > 0 ? (
+                <>
+                  <p className="font-medium text-xs">Bonus credits</p>
+                  <p className="text-muted-foreground text-xs">
+                    +{bonusCredits} from referrals
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="font-medium text-xs">Credits used today</p>
+                  <p className="text-muted-foreground text-xs">
+                    {creditsUsed} of {total}
+                  </p>
+                </>
+              )}
             </div>
           </div>
         </div>
