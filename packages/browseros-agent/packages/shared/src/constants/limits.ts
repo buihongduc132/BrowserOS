@@ -102,10 +102,7 @@ export const CONTENT_LIMITS = {
   CONSOLE_MAX_LIMIT: 200,
 } as const
 
-export const AGENT_HARNESS_LIMITS = {
-  AGENT_NAME_MAX_CHARS: 80,
-  /** Maximum number of messages allowed in an agent's pending queue. */
-  QUEUE_MAX_LENGTH: 50,
-  /** Maximum size in bytes for a single queued message's text. */
-  QUEUE_MESSAGE_MAX_BYTES: 64 * 1024,
+export const REFERRAL_LIMITS = {
+  MAX_DAILY_CREDITS: 500,
+  CREDITS_PER_REFERRAL: 200,
 } as const
