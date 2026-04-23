@@ -24,11 +24,48 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
-import {
-  buildRunSummaries,
-  type ReportManifest,
-  type RunSummary,
-} from '../src/reporting/run-summary'
+
+interface ManifestTask {
+  queryId: string
+  query: string
+  status: string
+  durationMs: number
+  screenshotCount: number
+  graderResults: Record<string, { pass: boolean; score: number }>
+}
+
+interface Manifest {
+  runId: string
+  uploadedAt: string
+  agentConfig?: { type?: string; model?: string }
+  dataset?: string
+  summary?: { passRate?: number; avgDurationMs?: number }
+  tasks: ManifestTask[]
+}
+
+interface RunSummary {
+  runId: string
+  configName: string
+  date: string
+  avgScore: number
+  total: number
+  completed: number
+  failed: number
+  timeout: number
+  avgDurationMs: number
+  model: string
+  dataset: string
+  agentType: string
+}
+
+const PASS_FAIL_GRADER_ORDER = [
+  'agisdk_state_diff',
+  'infinity_state',
+  'performance_grader',
+  'webvoyager_grader',
+  'fara_combined',
+  'fara_grader',
+]
 
 function requireEnv(name: string): string {
   const value = process.env[name]

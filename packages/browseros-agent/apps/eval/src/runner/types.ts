@@ -106,6 +106,15 @@ export interface TaskResultSummary {
 // Pass/Fail Determination
 // ============================================================================
 
+export const PASS_FAIL_GRADER_ORDER = [
+  'agisdk_state_diff',
+  'infinity_state',
+  'performance_grader',
+  'webvoyager_grader',
+  'fara_combined',
+  'fara_grader',
+] as const
+
 export function getPrimaryGraderResult(
   graderResults: Record<string, { pass: boolean; score: number }>,
 ): { name: string; pass: boolean; score: number } | null {
