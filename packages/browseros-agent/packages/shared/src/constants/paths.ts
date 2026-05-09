@@ -4,7 +4,18 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
  * Centralized file system paths.
+ *
+ * Retention and sizing values can be overridden via environment variables.
  */
+
+/** Read a positive integer limit from env, returning fallback on invalid input. */
+function envInt(name: string, fallback: number): number {
+  const raw = process.env[name]
+  if (raw === undefined) return fallback
+  const parsed = Number.parseInt(raw, 10)
+  if (Number.isNaN(parsed) || parsed < 0) return fallback
+  return parsed
+}
 
 export const PATHS = {
   DEFAULT_EXECUTION_DIR: process.cwd(),
@@ -17,5 +28,8 @@ export const PATHS = {
   TOOL_OUTPUT_DIR_NAME: 'tool-output',
   SOUL_FILE_NAME: 'SOUL.md',
   SERVER_CONFIG_FILE_NAME: 'server.json',
-  SESSION_RETENTION_DAYS: 30,
-} as const
+  OPENCLAW_DIR_NAME: 'openclaw',
+  SOUL_MAX_LINES: envInt('BROWSEROS_LIMIT_SOUL_MAX_LINES', 150),
+  MEMORY_RETENTION_DAYS: envInt('BROWSEROS_LIMIT_MEMORY_RETENTION_DAYS', 30),
+  SESSION_RETENTION_DAYS: envInt('BROWSEROS_LIMIT_SESSION_RETENTION_DAYS', 30),
+}
