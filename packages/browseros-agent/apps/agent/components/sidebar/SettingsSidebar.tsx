@@ -8,6 +8,9 @@ import {
   Palette,
   RotateCcw,
   Server,
+  Settings2,
+  ShieldAlert,
+  ShieldCheck,
 } from 'lucide-react'
 import type { FC } from 'react'
 import { NavLink } from 'react-router'
@@ -83,6 +86,7 @@ const primarySettingsSections: NavSection[] = [
         icon: CreditCard,
         feature: Feature.CREDITS_SUPPORT,
       },
+      { name: 'Advanced Config', to: '/settings/advanced', icon: Settings2 },
     ],
   },
 ]

@@ -10,13 +10,15 @@
  * - MCP HTTP routes (using @hono/mcp transport)
  */
 
+import { configStore } from '@browseros/shared/constants/config-store'
+import { OPENCLAW_GATEWAY_CONTAINER_NAME } from '@browseros/shared/constants/openclaw'
 import { Hono } from 'hono'
 import { websocket } from 'hono/bun'
 import { cors } from 'hono/cors'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { HttpAgentError } from '../agent/errors'
 import { INLINED_ENV } from '../env'
-import { ensureHermesRuntimeReady } from '../lib/agents/runtime'
+import { getAdvancedConfigPath } from '../lib/browseros-dir'
 import { KlavisClient } from '../lib/clients/klavis/klavis-client'
 import { initializeOAuth, shutdownOAuth } from '../lib/clients/oauth'
 import { getDb } from '../lib/db'
@@ -24,6 +26,7 @@ import { logger } from '../lib/logger'
 import { Sentry } from '../lib/sentry'
 import { createAgentRoutes } from './routes/agents'
 import { createChatRoutes } from './routes/chat'
+import { createConfigRoutes } from './routes/config'
 import { createCreditsRoutes } from './routes/credits'
 import { createHealthRoute } from './routes/health'
 import { createKlavisRoutes } from './routes/klavis'
@@ -78,6 +81,7 @@ export async function createHttpServer(config: HttpServerConfig) {
   } = config
 
   const { onShutdown } = config
+  configStore.init(getAdvancedConfigPath())
   const tokenManager = browserosId
     ? initializeOAuth(getDb(), browserosId)
     : null
@@ -132,6 +136,10 @@ export async function createHttpServer(config: HttpServerConfig) {
       }),
     )
     .route('/status', createStatusRoute({ browser }))
+    .route('/config', createConfigRoutes())
+    .route('/soul', createSoulRoutes())
+    .route('/memory', createMemoryRoutes())
+    .route('/skills', createSkillsRoutes())
     .route('/monitoring', monitoringRoutes)
     .route('/test-provider', createProviderRoutes({ browserosId }))
     .route('/refine-prompt', createRefinePromptRoutes({ browserosId }))

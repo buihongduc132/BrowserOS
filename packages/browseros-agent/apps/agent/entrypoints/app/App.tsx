@@ -10,6 +10,9 @@ import { OnboardingDemo } from '../onboarding/demo/OnboardingDemo'
 import { FeaturesPage } from '../onboarding/features/Features'
 import { Onboarding } from '../onboarding/index/Onboarding'
 import { StepsLayout } from '../onboarding/steps/StepsLayout'
+import { AclSettingsPage } from './acl-settings/AclSettingsPage'
+import { AdminDashboardPage } from './admin-dashboard/AdminDashboardPage'
+import { AdvancedConfigPage } from './advanced-config/AdvancedConfigPage'
 import { AgentCommandConversation } from './agent-command/AgentCommandConversation'
 import { AgentCommandHome } from './agent-command/AgentCommandHome'
 import { AgentCommandLayout } from './agent-command/agent-command-layout'
@@ -128,10 +131,8 @@ export const App: FC = () => {
             <Route path="chat" element={<LlmHubPage />} />
             <Route path="mcp" element={<MCPSettingsPage />} />
             <Route path="customization" element={<CustomizationPage />} />
-            <Route
-              path="search"
-              element={<Navigate to="/settings/ai" replace />}
-            />
+            <Route path="search" element={<SearchProviderPage />} />
+            <Route path="advanced" element={<AdvancedConfigPage />} />
             <Route path="survey" element={<SurveyPage {...surveyParams} />} />
             <Route path="usage" element={<UsagePage />} />
             <Route path="*" element={<Navigate to="/settings/ai" replace />} />
