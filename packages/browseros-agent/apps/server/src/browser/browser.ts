@@ -1422,7 +1422,7 @@ export class Browser {
 
   // --- Extension Message Bridge (L3) ---
 
-  async listMessageableExtensions() {
+  async listMessageableExtensions(): Promise<extensionBridge.MessageableExtension[]> {
     return extensionBridge.listMessageableExtensions(this.cdp)
   }
 
@@ -1430,7 +1430,7 @@ export class Browser {
     extensionId: string,
     message: unknown,
     timeoutMs?: number,
-  ) {
+  ): Promise<unknown> {
     return extensionBridge.sendExtensionMessage(this.cdp, extensionId, message, timeoutMs)
   }
 
