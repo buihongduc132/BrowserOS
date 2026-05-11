@@ -176,15 +176,19 @@ export class DbAgentStore implements AgentStore {
   }
 }
 
-function toAgentDefinition(row: AgentDefinitionRow): AgentDefinition | null {
-  const adapter = row.adapter as unknown
-  if (!isAgentAdapter(adapter)) {
-    logger.warn('Agent harness store ignored unsupported adapter row', {
-      agentId: row.id,
-      adapter,
-      store: 'sqlite',
-    })
-    return null
+function toAgentDefinition(row: AgentDefinitionRow): AgentDefinition {
+  let customCommand: string | undefined
+  let customArgs: string[] | undefined
+  let customLabel: string | undefined
+  if (row.adapterConfigJson) {
+    try {
+      const parsed = JSON.parse(row.adapterConfigJson)
+      if (typeof parsed.customCommand === 'string')
+        customCommand = parsed.customCommand
+      if (Array.isArray(parsed.customArgs)) customArgs = parsed.customArgs
+      if (typeof parsed.customLabel === 'string')
+        customLabel = parsed.customLabel
+    } catch {}
   }
   return {
     id: row.id,
@@ -195,6 +199,9 @@ function toAgentDefinition(row: AgentDefinitionRow): AgentDefinition | null {
     permissionMode: row.permissionMode,
     sessionKey: row.sessionKey,
     pinned: row.pinned,
+    ...(customCommand !== undefined ? { customCommand } : {}),
+    ...(customArgs !== undefined ? { customArgs } : {}),
+    ...(customLabel !== undefined ? { customLabel } : {}),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   }
@@ -212,6 +219,13 @@ function serializeAdapterConfig(input: CreateAgentInput): string | null {
     ...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
     ...(input.supportsImages !== undefined
       ? { supportsImages: input.supportsImages }
+      : {}),
+    ...(input.customCommand !== undefined
+      ? { customCommand: input.customCommand }
+      : {}),
+    ...(input.customArgs !== undefined ? { customArgs: input.customArgs } : {}),
+    ...(input.customLabel !== undefined
+      ? { customLabel: input.customLabel }
       : {}),
   }
   return Object.keys(config).length > 0 ? JSON.stringify(config) : null

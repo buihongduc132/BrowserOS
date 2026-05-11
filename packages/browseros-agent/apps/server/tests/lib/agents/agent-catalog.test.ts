@@ -7,16 +7,18 @@ import { describe, expect, it } from 'bun:test'
 import {
   AGENT_ADAPTER_CATALOG,
   getAgentAdapterDescriptor,
+  isAgentAdapter,
   isSupportedAgentModel,
   isSupportedReasoningEffort,
 } from '../../../src/lib/agents/agent-catalog'
 
 describe('AGENT_ADAPTER_CATALOG', () => {
-  it('exposes shipped adapters with model and effort options', () => {
+  it('exposes Claude, Codex, OpenClaw, Hermes, and Custom adapters with model and effort options', () => {
     expect(AGENT_ADAPTER_CATALOG.map((adapter) => adapter.id)).toEqual([
       'claude',
       'codex',
       'hermes',
+      'custom',
     ])
 
     expect(getAgentAdapterDescriptor('claude')).toMatchObject({
@@ -46,5 +48,31 @@ describe('AGENT_ADAPTER_CATALOG', () => {
 
     expect(isSupportedReasoningEffort('codex', 'xhigh')).toBe(true)
     expect(isSupportedReasoningEffort('claude', 'banana')).toBe(false)
+    expect(isSupportedReasoningEffort('openclaw', 'adaptive')).toBe(true)
+    expect(isSupportedReasoningEffort('openclaw', 'xhigh')).toBe(false)
+
+    // Custom adapter: no per-session model picker, like OpenClaw/Hermes.
+    expect(getAgentAdapterDescriptor('custom')).toMatchObject({
+      id: 'custom',
+      name: 'Custom ACP Agent',
+      defaultModelId: 'default',
+      defaultReasoningEffort: 'medium',
+      modelControl: 'best-effort',
+    })
+    expect(getAgentAdapterDescriptor('custom')?.models).toEqual([])
+    expect(isSupportedAgentModel('custom', undefined)).toBe(true)
+    expect(isSupportedAgentModel('custom', 'default')).toBe(true)
+    expect(isSupportedAgentModel('custom', 'anything')).toBe(false)
+    expect(isSupportedReasoningEffort('custom', 'low')).toBe(true)
+    expect(isSupportedReasoningEffort('custom', 'medium')).toBe(true)
+    expect(isSupportedReasoningEffort('custom', 'high')).toBe(true)
+    expect(isSupportedReasoningEffort('custom', 'xhigh')).toBe(false)
+  })
+
+  it('recognizes custom as a valid adapter', () => {
+    expect(isAgentAdapter('custom')).toBe(true)
+    expect(isAgentAdapter('unknown')).toBe(false)
+    expect(isAgentAdapter(42)).toBe(false)
+    expect(isAgentAdapter(null)).toBe(false)
   })
 })

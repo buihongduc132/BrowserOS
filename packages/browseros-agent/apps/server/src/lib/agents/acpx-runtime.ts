@@ -178,6 +178,8 @@ export class AcpxRuntime implements AgentRuntime {
       commandIdentity: prepared.commandIdentity,
       useBrowserosMcp: prepared.useBrowserosMcp,
       browserosMcpHost: prepared.browserosMcpHost,
+      openclawSessionKey: prepared.openclawSessionKey,
+      agent: input.agent,
     })
 
     return createAcpxEventStream(runtime, input, {
@@ -236,6 +238,8 @@ export class AcpxRuntime implements AgentRuntime {
     commandIdentity: string
     useBrowserosMcp: boolean
     browserosMcpHost?: string
+    openclawSessionKey: string | null
+    agent: AgentDefinition
   }): AcpxCoreRuntime {
     const mcpHost = input.browserosMcpHost ?? '127.0.0.1'
     const key = JSON.stringify({
@@ -249,13 +253,15 @@ export class AcpxRuntime implements AgentRuntime {
     const existing = this.runtimes.get(key)
     if (existing) return existing
 
+    const customAgents = new Map<string, AgentDefinition>()
+    customAgents.set(input.agent.id, input.agent)
+
     const runtime = this.runtimeFactory({
       cwd: input.cwd,
       sessionStore: this.sessionStore,
       agentRegistry: createBrowserosAgentRegistry({
         commandEnv: input.commandEnv,
-        resourcesDir: this.resourcesDir,
-        browserosDir: this.browserosDir,
+        customAgents,
       }),
       mcpServers: input.useBrowserosMcp
         ? createBrowserosMcpServers(this.browserosServerPort, mcpHost)
@@ -567,7 +573,10 @@ function createAcpxEventStream(
       const run = async () => {
         const handle = await runtime.ensureSession({
           sessionKey: prepared.runtimeSessionKey,
-          agent: input.agent.adapter,
+          agent:
+            input.agent.adapter === 'custom'
+              ? `custom:${input.agent.id}`
+              : input.agent.adapter,
           mode: 'persistent',
           cwd: prepared.cwd,
         })
@@ -659,8 +668,7 @@ function createBrowserosMcpServers(
 
 function createBrowserosAgentRegistry(input: {
   commandEnv: Record<string, string>
-  resourcesDir: string | null
-  browserosDir: string
+  customAgents: Map<string, AgentDefinition>
 }): AcpRuntimeOptions['agentRegistry'] {
   const registry = createAgentRegistry()
 
@@ -690,6 +698,16 @@ function createBrowserosAgentRegistry(input: {
           launch.addMacosAdapterEnv
             ? withMacosAcpAdapterEnv(input.commandEnv, input.browserosDir)
             : input.commandEnv,
+        )
+      }
+
+      if (lower.startsWith('custom:')) {
+        const agentId = lower.slice('custom:'.length)
+        const def = input.customAgents.get(agentId)
+        if (!def?.customCommand) return agentName
+        return wrapCommandWithEnv(
+          [def.customCommand, ...(def.customArgs ?? [])].join(' '),
+          input.commandEnv,
         )
       }
 
