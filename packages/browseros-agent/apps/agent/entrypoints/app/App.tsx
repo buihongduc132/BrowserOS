@@ -18,6 +18,7 @@ import { AgentCommandHome } from './agent-command/AgentCommandHome'
 import { AgentCommandLayout } from './agent-command/agent-command-layout'
 import { AgentsPage } from './agents/AgentsPage'
 import { AISettingsPage } from './ai-settings/AISettingsPage'
+import { CompactionSettingsPage } from './compaction-settings/CompactionSettingsPage'
 import { ConnectMCP } from './connect-mcp/ConnectMCP'
 import { CustomizationPage } from './customization/CustomizationPage'
 import { SurveyPage } from './jtbd-agent/SurveyPage'
@@ -31,6 +32,10 @@ import { MagicLinkCallback } from './login/MagicLinkCallback'
 import { MCPSettingsPage } from './mcp-settings/MCPSettingsPage'
 import { ProfilePage } from './profile/ProfilePage'
 import { ScheduledTasksPage } from './scheduled-tasks/ScheduledTasksPage'
+import { SearchProviderPage } from './search-provider/SearchProviderPage'
+import { SkillsPage } from './skills/SkillsPage'
+import { SoulPage } from './soul/SoulPage'
+import { ToolApprovalsPage } from './tool-approvals/ToolApprovalsPage'
 import { UsagePage } from './usage/UsagePage'
 
 function getSurveyParams(): { maxTurns?: number; experimentId?: string } {
@@ -98,6 +103,9 @@ export const App: FC = () => {
             ) : (
               <Route index element={<NewTab />} />
             )}
+            <Route path="soul" element={<SoulPage />} />
+            <Route path="skills" element={<SkillsPage />} />
+            <Route path="memory" element={<MemoryPage />} />
           </Route>
 
           {/* Primary nav routes */}
@@ -121,6 +129,9 @@ export const App: FC = () => {
               </Route>
             </>
           ) : null}
+          {alphaEnabled ? (
+            <Route path="admin" element={<AdminDashboardPage />} />
+          ) : null}
         </Route>
 
         {/* Settings with dedicated sidebar */}
@@ -133,9 +144,15 @@ export const App: FC = () => {
             <Route path="customization" element={<CustomizationPage />} />
             <Route path="search" element={<SearchProviderPage />} />
             <Route path="advanced" element={<AdvancedConfigPage />} />
+            <Route path="compaction" element={<CompactionSettingsPage />} />
             <Route path="survey" element={<SurveyPage {...surveyParams} />} />
             <Route path="usage" element={<UsagePage />} />
-            <Route path="*" element={<Navigate to="/settings/ai" replace />} />
+            {alphaEnabled ? (
+              <>
+                <Route path="acl" element={<AclSettingsPage />} />
+                <Route path="approvals" element={<ToolApprovalsPage />} />
+              </>
+            ) : null}
           </Route>
         </Route>
 
@@ -167,7 +184,18 @@ export const App: FC = () => {
           path="/observability"
           element={<Navigate to="/home" replace />}
         />
-        <Route path="/executions" element={<Navigate to="/home" replace />} />
+        <Route
+          path="/audit"
+          element={<Navigate to={alphaEnabled ? '/admin' : '/home'} replace />}
+        />
+        <Route
+          path="/observability"
+          element={<Navigate to={alphaEnabled ? '/admin' : '/home'} replace />}
+        />
+        <Route
+          path="/executions"
+          element={<Navigate to={alphaEnabled ? '/admin' : '/home'} replace />}
+        />
         <Route path="/options/*" element={<OptionsRedirect />} />
 
         {/* Fallback to home */}
