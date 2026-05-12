@@ -18,26 +18,22 @@ import type { CompactionStrategyConfig } from '../../src/agent/types'
 
 // ─── Zone 4: Error propagation ──────────────────────────────
 
-describe('CompactionStrategyConfig — method defaults', () => {
-  it('invalid method value → defaults to "default"', () => {
+describe('CompactionStrategyConfig — error propagation', () => {
+  it('throws on invalid method value', () => {
     const raw = { method: 'invalid' }
-    const result = resolveCompactionConfig(raw)
-    expect(result).toBeDefined()
-    expect(result!.method).toBe('default')
+    expect(() => resolveCompactionConfig(raw)).toThrow(
+      /invalid.*method|method.*invalid/i,
+    )
   })
 
-  it('method being a number → defaults to "default"', () => {
+  it('throws on method being a number', () => {
     const raw = { method: 42 }
-    const result = resolveCompactionConfig(raw)
-    expect(result).toBeDefined()
-    expect(result!.method).toBe('default')
+    expect(() => resolveCompactionConfig(raw)).toThrow()
   })
 
-  it('method being null → defaults to "default"', () => {
+  it('throws on method being null', () => {
     const raw = { method: null }
-    const result = resolveCompactionConfig(raw)
-    expect(result).toBeDefined()
-    expect(result!.method).toBe('default')
+    expect(() => resolveCompactionConfig(raw)).toThrow()
   })
 })
 

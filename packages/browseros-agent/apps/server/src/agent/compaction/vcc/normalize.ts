@@ -71,9 +71,7 @@ function normalizeOne(msg: ModelMessage, msgIndex: number): NormalizedBlock[] {
     }
     // Check for image parts
     if (Array.isArray(msg.content)) {
-      for (const part of msg.content as unknown as Array<
-        Record<string, unknown>
-      >) {
+      for (const part of msg.content as Array<Record<string, unknown>>) {
         if (part.type === 'image') {
           return [
             {

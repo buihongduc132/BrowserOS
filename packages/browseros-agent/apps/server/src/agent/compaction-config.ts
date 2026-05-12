@@ -5,8 +5,6 @@
  *
  * Compaction strategy config resolution and validation.
  */
-
-import { logger } from '../lib/logger'
 import type { CompactionStrategyConfig } from './types'
 
 const VALID_METHODS = new Set(['default', 'vcc'])
@@ -32,20 +30,17 @@ export function resolveCompactionConfig(
     return undefined
   }
 
-  // Validate method — default to 'default' if absent or invalid
-  const rawMethod = input.method
-  const method =
-    typeof rawMethod === 'string' && VALID_METHODS.has(rawMethod)
-      ? rawMethod
-      : 'default'
+  // Validate method
+  const method = input.method
+  if (method == null || typeof method !== 'string') {
+    throw new Error(
+      'Compaction config: "method" must be a string ("default" | "vcc")',
+    )
+  }
 
-  if (
-    rawMethod != null &&
-    typeof rawMethod === 'string' &&
-    !VALID_METHODS.has(rawMethod)
-  ) {
-    logger.warn(
-      `Compaction config: invalid method "${rawMethod}", falling back to "default"`,
+  if (!VALID_METHODS.has(method)) {
+    throw new Error(
+      `Compaction config: invalid method "${method}". Must be "default" or "vcc"`,
     )
   }
 
@@ -89,7 +84,7 @@ export function resolveCompactionConfig(
 
   // Warn on mismatched combinations
   if (method === 'default' && 'vccConfig' in input && input.vccConfig != null) {
-    logger.warn(
+    console.warn(
       '[compaction] vccConfig is set but method is "default" — vccConfig will be ignored',
     )
   }
@@ -98,7 +93,7 @@ export function resolveCompactionConfig(
     'customPrompt' in input &&
     typeof input.customPrompt === 'string'
   ) {
-    logger.warn(
+    console.warn(
       '[compaction] customPrompt is set but method is "vcc" — customPrompt will be ignored',
     )
   }

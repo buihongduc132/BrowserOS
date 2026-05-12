@@ -5,6 +5,30 @@
  */
 import type { LLMProvider } from '@browseros/shared/schemas/llm'
 
+export interface CompactionStrategyConfig {
+  /** Compaction method. Default: "default" (LLM summarization) */
+  method: 'default' | 'vcc'
+
+  /**
+   * When method=="default": replace the summarization prompt.
+   * null/undefined = use built-in BrowserOS prompt.
+   */
+  customPrompt?: string
+
+  /**
+   * When method=="vcc": override section caps.
+   * null/undefined = use built-in pi-vcc defaults.
+   */
+  vccConfig?: {
+    maxTranscriptLines?: number
+    maxGoalLines?: number
+    maxFileEntries?: number
+    maxCommitEntries?: number
+    maxPreferenceLines?: number
+    maxOutstandingLines?: number
+  }
+}
+
 export interface ProviderConfig {
   provider: LLMProvider
   model: string
@@ -50,4 +74,8 @@ export interface ResolvedAgentConfig {
   origin?: 'sidepanel' | 'newtab'
   /** BrowserOS installation ID for credit-based tracking. */
   browserosId?: string
+  /** Tool approval configuration — which categories require human approval. */
+  toolApprovalConfig?: ToolApprovalConfig
+  /** Compaction strategy configuration. Undefined = default LLM summarization. */
+  compaction?: CompactionStrategyConfig
 }
