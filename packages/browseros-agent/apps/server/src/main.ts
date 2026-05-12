@@ -85,6 +85,7 @@ export class Application {
         resourcesDir: this.config.resourcesDir,
         codegenServiceUrl: this.config.codegenServiceUrl,
         aiSdkDevtoolsEnabled: this.config.aiSdkDevtoolsEnabled,
+        compaction: this.config.compaction,
 
         onShutdown: () => this.stop('shutdown-endpoint'),
       })

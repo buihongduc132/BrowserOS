@@ -200,6 +200,7 @@ export async function createHttpServer(config: HttpServerConfig) {
         browserosId,
         klavisRef,
         aiSdkDevtoolsEnabled: config.aiSdkDevtoolsEnabled,
+        compaction: config.compaction,
       }),
     )
   // Error handler
