@@ -14,6 +14,9 @@ import type {
 export interface AgentPageActionInput {
   createRuntime: CreateAgentRuntime
   createHermesProviderId: string
+  customArgs?: string
+  customCommand?: string
+  customLabel?: string
   harnessModelId: string
   harnessReasoningEffort: string
   navigate: NavigateFunction
@@ -27,6 +30,9 @@ export interface AgentPageActionInput {
     providerType?: string
     apiKey?: string
     baseUrl?: string
+    customCommand?: string
+    customArgs?: string[]
+    customLabel?: string
   }) => Promise<HarnessAgent>
   deleteHarnessAgent: (agentId: string) => Promise<unknown>
   setCreateError: (error: string | null) => void
@@ -50,6 +56,7 @@ export function createAgentPageActions(input: AgentPageActionInput) {
     if (!input.newName.trim()) return
 
     const isHermes = input.createRuntime === 'hermes'
+    const isCustom = input.createRuntime === 'custom'
     // Hermes pulls every provider field from the user's selected entry
     // in the global LLM-providers list (managed under AI Settings). The
     // backend rejects creation if any required field is missing.
@@ -72,6 +79,14 @@ export function createAgentPageActions(input: AgentPageActionInput) {
         providerType: hermesProvider?.type,
         apiKey: hermesProvider?.apiKey,
         baseUrl: hermesProvider?.baseUrl,
+        customCommand: isCustom ? (input.customCommand ?? '').trim() : undefined,
+        customArgs: isCustom
+          ? (input.customArgs ?? '')
+              .split(/\s+/)
+              .map((value) => value.trim())
+              .filter(Boolean)
+          : undefined,
+        customLabel: isCustom ? (input.customLabel ?? '').trim() || undefined : undefined,
       })
       input.setCreateOpen(false)
       input.setNewName('')
@@ -92,6 +107,7 @@ export function createAgentPageActions(input: AgentPageActionInput) {
       claude: handleHarnessCreate,
       codex: handleHarnessCreate,
       hermes: handleHarnessCreate,
+      custom: handleHarnessCreate,
     }
     void createByRuntime[input.createRuntime]()
   }

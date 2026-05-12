@@ -147,7 +147,7 @@ export function mapHistoryItemToAgentMessage(
 
   // Reasoning, then tool calls, then text — the chronological order the
   // agent produced them (think → act → answer).
-  if (item.reasoning && item.reasoning.text.trim().length > 0) {
+  if (item.reasoning && (item.reasoning.text ?? '').trim().length > 0) {
     // 0ms means thinking and the final answer were emitted in the same JSONL
     // line (no tool calls between them) — there's no real elapsed wall-clock,
     // so fall through to the "Thinking" trigger instead of "Thought for 0
@@ -180,7 +180,7 @@ export function mapHistoryItemToAgentMessage(
 
   // Only emit a text part when there's actual content. User messages with
   // only attachments and no caption shouldn't render an empty bubble.
-  if (item.text.trim().length > 0) {
+  if ((item.text ?? '').trim().length > 0) {
     parts.push({ type: 'text', text: item.text })
   }
 
@@ -220,9 +220,9 @@ export function buildChatHistoryFromAgentMessages(
     .map((message) => {
       const content = message.parts
         .filter((part): part is { type: 'text'; text: string } => {
-          return part.type === 'text' && part.text.trim().length > 0
+          return part.type === 'text' && (part.text ?? '').trim().length > 0
         })
-        .map((part) => part.text.trim())
+        .map((part) => (part.text ?? '').trim())
         .join('\n\n')
 
       return content ? { role: message.role, content } : null
@@ -251,7 +251,7 @@ function isTurnPersistedInHistory(
   if (!assistantText) return false
 
   const minTimestamp = turn.timestamp - TURN_HISTORY_MATCH_WINDOW_MS
-  const userText = turn.userText.trim()
+  const userText = (turn.userText ?? '').trim()
   const userPersisted =
     !userText ||
     historyMessages.some(
