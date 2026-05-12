@@ -30,7 +30,6 @@ import { createAgentRoutes } from './routes/agents'
 import { createAgentSessionRoutes } from './routes/agent-sessions'
 import { createAssistantSessionRoutes } from './routes/assistant-sessions'
 import { createChatRoutes } from './routes/chat'
-import { createCommandsRoutes } from './routes/commands'
 import { createCompactionRoutes } from './routes/compaction'
 import { createConfigRoutes } from './routes/config'
 import { createCreditsRoutes } from './routes/credits'
@@ -156,7 +155,12 @@ export async function createHttpServer(config: HttpServerConfig) {
       '/agents',
       createAgentSessionRoutes({ sessionStore: sharedSessionStore }),
     )
-    .route('/assistant', createAssistantSessionRoutes())
+    .route(
+      '/compaction',
+      new Hono<Env>()
+        .use('/*', requireTrustedAppOrigin())
+        .route('/', createCompactionRoutes()),
+    )
     .route('/soul', createSoulRoutes())
     .route('/memory', createMemoryRoutes())
     .route('/skills/sources', createSkillSourcesRoutes())

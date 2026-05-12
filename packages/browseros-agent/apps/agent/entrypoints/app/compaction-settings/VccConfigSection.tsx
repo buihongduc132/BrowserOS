@@ -7,7 +7,6 @@ import type { VccConfig } from './compaction-queries'
 interface VccConfigSectionProps {
   values: VccConfig
   onChange: (values: VccConfig) => void
-  errors: Record<string, string>
 }
 
 interface FieldDef {
@@ -70,26 +69,9 @@ const VCC_FIELDS: FieldDef[] = [
   },
 ]
 
-export const VCC_DEFAULTS: VccConfig = Object.fromEntries(
-  VCC_FIELDS.map((f) => [f.key, f.default]),
-) as VccConfig
-
-export function validateVccField(field: FieldDef, raw: string): string | null {
-  const normalized = raw.trim()
-  if (!/^\d+$/.test(normalized)) return 'Enter a whole non-negative integer'
-  const value = Number(normalized)
-  if (value < field.min) return `Minimum is ${field.min}`
-  if (value > field.max) return `Maximum is ${field.max}`
-  return null
-}
-
-export type { FieldDef }
-export { VCC_FIELDS }
-
 export const VccConfigSection: FC<VccConfigSectionProps> = ({
   values,
   onChange,
-  errors,
 }) => {
   const [open, setOpen] = useState(true)
 
@@ -125,43 +107,35 @@ export const VccConfigSection: FC<VccConfigSectionProps> = ({
           {VCC_FIELDS.map((field) => {
             const current = values[field.key]
             const isDefault = current === undefined || current === field.default
-            const error = errors[field.key]
 
             return (
-              <div key={field.key}>
-                <div className="flex items-center gap-4">
-                  <div className="min-w-0 flex-1">
-                    <div className="font-medium text-sm">{field.label}</div>
-                    <div className="text-muted-foreground text-xs">
-                      Default: {field.default} {field.unit}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min={field.min}
-                      max={field.max}
-                      value={current ?? field.default}
-                      onChange={(e) =>
-                        handleFieldChange(field.key, e.target.value)
-                      }
-                      className={cn(
-                        'h-9 w-24 rounded-md border bg-transparent px-3 text-right font-mono text-sm',
-                        error
-                          ? 'border-destructive'
-                          : isDefault
-                            ? 'border-border'
-                            : 'border-primary/50 bg-primary/5',
-                      )}
-                    />
-                    <span className="w-16 text-muted-foreground text-xs">
-                      {field.unit}
-                    </span>
+              <div key={field.key} className="flex items-center gap-4">
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium text-sm">{field.label}</div>
+                  <div className="text-muted-foreground text-xs">
+                    Default: {field.default} {field.unit}
                   </div>
                 </div>
-                {error && (
-                  <p className="mt-1 pl-0 text-destructive text-xs">{error}</p>
-                )}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={field.min}
+                    max={field.max}
+                    value={current ?? field.default}
+                    onChange={(e) =>
+                      handleFieldChange(field.key, e.target.value)
+                    }
+                    className={cn(
+                      'h-9 w-24 rounded-md border bg-transparent px-3 text-right font-mono text-sm',
+                      isDefault
+                        ? 'border-border'
+                        : 'border-primary/50 bg-primary/5',
+                    )}
+                  />
+                  <span className="w-16 text-muted-foreground text-xs">
+                    {field.unit}
+                  </span>
+                </div>
               </div>
             )
           })}

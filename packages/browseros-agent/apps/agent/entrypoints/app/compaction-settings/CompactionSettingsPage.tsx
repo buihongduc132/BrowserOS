@@ -4,21 +4,26 @@ import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { PendingRestartBanner } from '../advanced-config/PendingRestartBanner'
-import {
-  type CompactionConfig,
-  useCompactionConfig,
-  type VccConfig,
-} from './compaction-queries'
+import type { CompactionConfig, VccConfig } from './compaction-queries'
+import { useCompactionConfig } from './compaction-queries'
 import { MethodSelector } from './MethodSelector'
-import {
-  VCC_DEFAULTS,
-  VCC_FIELDS,
-  VccConfigSection,
-  validateVccField,
-} from './VccConfigSection'
+import { VccConfigSection } from './VccConfigSection'
 
-// Single source of truth: VCC defaults come from VccConfigSection's VCC_FIELDS
-const VCC_FIELD_DEFAULTS = VCC_DEFAULTS
+const VCC_FIELD_DEFAULTS: VccConfig = {
+  maxTranscriptLines: 120,
+  maxGoalLines: 8,
+  maxFileEntries: 10,
+  maxCommitEntries: 8,
+  maxPreferenceLines: 15,
+  maxOutstandingLines: 10,
+}
+
+function isVccConfigDefault(vcc?: VccConfig): boolean {
+  if (!vcc) return true
+  return (Object.keys(VCC_FIELD_DEFAULTS) as (keyof VccConfig)[]).every(
+    (key) => vcc[key] === undefined || vcc[key] === VCC_FIELD_DEFAULTS[key],
+  )
+}
 
 export const CompactionSettingsPage: FC = () => {
   const {
@@ -36,12 +41,12 @@ export const CompactionSettingsPage: FC = () => {
   const [vccConfig, setVccConfig] = useState<VccConfig>({})
   const [hasPendingRestart, setHasPendingRestart] = useState(false)
 
-  // Populate form from server data on first load only
+  // Populate form from server data
   useEffect(() => {
     if (!config) return
     const active = config.active
     if (active) {
-      setMethod(active.method ?? 'default')
+      setMethod(active.method)
       setCustomPrompt(active.customPrompt ?? '')
       setVccConfig(active.vccConfig ?? {})
     } else {
@@ -49,51 +54,36 @@ export const CompactionSettingsPage: FC = () => {
       setCustomPrompt('')
       setVccConfig({})
     }
-    // NOTE: Do NOT reset hasPendingRestart here.
-    // After save+invalidate, the refetch triggers this effect.
-    // Resetting would hide the banner after one frame.
   }, [config])
-
-  // Validate VCC fields
-  const vccErrors = useMemo(() => {
-    const errs: Record<string, string> = {}
-    for (const field of VCC_FIELDS) {
-      const raw = String(vccConfig[field.key] ?? VCC_FIELD_DEFAULTS[field.key])
-      const err = validateVccField(field, raw)
-      if (err) errs[field.key] = err
-    }
-    return errs
-  }, [vccConfig])
-
-  const hasValidationErrors =
-    method === 'vcc' && Object.keys(vccErrors).length > 0
 
   const hasChanges = useMemo(() => {
     if (!config) return false
     const active = config.active
 
+    // Method changed
     const currentMethod = active?.method ?? 'default'
     if (method !== currentMethod) return true
 
-    if (method === 'default') {
-      const currentPrompt = active?.customPrompt ?? ''
-      if (customPrompt !== currentPrompt) return true
-    }
+    // Custom prompt changed (default mode)
+    const currentPrompt = active?.customPrompt ?? ''
+    if (method === 'default' && customPrompt !== currentPrompt) return true
 
+    // VCC config changed (vcc mode)
     if (method === 'vcc') {
       const currentVcc = active?.vccConfig ?? {}
-      if (JSON.stringify(vccConfig) !== JSON.stringify(currentVcc)) return true
+      return !isVccConfigDefault(
+        Object.fromEntries(
+          Object.entries(vccConfig).filter(([, v]) => v !== undefined),
+        ) as VccConfig,
+      ) || !isVccConfigDefault(currentVcc)
+        ? JSON.stringify(vccConfig) !== JSON.stringify(currentVcc)
+        : false
     }
 
     return false
   }, [config, method, customPrompt, vccConfig])
 
   const handleSave = async () => {
-    if (hasValidationErrors) {
-      toast.error('Fix validation errors before saving')
-      return
-    }
-
     const newConfig: CompactionConfig = { method }
 
     if (method === 'default' && customPrompt.trim()) {
@@ -101,6 +91,7 @@ export const CompactionSettingsPage: FC = () => {
     }
 
     if (method === 'vcc') {
+      // Only include non-default values
       const overrides: VccConfig = {}
       for (const [key, defaultVal] of Object.entries(VCC_FIELD_DEFAULTS)) {
         const current = vccConfig[key as keyof VccConfig]
@@ -113,16 +104,11 @@ export const CompactionSettingsPage: FC = () => {
       }
     }
 
-    try {
-      const result = await saveConfig(newConfig)
-      if (!result.ok) {
-        toast.error(
-          result.errors?.[0]?.message ?? 'Failed to save compaction config',
-        )
-        return
-      }
-    } catch {
-      toast.error('Failed to save compaction config')
+    const result = await saveConfig(newConfig)
+    if (!result.ok) {
+      toast.error(
+        result.errors?.[0]?.message ?? 'Failed to save compaction config',
+      )
       return
     }
 
@@ -133,19 +119,17 @@ export const CompactionSettingsPage: FC = () => {
   }
 
   const handleReset = async () => {
-    try {
-      const result = await resetConfig()
-      if (!result.ok) {
-        toast.error(
-          result.errors?.[0]?.message ?? 'Failed to reset compaction config',
-        )
-        return
-      }
-    } catch {
-      toast.error('Failed to reset compaction config')
+    const result = await resetConfig()
+    if (!result.ok) {
+      toast.error(
+        result.errors?.[0]?.message ?? 'Failed to reset compaction config',
+      )
       return
     }
 
+    setMethod('default')
+    setCustomPrompt('')
+    setVccConfig({})
     setHasPendingRestart(false)
     toast.success(
       'Compaction config reset. Quit and reopen BrowserOS to apply.',
@@ -213,11 +197,7 @@ export const CompactionSettingsPage: FC = () => {
         )}
 
         {method === 'vcc' && (
-          <VccConfigSection
-            values={vccConfig}
-            onChange={setVccConfig}
-            errors={vccErrors}
-          />
+          <VccConfigSection values={vccConfig} onChange={setVccConfig} />
         )}
       </div>
 
@@ -231,9 +211,7 @@ export const CompactionSettingsPage: FC = () => {
         </Button>
         <Button
           onClick={() => void handleSave()}
-          disabled={
-            isSaving || isResetting || hasValidationErrors || !hasChanges
-          }
+          disabled={isSaving || isResetting || !hasChanges}
         >
           {isSaving ? 'Saving...' : 'Save Changes'}
         </Button>

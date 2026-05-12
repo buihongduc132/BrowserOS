@@ -46,14 +46,6 @@ async function putCompactionConfig(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
   })
-  if (!res.ok) {
-    // Try to parse error body, fall back to HTTP status
-    try {
-      return await res.json()
-    } catch {
-      throw new Error(`HTTP ${res.status}`)
-    }
-  }
   return res.json()
 }
 
@@ -61,13 +53,6 @@ async function deleteCompactionConfig(
   baseUrl: string,
 ): Promise<CompactionSaveResponse> {
   const res = await fetch(`${baseUrl}/compaction`, { method: 'DELETE' })
-  if (!res.ok) {
-    try {
-      return await res.json()
-    } catch {
-      throw new Error(`HTTP ${res.status}`)
-    }
-  }
   return res.json()
 }
 

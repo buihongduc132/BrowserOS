@@ -3,18 +3,14 @@
  * Copyright 2025 BrowserOS
  *
  * API route for compaction strategy configuration.
- * Reads/writes the `compaction` field from the server config file
- * (the one passed via --config, NOT server.json).
+ * Reads/writes the `compaction` field from the server config file.
  */
 import fs from 'node:fs'
 
 import { Hono } from 'hono'
 
-import {
-  CompactionStrategySchema,
-  getResolvedConfigFilePath,
-} from '../../config'
-import { logger } from '../../lib/logger'
+import { CompactionStrategySchema } from '../../config'
+import { getServerConfigPath } from '../../lib/browseros-dir'
 import type { Env } from '../types'
 
 interface CompactionConfigResponse {
@@ -39,28 +35,18 @@ interface CompactionSaveResponse {
   errors?: Array<{ key: string; message: string }>
 }
 
-function getConfigFilePath(): string | null {
-  return getResolvedConfigFilePath()
-}
-
-function readConfigFile(): Record<string, unknown> | null {
-  const configPath = getConfigFilePath()
-  if (!configPath || !fs.existsSync(configPath)) return null
+function readConfigFile(): Record<string, unknown> {
+  const configPath = getServerConfigPath()
+  if (!fs.existsSync(configPath)) return {}
   try {
     return JSON.parse(fs.readFileSync(configPath, 'utf-8'))
-  } catch (e) {
-    logger.warn('Failed to read config file for compaction API', {
-      error: e instanceof Error ? e.message : String(e),
-    })
-    return null
+  } catch {
+    return {}
   }
 }
 
 function writeConfigFile(config: Record<string, unknown>): void {
-  const configPath = getConfigFilePath()
-  if (!configPath) {
-    throw new Error('No config file path available')
-  }
+  const configPath = getServerConfigPath()
   fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf-8')
 }
 
@@ -68,9 +54,9 @@ export function createCompactionRoutes() {
   return new Hono<Env>()
     .get('/', (c) => {
       const config = readConfigFile()
-      const compaction = config
-        ? (config.compaction as CompactionConfigResponse['active'] | undefined)
-        : undefined
+      const compaction = config.compaction as
+        | CompactionConfigResponse['active']
+        | undefined
 
       const response: CompactionConfigResponse = {
         active: compaction ?? null,
@@ -103,10 +89,7 @@ export function createCompactionRoutes() {
         return c.json(resp, 400)
       }
 
-      let config = readConfigFile()
-      if (!config) {
-        config = {}
-      }
+      const config = readConfigFile()
       config.compaction = result.data
       writeConfigFile(config)
 
@@ -118,12 +101,6 @@ export function createCompactionRoutes() {
     })
     .delete('/', (c) => {
       const config = readConfigFile()
-      if (!config) {
-        // No config file — nothing to remove
-        const resp: CompactionSaveResponse = { ok: true }
-        return c.json(resp)
-      }
-
       delete config.compaction
       writeConfigFile(config)
 
