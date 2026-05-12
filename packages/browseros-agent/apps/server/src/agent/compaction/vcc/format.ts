@@ -2,12 +2,7 @@
  * Vendored from pi-vcc core/format.ts — format-agnostic.
  * Formats SectionData into a summary string.
  */
-import type {
-  SectionData,
-  SiteVisit,
-  TimelineEvent,
-  VccOverrides,
-} from './types'
+import type { SectionData, VccOverrides } from './types'
 
 const DEFAULT_MAX_TRANSCRIPT_LINES = 120
 
@@ -32,34 +27,6 @@ export const RECALL_NOTE =
   'Use `vcc_recall` to search for prior work, decisions, and context from before this summary. ' +
   'Do not redo work already completed.'
 
-const formatSiteActivity = (visits: SiteVisit[]): string => {
-  if (visits.length === 0) return ''
-
-  const lines = visits.map((v) => {
-    const tools = [...v.tools.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map(([name, count]) => `${name}*${count}`)
-      .join(', ')
-    return `${v.order}. ${v.domain} — ${tools}`
-  })
-
-  return `[Site Activity]\n${lines.map((l) => `- ${l}`).join('\n')}`
-}
-
-const formatTimeline = (events: TimelineEvent[]): string => {
-  if (events.length === 0) return ''
-
-  const lines = events.map((e) => {
-    const prefix = e.isReturnVisit
-      ? '  ↳ back to'
-      : `#${events.indexOf(e) + 1} →`
-    const toolInfo = e.toolSnapshot ? `[tools: ${e.toolSnapshot}]` : ''
-    return `${prefix} ${e.domain} ${toolInfo}`.trim()
-  })
-
-  return `[Timeline]\n${lines.join('\n')}`
-}
-
 export const formatSummary = (
   data: SectionData,
   overrides?: VccOverrides,
@@ -72,8 +39,6 @@ export const formatSummary = (
     section('Files And Changes', data.filesAndChanges),
     section('Commits', data.commits),
     section('Outstanding Context', data.outstandingContext),
-    formatSiteActivity(data.siteActivity),
-    formatTimeline(data.timelineEvents),
     section('User Preferences', data.userPreferences),
   ].filter(Boolean)
 
