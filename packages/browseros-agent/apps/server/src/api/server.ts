@@ -178,6 +178,7 @@ export async function createHttpServer(config: HttpServerConfig) {
         registry,
         browserosId,
         aiSdkDevtoolsEnabled: config.aiSdkDevtoolsEnabled,
+        compaction: config.compaction,
       }),
     )
   // Error handler
