@@ -109,7 +109,7 @@ export class AcpxRuntime implements AgentRuntime {
 
   async getHistory(input: {
     agent: AgentPromptInput['agent']
-    sessionId: 'main'
+    sessionId: string
   }): Promise<AgentHistoryPage> {
     const record = await this.loadLatestSessionRecord(input.agent)
     if (!record) {
@@ -127,7 +127,7 @@ export class AcpxRuntime implements AgentRuntime {
    */
   async getRowSnapshot(input: {
     agent: AgentPromptInput['agent']
-    sessionId: 'main'
+    sessionId: string
   }): Promise<AgentRowSnapshot | null> {
     const record = await this.loadLatestSessionRecord(input.agent)
     if (!record) return null
@@ -338,7 +338,7 @@ type AcpxToolResult = AcpxAgentMessage['tool_results'][string]
 
 function mapAcpxSessionRecordToHistory(
   agent: AgentDefinition,
-  sessionId: 'main',
+  sessionId: string,
   record: AcpSessionRecord,
 ): AgentHistoryPage {
   const createdAt = parseRecordTimestamp(record)
@@ -388,7 +388,7 @@ function mapAcpxSessionRecordToHistory(
 function mapAgentMessageToHistoryEntry(input: {
   id: string
   agentId: string
-  sessionId: 'main'
+  sessionId: string
   createdAt: number
   message: AcpxAgentMessage
 }): AgentHistoryEntry | null {
