@@ -586,6 +586,14 @@ export class AgentHarnessService {
     return this.agentStore.get(agentId)
   }
 
+  /**
+   * Expose the AcpxRuntime for conversation mutation routes (undo/fork).
+   * Returns `null` if the runtime is not an AcpxRuntime instance.
+   */
+  getAcpxRuntime(): AcpxRuntime | null {
+    return this.runtime instanceof AcpxRuntime ? this.runtime : null
+  }
+
   async getHistory(agentId: string): Promise<AgentHistoryPage> {
     const agent = await this.requireAgent(agentId)
     return this.runtime.getHistory({ agent, sessionId: 'main' })

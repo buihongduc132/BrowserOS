@@ -23,6 +23,7 @@ import { getMessageSegments } from './getMessageSegments'
 import { JtbdPopup } from './JtbdPopup'
 import { ScheduleSuggestionCard } from './ScheduleSuggestionCard'
 import { ToolBatch } from './ToolBatch'
+import { TurnActions } from './TurnActions'
 import { UserActionMessage } from './UserActionMessage'
 
 interface ChatMessagesProps {
@@ -37,6 +38,11 @@ interface ChatMessagesProps {
   showDontShowAgain: boolean
   onTakeSurvey: (opts?: { dontShowAgain?: boolean }) => void
   onDismissJtbdPopup: (dontShowAgain: boolean) => void
+  onToolApprove?: (approvalId: string) => void
+  onToolDeny?: (approvalId: string) => void
+  onUndoTurn?: (messageId: string) => void
+  onForkTurn?: (messageId: string) => void
+  onEditTurn?: (messageId: string, newContent: string) => void
 }
 
 export const ChatMessages: FC<ChatMessagesProps> = ({
@@ -51,6 +57,11 @@ export const ChatMessages: FC<ChatMessagesProps> = ({
   showDontShowAgain,
   onTakeSurvey,
   onDismissJtbdPopup,
+  onToolApprove,
+  onToolDeny,
+  onUndoTurn,
+  onForkTurn,
+  onEditTurn,
 }) => {
   const isStreaming = status === 'streaming' || status === 'submitted'
 
@@ -147,6 +158,21 @@ export const ChatMessages: FC<ChatMessagesProps> = ({
                     disliked={disliked[message.id] ?? false}
                     onClickLike={likeAction}
                     onClickDislike={dislikeAction}
+                  />
+                ) : null}
+                {message.role === 'user' &&
+                !action &&
+                onUndoTurn &&
+                onForkTurn &&
+                onEditTurn ? (
+                  <TurnActions
+                    messageId={message.id}
+                    messageIndex={messageIndex}
+                    messageText={messageText}
+                    isStreaming={isStreaming}
+                    onUndo={onUndoTurn}
+                    onFork={onForkTurn}
+                    onEdit={onEditTurn}
                   />
                 ) : null}
               </Fragment>

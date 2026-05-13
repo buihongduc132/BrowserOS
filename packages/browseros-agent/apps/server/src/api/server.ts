@@ -140,9 +140,10 @@ export async function createHttpServer(config: HttpServerConfig) {
       }),
     )
     .route('/status', createStatusRoute({ browser }))
-    .route('/config', createConfigRoutes())
-    .route('/compaction', createCompactionRoutes())
-    .route('/agents', createAgentRoutes({ browser, browserosServerPort: port }))
+    .route(
+      '/agents',
+      createAgentRoutes({ browser, browserosServerPort: port }),
+    )
     .route('/soul', createSoulRoutes())
     .route('/memory', createMemoryRoutes())
     .route('/skills', createSkillsRoutes())
@@ -188,8 +189,7 @@ export async function createHttpServer(config: HttpServerConfig) {
         aiSdkDevtoolsEnabled: config.aiSdkDevtoolsEnabled,
       }),
     )
-
-  // Error handler
+    // Error handler
   app.onError((err, c) => {
     const error = err as Error
 

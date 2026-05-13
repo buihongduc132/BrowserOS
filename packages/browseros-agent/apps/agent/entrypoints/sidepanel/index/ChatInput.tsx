@@ -9,9 +9,10 @@ import {
   useState,
 } from 'react'
 import { TabPickerPopover } from '@/components/elements/tab-picker-popover'
-import { useCommands } from '@/entrypoints/app/command-settings/command-queries'
+import type { SlashCommand } from '@/lib/slash-commands/types'
 import { cn } from '@/lib/utils'
 import type { VoiceInputState } from '@/lib/voice/useVoiceInput'
+import { SlashCommandAutocomplete } from './SlashCommandAutocomplete'
 import type { ChatMode } from './chatTypes'
 import { type SlashCommandItem, SlashCommandMenu } from './SlashCommandMenu'
 
@@ -40,6 +41,11 @@ interface ChatInputProps {
   /** Callback when user selects a slash command from the autocomplete menu */
   onSlashCommandSelect?: (command: SlashCommandItem) => void
   voice?: VoiceInputState
+  slashCommandOpen?: boolean
+  slashFilterText?: string
+  slashCommands?: SlashCommand[]
+  onSlashSelect?: (cmd: SlashCommand) => void
+  onSlashOpenChange?: (isOpen: boolean) => void
 }
 
 export interface ChatInputHandle {
@@ -69,6 +75,11 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       onTabMentionOpenChange,
       onSlashCommandSelect,
       voice,
+      slashCommandOpen: slashCommandOpenProp = false,
+      slashFilterText = '',
+      slashCommands = [],
+      onSlashSelect,
+      onSlashOpenChange,
     },
     ref,
   ) => {
@@ -78,19 +89,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       filterText: '',
       startPosition: 0,
     })
-    const [slashState, setSlashState] =
-      useState<SlashCommandState>(INITIAL_SLASH_STATE)
-    const [slashAnchorRect, setSlashAnchorRect] = useState<DOMRect | null>(null)
-
-    const { commands: apiCommands } = useCommands()
-
-    // Map to SlashCommandItem for the menu
-    const slashCommands: SlashCommandItem[] = apiCommands.map((cmd) => ({
-      id: cmd.id,
-      name: cmd.name,
-      description: cmd.description,
-      builtIn: cmd.builtIn,
-    }))
+    const [localSlashOpen, setLocalSlashOpen] = useState(false)
+    const slashOpen = slashCommandOpenProp || localSlashOpen
 
     const inputRef = useRef(input)
     const mentionStateRef = useRef(mentionState)
@@ -411,17 +411,15 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         }
       }
 
-      // When slash menu is open, delegate navigation keys to the menu
-      if (slashState.isOpen) {
-        if (
-          e.key === 'ArrowDown' ||
-          e.key === 'ArrowUp' ||
-          e.key === 'Enter' ||
-          e.key === 'Escape' ||
-          e.key === 'Tab'
-        ) {
+      // Slash command autocomplete: close on Escape or Tab
+      if (slashOpen) {
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          setLocalSlashOpen(false)
+          onSlashOpenChange?.(false)
           return
         }
+        // Let the popover handle arrow keys and enter via cmdk
       }
 
       if (
@@ -431,6 +429,10 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         !e.ctrlKey &&
         !e.nativeEvent.isComposing
       ) {
+        if (slashOpen) {
+          // Don't submit while autocomplete is open — let cmdk handle selection
+          return
+        }
         e.preventDefault()
         if (input.trim() && !isBusy) {
           e.currentTarget.form?.requestSubmit()
@@ -561,13 +563,20 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           onClose={closeMention}
           anchorRef={textareaRef}
         />
-        <SlashCommandMenu
-          isOpen={slashState.isOpen}
-          filterText={slashState.filterText}
+        <SlashCommandAutocomplete
+          isOpen={slashOpen && !mentionState.isOpen}
+          filterText={slashFilterText}
           commands={slashCommands}
-          onSelect={handleSlashCommandSelect}
-          onClose={closeSlash}
-          anchorRect={slashAnchorRect}
+          onSelect={(cmd) => {
+            onSlashSelect?.(cmd)
+            setLocalSlashOpen(false)
+            onSlashOpenChange?.(false)
+          }}
+          onClose={() => {
+            setLocalSlashOpen(false)
+            onSlashOpenChange?.(false)
+          }}
+          anchorRef={textareaRef}
         />
         {voice?.isRecording ? (
           <div className="flex min-h-[42px] flex-1 items-center justify-center gap-1 rounded-2xl border border-red-500/50 bg-muted/50 px-4 py-2.5 pr-[4.5rem]">

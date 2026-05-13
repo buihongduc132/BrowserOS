@@ -64,7 +64,8 @@ if [ ! -d "$EXT_DIR" ]; then
   exit 1
 fi
 
-# ── Desktop entries: only install if missing (prevents GNOME losing window tracking) ──
+# ── Desktop entries: skip if already installed (prevents GNOME losing track of running window) ──
+# Only regenerate during dev:setup, NOT on every start. See: setup-desktop-entries.sh
 if [ ! -f "${HOME}/.local/share/applications/browseros-dev.desktop" ]; then
   "$REPO_ROOT/scripts/setup-desktop-entries.sh" 2>/dev/null || true
 fi
