@@ -494,6 +494,7 @@ export const AgentCommandConversation: FC<AgentCommandConversationProps> = ({
             agents={harnessAgents}
             adapters={adapters}
             activeAgentId={resolvedAgentId}
+            activeSessionId={sessionId}
             onSelectAgent={handleSelectHarnessAgent}
             onPinToggle={(target, next) => handlePinToggle(target, next)}
           />
