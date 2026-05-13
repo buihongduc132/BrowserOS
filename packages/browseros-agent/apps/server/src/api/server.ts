@@ -42,6 +42,9 @@ import { createOAuthRoutes } from './routes/oauth'
 import { createProviderRoutes } from './routes/provider'
 import { createRefinePromptRoutes } from './routes/refine-prompt'
 import { createShutdownRoute } from './routes/shutdown'
+import { createSkillSourcesRoutes } from './routes/skill-sources'
+import { createSkillsRoutes } from './routes/skills'
+import { createSoulRoutes } from './routes/soul'
 import { createStatusRoute } from './routes/status'
 import {
   connectKlavisInBackground,
@@ -157,7 +160,7 @@ export async function createHttpServer(config: HttpServerConfig) {
     .route('/soul', createSoulRoutes())
     .route('/memory', createMemoryRoutes())
     .route('/skills', createSkillsRoutes())
-    .route('/commands', createCommandsRoutes())
+    .route('/skills/sources', createSkillSourcesRoutes())
     .route('/test-provider', createProviderRoutes({ browserosId }))
     .route('/refine-prompt', createRefinePromptRoutes({ browserosId }))
     .route(
