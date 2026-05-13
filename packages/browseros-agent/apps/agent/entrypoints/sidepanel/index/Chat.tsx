@@ -18,9 +18,13 @@ import {
 } from '@/lib/constants/analyticsEvents'
 import { useJtbdPopup } from '@/lib/jtbd-popup/useJtbdPopup'
 import { track } from '@/lib/metrics/track'
-import { useVoiceInput } from '@/lib/voice/useVoiceInput'
-import { processSlashCommand, getAllCommands, type SlashCommand } from '@/lib/slash-commands'
+import {
+  getAllCommands,
+  processSlashCommand,
+  type SlashCommand,
+} from '@/lib/slash-commands'
 import { registerBuiltinCommands } from '@/lib/slash-commands/builtins'
+import { useVoiceInput } from '@/lib/voice/useVoiceInput'
 import { useChatSessionContext } from '../layout/ChatSessionContext'
 import { ChatEmptyState } from './ChatEmptyState'
 import { ChatError } from './ChatError'
@@ -202,14 +206,9 @@ export const Chat = () => {
     setAttachedTabs((prev) => prev.filter((t) => t.id !== tabId))
   }
 
-  /**
-   * Resolve a slash command into a CommandResolution.
-   * Returns null if input is not a slash command.
-   */
-  const resolveSlashCommand = useCallback(
-    async (inputText: string): Promise<CommandResolution | null> => {
-      const parsed = parseSlashCommand(inputText)
-      if (!parsed) return null
+  const executeMessage = async (customMessageText?: string) => {
+    const messageText = customMessageText ? customMessageText : input.trim()
+    if (!messageText) return
 
       // Check built-in commands first
       if (BUILTIN_COMMAND_NAMES.has(parsed.name)) {
@@ -220,7 +219,7 @@ export const Chat = () => {
 
     // Process slash commands before sending
     if (messageText.startsWith('/')) {
-      const result = processSlashCommand(messageText, {
+      const maybeResult = processSlashCommand(messageText, {
         messages,
         conversationId,
         setMessages: setMessagesFromContext,
@@ -228,18 +227,24 @@ export const Chat = () => {
         mode,
         setMode,
       })
+      const result =
+        maybeResult instanceof Promise ? await maybeResult : maybeResult
 
-      // Handle async results (none currently, but future-proof)
-      const resolved = result instanceof Promise ? null : result
-      if (resolved) {
-        if (resolved.type === 'action') {
-          track(SLASH_COMMAND_EXECUTED_EVENT, { command: messageText.split(' ')[0], type: 'action' })
+      if (result) {
+        if (result.type === 'action') {
+          track(SLASH_COMMAND_EXECUTED_EVENT, {
+            command: messageText.split(' ')[0],
+            type: 'action',
+          })
           setInput('')
           setAttachedTabs([])
           return
         }
         if (resolved.type === 'prompt') {
-          track(SLASH_COMMAND_EXECUTED_EVENT, { command: messageText.split(' ')[0], type: 'prompt' })
+          track(SLASH_COMMAND_EXECUTED_EVENT, {
+            command: messageText.split(' ')[0],
+            type: 'prompt',
+          })
           if (attachedTabs.length) {
             const action = createBrowserOSAction({
               mode,
