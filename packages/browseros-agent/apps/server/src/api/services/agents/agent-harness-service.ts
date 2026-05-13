@@ -749,7 +749,7 @@ export class AgentHarnessService {
         : null
 
     // Ensure session exists in the metadata store (idempotent — skips if already tracked)
-    if (!(await this.sessionMetaStore.getSessionMeta('main'))) {
+    if (!(await this.sessionMetaStore.getSessionMeta(agent.id, 'main'))) {
       await this.sessionMetaStore.openSession(agent.id, 'main', input.cwd)
     }
 
@@ -832,13 +832,13 @@ export class AgentHarnessService {
       // Update session metadata after the turn completes. Skip on
       // explicit cancel — the user didn't want the side effects.
       if (!turn.abortController.signal.aborted) {
-        const meta = await this.sessionMetaStore.getSessionMeta('main')
+        const meta = await this.sessionMetaStore.getSessionMeta(agent.id, 'main')
         if (meta) {
           const preview = input.message
             .split('\n')
             .find((l) => l.trim())
             ?.slice(0, 200) ?? null
-          await this.sessionMetaStore.updateSessionMeta('main', {
+          await this.sessionMetaStore.updateSessionMeta(agent.id, 'main', {
             turnCount: meta.turnCount + 1,
             lastMessagePreview: preview,
           })
