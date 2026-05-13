@@ -462,6 +462,8 @@ export const AgentCommandConversation: FC<AgentCommandConversationProps> = ({
               onPinToggle={(next) =>
                 handlePinToggle(harnessAgent ?? null, next)
               }
+              agentId={agentId}
+              sessionId={sessionId}
               headerExtra={
                 isOpenClawAgent ? (
                   <Button
