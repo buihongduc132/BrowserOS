@@ -43,12 +43,12 @@ export function getBuiltinSkillsDir(): string {
   return join(getSkillsDir(), PATHS.BUILTIN_DIR_NAME)
 }
 
-export function getCommandsDir(): string {
-  return join(getBrowserosDir(), PATHS.COMMANDS_DIR_NAME)
+export function getSkillsSourcesPath(): string {
+  return join(getSkillsDir(), 'sources.json')
 }
 
-export function getBuiltinCommandsDir(): string {
-  return join(getCommandsDir(), PATHS.BUILTIN_DIR_NAME)
+export function getSkillsStatePath(): string {
+  return join(getSkillsDir(), 'state.json')
 }
 
 export function getOpenClawDir(): string {
