@@ -26,6 +26,9 @@ import {
   type QueuedMessage,
   type QueuedMessageAttachment,
 } from '../../../lib/agents/message-queue'
+import { AgentSessionStore } from '../../../agent/agent-session-store'
+import { writeHermesPerAgentProvider } from '../hermes/hermes-paths'
+import { getHermesProviderMapping } from '../hermes/hermes-provider-map'
 
 export {
   MessageQueueFullError,
@@ -117,6 +120,7 @@ export type EnsureVmRuntimeReady = (
 ) => Promise<void>
 
 export class AgentHarnessService {
+  readonly sessionMetaStore: AgentSessionStore
   private readonly agentStore: AgentStore
   private readonly runtime: AgentRuntime
   private readonly browserosDir: string
@@ -143,6 +147,8 @@ export class AgentHarnessService {
       ensureVmRuntimeReady?: EnsureVmRuntimeReady
       turnRegistry?: TurnRegistry
       messageQueue?: FileMessageQueue
+      producedFilesStore?: ProducedFilesStore
+      sessionMetaStore?: AgentSessionStore
     } = {},
   ) {
     this.browserosDir = deps.browserosDir ?? getBrowserosDir()
@@ -156,16 +162,12 @@ export class AgentHarnessService {
       })
     this.ensureVmRuntimeReady = deps.ensureVmRuntimeReady ?? null
     this.turnRegistry = deps.turnRegistry ?? new TurnRegistry()
-    this.messageQueue =
-      deps.messageQueue ??
-      new FileMessageQueue({
-        filePath: join(
-          this.browserosDir,
-          'agents',
-          'harness',
-          'message-queues.json',
-        ),
-      })
+    this.messageQueue = deps.messageQueue ?? new FileMessageQueue()
+    this.browserosDir = deps.browserosDir
+    this.sessionMetaStore = deps.sessionMetaStore ?? new AgentSessionStore()
+    if (deps.producedFilesStore) {
+      this.explicitProducedFilesStore = deps.producedFilesStore
+    }
     // Drain any agents whose queue file survived a restart. The check
     // for `getActiveFor` inside `maybeStartNextFromQueue` guards
     // against double-firing if the in-memory turn registry happens to
@@ -727,6 +729,29 @@ export class AgentHarnessService {
     if (!turn) return
     let lastErrorMessage: string | undefined
 
+    // Bracket openclaw turns with a workspace snapshot so any file the
+    // agent produces during the turn is attributable back to it (rail
+    // + inline artifact UX). Adapter-gated for v1 — Claude / Codex
+    // write to the user's host filesystem and don't need this; their
+    // outputs are already visible via the user's own tools.
+    const isOpenclaw = agent.adapter === 'openclaw'
+    const workspaceDir = isOpenclaw ? this.resolveSafeWorkspaceDir(agent) : null
+    const producedFilesStore = workspaceDir
+      ? this.tryGetProducedFilesStore()
+      : null
+    const workspaceSnapshot =
+      workspaceDir && producedFilesStore
+        ? await this.snapshotWorkspaceForTurn(
+            agent,
+            workspaceDir,
+            producedFilesStore,
+          )
+        : null
+
+    // Open (or re-open) the session in the session metadata store so
+    // callers can enumerate active sessions and read their metadata.
+    await this.sessionMetaStore.openSession(agent.id, 'main', input.cwd)
+
     try {
       const upstream = await this.runtime.send({
         agent,
@@ -782,6 +807,42 @@ export class AgentHarnessService {
         })
       }
     } finally {
+      // Attribute any files the agent produced during this turn. We
+      // run on success, error, AND inside `finally` so an upstream
+      // failure mid-turn that still managed to write files doesn't
+      // lose them. We skip only when the user explicitly cancelled —
+      // in that case the side effects shouldn't be surfaced as
+      // "outputs you asked for."
+      if (
+        workspaceDir &&
+        workspaceSnapshot !== null &&
+        producedFilesStore &&
+        !turn.abortController.signal.aborted
+      ) {
+        await this.attributeTurnFiles({
+          producedFilesStore,
+          workspaceDir,
+          before: workspaceSnapshot,
+          agent,
+          turnId,
+          turnPrompt: input.message,
+        })
+      }
+      // Update session metadata after the turn completes. Skip on
+      // explicit cancel — the user didn't want the side effects.
+      if (!turn.abortController.signal.aborted) {
+        const meta = await this.sessionMetaStore.getSessionMeta('main')
+        if (meta) {
+          const preview = input.message
+            .split('\n')
+            .find((l) => l.trim())
+            ?.slice(0, 200) ?? null
+          await this.sessionMetaStore.updateSessionMeta('main', {
+            turnCount: meta.turnCount + 1,
+            lastMessagePreview: preview,
+          })
+        }
+      }
       this.notifyTurnEnded(agent.id, {
         ok: lastErrorMessage === undefined,
         error: lastErrorMessage,
