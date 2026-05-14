@@ -15,6 +15,7 @@ const ChatLayoutContent: FC = () => {
     messages,
     isLoading,
     conversationId,
+    sendMessage,
   } = useChatSessionContext()
 
   if (isLoading || !selectedProvider) {
@@ -35,7 +36,7 @@ const ChatLayoutContent: FC = () => {
         hasMessages={messages.length > 0}
         conversationId={conversationId}
         onCompact={() => {
-          // TODO: wire to compaction mutation (Task 2)
+          sendMessage({ text: '/compact' })
         }}
       />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">

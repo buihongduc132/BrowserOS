@@ -89,7 +89,6 @@ export const ChatHeader: FC<ChatHeaderProps> = ({
   )
   const { deleteSession } = useDeleteAgentSession(
     isAcp ? selectedProvider.agentId : undefined,
-    undefined,
   )
 
   const handleNewConversationFromHistory = () => {

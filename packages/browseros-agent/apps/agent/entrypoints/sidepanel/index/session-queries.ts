@@ -254,7 +254,6 @@ export function useUpdateAgentSession(
  */
 export function useDeleteAgentSession(
   agentId: string | undefined,
-  sessionId: string | undefined,
 ) {
   const {
     baseUrl,
@@ -264,8 +263,8 @@ export function useDeleteAgentSession(
   const queryClient = useQueryClient()
 
   const mutation = useMutation({
-    mutationFn: () =>
-      deleteSession(baseUrl as string, agentId!, sessionId!),
+    mutationFn: (targetSessionId: string) =>
+      deleteSession(baseUrl as string, agentId!, targetSessionId),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: SESSION_KEYS.all(agentId ?? ''),
