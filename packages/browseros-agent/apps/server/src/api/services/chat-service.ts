@@ -35,6 +35,9 @@ export interface ChatServiceDeps {
 }
 
 export class ChatService {
+  /** Reusable AGENTS.md loader — preserves mtime cache across requests */
+  private agentsMdLoader = new AgentsMdLoader([])
+
   constructor(private deps: ChatServiceDeps) {}
 
   async processMessage(
@@ -104,8 +107,8 @@ export class ChatService {
     // Load AGENTS.md for all workspaces (with allowlist security)
     if (resolvedWorkspaces.length > 0) {
       try {
-        const loader = new AgentsMdLoader(resolvedWorkspaces.map((w) => w.path))
-        const agentsMd = await loader.loadMultiple(resolvedWorkspaces.map((w) => w.path))
+        this.agentsMdLoader.updateAllowlist(resolvedWorkspaces.map((w) => w.path))
+        const agentsMd = await this.agentsMdLoader.loadMultiple(resolvedWorkspaces.map((w) => w.path))
         if (agentsMd.length > 0) {
           agentConfig.workspaceAgentsMd = agentsMd
         }

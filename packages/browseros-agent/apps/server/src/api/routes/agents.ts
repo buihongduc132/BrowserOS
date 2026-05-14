@@ -377,13 +377,17 @@ export function createAgentRoutes(deps: AgentRouteDeps = {}) {
       })
       .get('/:agentId/sessions/main/history', async (c) => {
         try {
-          return c.json(await service.getHistory(c.req.param('agentId')))
+          const sessionId = resolveSessionId(c.req.header('X-Session-Id'))
+          return c.json(
+            await service.getHistory(c.req.param('agentId'), sessionId),
+          )
         } catch (err) {
           return handleAgentRouteError(c, err)
         }
       })
       .post('/:agentId/chat', async (c) => {
         const agentId = c.req.param('agentId')
+        const sessionId = resolveSessionId(c.req.header('X-Session-Id'))
         const parsed = await parseChatBody(c)
         if ('error' in parsed) return c.json({ error: parsed.error }, 400)
 
@@ -394,6 +398,7 @@ export function createAgentRoutes(deps: AgentRouteDeps = {}) {
             message: parsed.message,
             attachments: parsed.attachments,
             cwd: parsed.cwd,
+            sessionId,
           })
         } catch (err) {
           if (err instanceof TurnAlreadyActiveError) {
