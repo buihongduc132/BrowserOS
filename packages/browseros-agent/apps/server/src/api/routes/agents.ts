@@ -54,8 +54,6 @@ import {
 import type { FilePreview } from '../services/openclaw/file-preview'
 import type { Env } from '../types'
 import { resolveBrowserContextPageIds } from '../utils/resolve-browser-context-page-ids'
-import { createSyntheticCommandStream } from './acp-command-response'
-import { dispatchCommand } from './acp-slash-commands-builtins'
 
 type AgentRouteService = {
   listAgents(): Promise<AgentDefinition[]>
@@ -158,8 +156,6 @@ type AgentRouteDeps = {
    * chat panel sees, so no second WS observer is needed.
    */
   onTurnLifecycle?: import('../services/agents/agent-harness-service').TurnLifecycleListener
-  /** Shared session metadata store. Forwarded to AgentHarnessService. */
-  sessionMetaStore?: import('../../agent/agent-session-store').AgentSessionStore
 }
 
 type SidepanelAgentChatRequest = {
@@ -172,10 +168,15 @@ type SidepanelAgentChatRequest = {
   userWorkingDir?: string
 }
 
-import {
-  createConversationMutationRoutes,
-  createConversationMutationsService,
-} from './conversation-mutations'
+/**
+ * Resolve session ID from the X-Session-Id header.
+ * Falls back to 'main' for backward compatibility.
+ * Exported for testability.
+ */
+export function resolveSessionId(headerValue: string | undefined): string {
+  const trimmed = (headerValue ?? '').trim()
+  return trimmed || 'main'
+}
 
 export function createAgentRoutes(deps: AgentRouteDeps = {}) {
   const service =
@@ -184,7 +185,6 @@ export function createAgentRoutes(deps: AgentRouteDeps = {}) {
       browserosServerPort: deps.browserosServerPort,
       openclawGateway: deps.openclawGateway,
       openclawProvisioner: deps.openclawProvisioner,
-      sessionMetaStore: deps.sessionMetaStore,
     })
   if (deps.onTurnLifecycle && service instanceof AgentHarnessService) {
     service.onTurnLifecycle(deps.onTurnLifecycle)
@@ -290,38 +290,6 @@ export function createAgentRoutes(deps: AgentRouteDeps = {}) {
             ? `${parsed.userSystemPrompt.trim()}\n\n${userContent}`
             : userContent
 
-          // ── ACP Slash Command Dispatch ─────────────────────────────
-          // Check if the message is a slash command BEFORE startTurn().
-          // Handled commands return a synthetic response; errors return
-          // an error message; passthrough falls through to normal LLM.
-          if (parsed.message.startsWith('/')) {
-            const cmdResult = await dispatchCommand(parsed.message, {
-              agentId: agent.id,
-              conversationId: parsed.conversationId,
-              sessionId: 'main',
-              args: '',
-            })
-
-            if (cmdResult.type === 'handled') {
-              const syntheticEvents = createSyntheticCommandStream(
-                cmdResult.response ?? 'Command executed.',
-              )
-              return createAcpUIMessageStreamResponse(syntheticEvents, {
-                headers: { 'X-Session-Id': 'main' },
-              })
-            }
-
-            if (cmdResult.type === 'error') {
-              const errorEvents = createSyntheticCommandStream(
-                `⚠️ ${cmdResult.error}`,
-              )
-              return createAcpUIMessageStreamResponse(errorEvents, {
-                headers: { 'X-Session-Id': 'main' },
-              })
-            }
-            // 'passthrough' → fall through to normal LLM call
-          }
-
           let started: { turnId: string; frames: ReadableStream<TurnFrame> }
           try {
             started = await service.startTurn({
@@ -367,7 +335,7 @@ export function createAgentRoutes(deps: AgentRouteDeps = {}) {
 
           return createAcpUIMessageStreamResponse(events, {
             headers: {
-              'X-Session-Id': 'main',
+              'X-Session-Id': resolveSessionId(c.req.header('X-Session-Id')),
               'X-Turn-Id': started.turnId,
             },
           })
@@ -407,49 +375,12 @@ export function createAgentRoutes(deps: AgentRouteDeps = {}) {
           return handleAgentRouteError(c, err)
         }
       })
-      .get('/:agentId/sessions/:sessionId/history', async (c) => {
+      .get('/:agentId/sessions/main/history', async (c) => {
         try {
-          const sessionId = c.req.param('sessionId') || 'main'
           return c.json(await service.getHistory(c.req.param('agentId')))
-          void sessionId // TODO: forward to service once multi-session history is supported
         } catch (err) {
           return handleAgentRouteError(c, err)
         }
-      })
-      // ── Conversation mutations (undo / fork) ────────────────────
-      .post('/:agentId/conversation/undo', async (c) => {
-        const agentId = c.req.param('agentId')
-        const acpxRuntime =
-          service instanceof AgentHarnessService
-            ? service.getAcpxRuntime()
-            : null
-        if (!acpxRuntime) {
-          return c.json({ error: 'Undo not available' }, 501)
-        }
-        const mutationService = createConversationMutationsService({
-          runtime: acpxRuntime,
-        })
-        const routes = createConversationMutationRoutes({
-          service: mutationService,
-        })
-        return routes.handleUndo(c, agentId)
-      })
-      .post('/:agentId/conversation/fork', async (c) => {
-        const agentId = c.req.param('agentId')
-        const acpxRuntime =
-          service instanceof AgentHarnessService
-            ? service.getAcpxRuntime()
-            : null
-        if (!acpxRuntime) {
-          return c.json({ error: 'Fork not available' }, 501)
-        }
-        const mutationService = createConversationMutationsService({
-          runtime: acpxRuntime,
-        })
-        const routes = createConversationMutationRoutes({
-          service: mutationService,
-        })
-        return routes.handleFork(c, agentId)
       })
       .post('/:agentId/chat', async (c) => {
         const agentId = c.req.param('agentId')
@@ -485,15 +416,17 @@ export function createAgentRoutes(deps: AgentRouteDeps = {}) {
       })
       .get('/:agentId/chat/active', (c) => {
         const agentId = c.req.param('agentId')
-        const info = service.getActiveTurn(agentId, 'main')
+        const sessionId = resolveSessionId(c.req.header('X-Session-Id'))
+        const info = service.getActiveTurn(agentId, sessionId)
         return c.json({ active: info })
       })
       .get('/:agentId/chat/stream', (c) => {
         const agentId = c.req.param('agentId')
+        const sessionId = resolveSessionId(c.req.header('X-Session-Id'))
         const url = new URL(c.req.url)
         const queryTurnId = url.searchParams.get('turnId')?.trim() || undefined
         const turnId =
-          queryTurnId ?? service.getActiveTurn(agentId, 'main')?.turnId
+          queryTurnId ?? service.getActiveTurn(agentId, sessionId)?.turnId
         if (!turnId) {
           return c.json({ error: 'No active turn for this agent' }, 404)
         }
@@ -731,7 +664,7 @@ function streamTurnFrames(
 ) {
   c.header('Content-Type', 'text/event-stream')
   c.header('Cache-Control', 'no-cache')
-  c.header('X-Session-Id', 'main')
+  c.header('X-Session-Id', resolveSessionId(c.req.header('X-Session-Id')))
   c.header('X-Turn-Id', options.turnId)
 
   return stream(c, async (s) => {
@@ -1064,8 +997,6 @@ async function readJsonBody(
   }
   return { value: body as Record<string, unknown> }
 }
-
-// ── Conversation undo/fork helpers are in ./conversation-mutations.ts ──
 
 function handleAgentRouteError(c: Context<Env>, err: unknown) {
   if (err instanceof UnknownAgentError) {
