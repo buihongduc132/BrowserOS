@@ -246,21 +246,14 @@ export function parseCommandInput(input: string): ParsedCommand {
  * !`cmd` → literal text, NO shell execution
  */
 export function resolveTemplate(template: string, args: string): string {
-  let result = template
-
-  // $ARGUMENTS → all args
-  result = result.replace(/\$ARGUMENTS/g, args)
-
-  // $1, $2, ... → positional args
-  if (args) {
-    const parts = args.split(/\s+/)
-    for (let i = 0; i < parts.length; i++) {
-      result = result.replace(new RegExp(`\\$${i + 1}`, 'g'), parts[i])
-    }
-  }
-
-  // !`cmd` stays as-is — literal text, no execution
-  return result
+  // Single-pass replacement to avoid sequential corruption
+  // e.g., if $ARGUMENTS value contains "$2", sequential would corrupt it
+  const parts = args ? args.split(/\s+/) : []
+  return template.replace(/\$(ARGUMENTS|\d+)/g, (match) => {
+    if (match === '$ARGUMENTS') return args
+    const idx = Number.parseInt(match.slice(1), 10) - 1
+    return idx >= 0 && idx < parts.length ? parts[idx] : match
+  })
 }
 
 /**
