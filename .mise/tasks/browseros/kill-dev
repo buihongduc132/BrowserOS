@@ -8,6 +8,10 @@ source "${REPO_ROOT}/scripts/launch/common.sh"
 
 echo "=== browseros:kill-dev ==="
 
+# ── Stop systemd services first (they use same ports) ──
+systemctl --user stop browser-os-dev-server 2>/dev/null || true
+systemctl --user stop browser-os-dev-app 2>/dev/null || true
+
 # ── Kill dev browser (entire process tree to catch GPU/renderer/zygote) ──
 if is_browser_running "$DEV_BROWSER_PID"; then
   PID=$(cat "$DEV_BROWSER_PID")
