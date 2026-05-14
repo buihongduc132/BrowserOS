@@ -86,9 +86,22 @@ async function restoreStats(): Promise<void> {
     const result = await chrome.storage.local.get(STATS_KEY);
     if (result[STATS_KEY]) {
       const restored = StatsCollector.fromJSON(result[STATS_KEY]);
-      // Merge: add restored counts to current session
       const restoredGlobal = restored.getGlobalStats();
       if (restoredGlobal.totalBlocked > 0) {
+        // Merge restored global counters into live session
+        const currentGlobal = stats.getGlobalStats();
+        const merged = StatsCollector.fromJSON(stats.toJSON());
+        // Add restored values on top of current
+        // Simple approach: just use restored if current session is fresh
+        if (currentGlobal.totalBlocked === 0) {
+          // Fresh session — adopt restored stats entirely
+          Object.assign(stats, { 
+            _globalBlocked: restoredGlobal.totalBlocked,
+            _globalAllowed: restoredGlobal.totalAllowed,
+            _globalByCategory: restoredGlobal.byCategory,
+            _globalDomains: new Set((restored as any)._globalDomains ?? []),
+          });
+        }
         console.log(`[BrowserOS Adblocker] Restored ${restoredGlobal.totalBlocked} previously blocked`);
       }
     }
@@ -96,24 +109,33 @@ async function restoreStats(): Promise<void> {
 }
 
 // Register stats-aware blocking listener on a blocker
+let activeListener: ((details: any) => any) | null = null;
+
 function registerBlockerWithStats(blocker: WebExtensionBlocker): void {
-  chrome.webRequest.onBeforeRequest.addListener(
-    (details: { url: string; tabId: number; type: string }) => {
-      // @ts-ignore — onBeforeRequest expects WebRequestDetails but blocker uses its own type
-      const result = blocker.onBeforeRequest(details);
-      const blocked = !!(result?.cancel || result?.redirectUrl);
+  // Remove previous listener to avoid memory/execution leak
+  if (activeListener) {
+    try { chrome.webRequest.onBeforeRequest.removeListener(activeListener); } catch { /* ok */ }
+  }
 
-      // NON-blocking stats: O(1) Map increment, done AFTER blocking decision
-      if (details.tabId >= 0) {
-        stats.record(details.tabId, details.url, blocked, 'network');
-        if (blocked) {
-          updateBadge(details.tabId);
-          logger.blocked(details.tabId, details.url, 'network');
-        }
+  activeListener = (details: { url: string; tabId: number; type: string }) => {
+    // @ts-ignore — onBeforeRequest expects WebRequestDetails but blocker uses its own type
+    const result = blocker.onBeforeRequest(details);
+    const blocked = !!(result?.cancel || result?.redirectUrl);
+
+    // NON-blocking stats: O(1) Map increment, done AFTER blocking decision
+    if (details.tabId >= 0) {
+      stats.record(details.tabId, details.url, blocked, 'network');
+      if (blocked) {
+        updateBadge(details.tabId);
+        logger.blocked(details.tabId, details.url, 'network');
       }
+    }
 
-      return result;
-    },
+    return result;
+  };
+
+  chrome.webRequest.onBeforeRequest.addListener(
+    activeListener,
     { urls: ['http://*/*', 'https://*/*'] },
     ['blocking'],
   );

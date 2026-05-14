@@ -25,13 +25,7 @@ async function init(): Promise<void> {
     // Global stats
     const global = stats.getGlobalStats();
     if (el('global-blocked')) el('global-blocked')!.textContent = String(global.totalBlocked);
-
-    // Count unique domains across all tabs
-    let totalDomains = 0;
-    // Access internal tabs map via getTabStats — we need a different approach
-    // Sum domains from all tab stats (approximate: count unique from current tab)
-    totalDomains = tabStats.domains?.size ?? 0;
-    if (el('global-domains')) el('global-domains')!.textContent = String(totalDomains);
+    if (el('global-domains')) el('global-domains')!.textContent = String(global.totalDomains);
   } catch {
     // Background page not available (e.g. in testing or incognito)
     const el = (id: string) => document.getElementById(id);

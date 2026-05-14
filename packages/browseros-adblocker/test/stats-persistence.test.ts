@@ -57,6 +57,6 @@ describe('Stats persistence', () => {
 
     restored.clearTab(1);
     expect(restored.getTabStats(1).blocked).toBe(0);
-    expect(restored.getGlobalStats().totalBlocked).toBe(1); // only tab 2 remains
+    expect(restored.getGlobalStats().totalBlocked).toBe(2); // global counters survive tab close
   });
 });
