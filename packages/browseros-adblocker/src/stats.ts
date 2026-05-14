@@ -99,12 +99,7 @@ export class StatsCollector {
     const collector = new StatsCollector();
     try {
       const data = JSON.parse(json);
-      // Restore global counters
-      collector._globalBlocked = data._globalBlocked ?? 0;
-      collector._globalAllowed = data._globalAllowed ?? 0;
-      collector._globalByCategory = data._globalByCategory ?? { network: 0, cosmetic: 0, scriptlet: 0 };
-      collector._globalDomains = new Set(data._globalDomains ?? []);
-      // Restore tabs
+      // Restore tabs first
       for (const t of data.tabs ?? []) {
         collector.tabs.set(t.id, {
           blocked: t.blocked, allowed: t.allowed,
@@ -112,6 +107,34 @@ export class StatsCollector {
           domains: new Set(t.domains ?? []),
           lastBlockedUrl: t.lastBlockedUrl ?? '',
         });
+      }
+      // Restore global counters — backward compat: derive from tabs if _global* fields missing
+      if (data._globalBlocked !== undefined) {
+        collector._globalBlocked = data._globalBlocked;
+        collector._globalAllowed = data._globalAllowed ?? 0;
+        collector._globalByCategory = data._globalByCategory ?? { network: 0, cosmetic: 0, scriptlet: 0 };
+        collector._globalDomains = new Set(data._globalDomains ?? []);
+      } else {
+        // Old format: derive globals from tab data
+        let totalBlocked = 0, totalAllowed = 0;
+        const byCategory = { network: 0, cosmetic: 0, scriptlet: 0 };
+        const domains = new Set<string>();
+        for (const tab of collector.tabs.values()) {
+          totalBlocked += tab.blocked;
+          totalAllowed += tab.allowed;
+          byCategory.network += tab.byCategory.network;
+          byCategory.cosmetic += tab.byCategory.cosmetic;
+          byCategory.scriptlet += tab.byCategory.scriptlet;
+          for (const d of tab.domains) domains.add(d);
+        }
+        collector._globalBlocked = totalBlocked;
+        collector._globalAllowed = totalAllowed;
+        collector._globalByCategory = byCategory;
+        collector._globalDomains = domains;
+      }
+      // Restore sessionStart if persisted
+      if (data._sessionStart) {
+        (collector as any)._sessionStart = data._sessionStart;
       }
     } catch { /* corrupt, return empty */ }
     return collector;

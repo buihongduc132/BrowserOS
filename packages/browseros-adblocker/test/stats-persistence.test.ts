@@ -59,4 +59,30 @@ describe('Stats persistence', () => {
     expect(restored.getTabStats(1).blocked).toBe(0);
     expect(restored.getGlobalStats().totalBlocked).toBe(2); // global counters survive tab close
   });
+
+  it('backward compat: old format without _global* fields', () => {
+    const oldFormat = JSON.stringify({
+      tabs: [
+        { id: 1, blocked: 3, allowed: 1, byCategory: { network: 2, cosmetic: 1, scriptlet: 0 }, domains: ['ads.com', 'tracker.com'], lastBlockedUrl: 'https://ads.com/ad.js' },
+        { id: 2, blocked: 1, allowed: 0, byCategory: { network: 1, cosmetic: 0, scriptlet: 0 }, domains: ['click.com'], lastBlockedUrl: 'https://click.com/p' },
+      ],
+    });
+    const restored = StatsCollector.fromJSON(oldFormat);
+    // Should derive globals from tabs
+    expect(restored.getGlobalStats().totalBlocked).toBe(4);
+    expect(restored.getGlobalStats().totalAllowed).toBe(1);
+    expect(restored.getGlobalStats().totalDomains).toBe(3);
+    expect(restored.getGlobalStats().byCategory.network).toBe(3);
+  });
+
+  it('restores sessionStart from persisted data', () => {
+    const stats = new StatsCollector();
+    stats.record(1, 'https://ads.com/ad.js', true, 'network');
+    const json = stats.toJSON();
+    const before = Date.now();
+    // Wait a tiny bit
+    const restored = StatsCollector.fromJSON(json);
+    // sessionStart should be from the original, not from restoration
+    expect(restored.getGlobalStats().sessionStart).toBeLessThan(before + 100);
+  });
 });

@@ -88,19 +88,20 @@ async function restoreStats(): Promise<void> {
       const restored = StatsCollector.fromJSON(result[STATS_KEY]);
       const restoredGlobal = restored.getGlobalStats();
       if (restoredGlobal.totalBlocked > 0) {
-        // Merge restored global counters into live session
-        const currentGlobal = stats.getGlobalStats();
-        const merged = StatsCollector.fromJSON(stats.toJSON());
+        // Merge: add restored counters to live session (handles both fresh + existing)
+        const current = stats.getGlobalStats();
+        // Use restored sessionStart if older than current
+        if (restoredGlobal.sessionStart < current.sessionStart) {
+          (stats as any)._sessionStart = restoredGlobal.sessionStart;
+        }
         // Add restored values on top of current
-        // Simple approach: just use restored if current session is fresh
-        if (currentGlobal.totalBlocked === 0) {
-          // Fresh session — adopt restored stats entirely
-          Object.assign(stats, { 
-            _globalBlocked: restoredGlobal.totalBlocked,
-            _globalAllowed: restoredGlobal.totalAllowed,
-            _globalByCategory: restoredGlobal.byCategory,
-            _globalDomains: new Set((restored as any)._globalDomains ?? []),
-          });
+        (stats as any)._globalBlocked += restoredGlobal.totalBlocked;
+        (stats as any)._globalAllowed += restoredGlobal.totalAllowed;
+        for (const [cat, val] of Object.entries(restoredGlobal.byCategory)) {
+          (stats as any)._globalByCategory[cat] += val;
+        }
+        for (const d of (restored as any)._globalDomains ?? []) {
+          (stats as any)._globalDomains.add(d);
         }
         console.log(`[BrowserOS Adblocker] Restored ${restoredGlobal.totalBlocked} previously blocked`);
       }
