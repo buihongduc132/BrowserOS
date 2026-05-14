@@ -55,6 +55,7 @@ import {
   toolApprovalConfigStorage,
 } from '@/lib/tool-approvals/storage'
 import { selectedWorkspaceStorage } from '@/lib/workspace/workspace-storage'
+import type { WorkspaceFolder } from '@/lib/workspace/workspace-storage'
 import type { ChatMode } from './chatTypes'
 import { GetConversationWithMessagesDocument } from './graphql/chatSessionDocument'
 import { toLlmProviderConfig } from './sidepanel-chat-targets'
@@ -289,6 +290,7 @@ export const useChatSession = (options?: ChatSessionOptions) => {
   const approvalJustRespondedRef = useRef(false)
   const textToActionRef = useRef<Map<string, ChatAction>>(textToAction)
   const workingDirRef = useRef<string | undefined>(undefined)
+  const workspaceFolderRef = useRef<WorkspaceFolder | null>(null)
   const selectionMapRef = useRef<
     Record<string, { text: string; url: string; title: string }>
   >({})
@@ -320,10 +322,12 @@ export const useChatSession = (options?: ChatSessionOptions) => {
   useEffect(() => {
     selectedWorkspaceStorage.getValue().then((folder) => {
       workingDirRef.current = folder?.path
+      workspaceFolderRef.current = folder
     })
 
     const unwatch = selectedWorkspaceStorage.watch((folder) => {
       workingDirRef.current = folder?.path
+      workspaceFolderRef.current = folder
     })
     return () => unwatch()
   }, [])
@@ -404,6 +408,13 @@ export const useChatSession = (options?: ChatSessionOptions) => {
           browserContext: requestBrowserContext,
           userSystemPrompt,
           userWorkingDir: workingDirRef.current,
+          userWorkspaces: workspaceFolderRef.current
+            ? [{
+                id: workspaceFolderRef.current.id,
+                path: workspaceFolderRef.current.path,
+                name: workspaceFolderRef.current.name,
+              }]
+            : undefined,
           previousConversation,
           declinedApps,
           aclRules: enabledAclRules,

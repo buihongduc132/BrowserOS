@@ -12,9 +12,9 @@ import { useGraphqlInfiniteQuery } from '@/lib/graphql/useGraphqlInfiniteQuery'
 import { useGraphqlMutation } from '@/lib/graphql/useGraphqlMutation'
 import { useGraphqlQuery } from '@/lib/graphql/useGraphqlQuery'
 import { useChatSessionContext } from '../layout/ChatSessionContext'
-import { ConversationList } from './components/ConversationList'
-import type { HistoryConversation } from './components/types'
-import { extractLastUserMessage, groupConversations } from './components/utils'
+import { SessionConversationList } from './components/SessionConversationList'
+import type { HistoryConversation, HistoryWorkspace } from './components/types'
+import { extractLastUserMessage } from './components/utils'
 import {
   DeleteConversationDocument,
   GetConversationsForHistoryDocument,
@@ -131,19 +131,19 @@ const RemoteChatHistory: FC<{ userId: string }> = ({ userId }) => {
             ? node.lastMessagedAt
             : `${node.lastMessagedAt}Z`
 
+          // TODO: Extract workspaces from node metadata when server returns them
+          // For now, workspaces are populated from the assistant session store
+          const workspaces: HistoryWorkspace[] = []
+
           return {
             id: node.rowId,
             lastMessagedAt: new Date(timestamp).getTime(),
             lastUserMessage: extractLastUserMessage(messages),
+            workspaces,
           }
         }),
     )
   }, [graphqlData])
-
-  const groupedConversations = useMemo(
-    () => groupConversations(conversations),
-    [conversations],
-  )
 
   if (!profileId || isLoadingConversations) {
     return (
@@ -154,8 +154,8 @@ const RemoteChatHistory: FC<{ userId: string }> = ({ userId }) => {
   }
 
   return (
-    <ConversationList
-      groupedConversations={groupedConversations}
+    <SessionConversationList
+      conversations={conversations}
       activeConversationId={activeConversationId}
       onDelete={handleDelete}
       onClearAll={handleClearAll}

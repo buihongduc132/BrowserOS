@@ -42,6 +42,7 @@ export function buildSidepanelPreparedSendMessagesRequest({
         browserContext: common.browserContext,
         userSystemPrompt: common.userSystemPrompt,
         userWorkingDir: common.userWorkingDir,
+        userWorkspaces: common.userWorkspaces,
         selectedText: common.selectedText,
         selectedTextSource: common.selectedTextSource,
       },
