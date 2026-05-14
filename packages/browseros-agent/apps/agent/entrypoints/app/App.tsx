@@ -18,6 +18,7 @@ import { AgentCommandHome } from './agent-command/AgentCommandHome'
 import { AgentCommandLayout } from './agent-command/agent-command-layout'
 import { AgentsPage } from './agents/AgentsPage'
 import { AISettingsPage } from './ai-settings/AISettingsPage'
+import { CommandSettingsPage } from './command-settings/CommandSettingsPage'
 import { CompactionSettingsPage } from './compaction-settings/CompactionSettingsPage'
 import { ConnectMCP } from './connect-mcp/ConnectMCP'
 import { CustomizationPage } from './customization/CustomizationPage'
@@ -145,6 +146,7 @@ export const App: FC = () => {
             <Route path="search" element={<SearchProviderPage />} />
             <Route path="advanced" element={<AdvancedConfigPage />} />
             <Route path="compaction" element={<CompactionSettingsPage />} />
+            <Route path="commands" element={<CommandSettingsPage />} />
             <Route path="survey" element={<SurveyPage {...surveyParams} />} />
             <Route path="usage" element={<UsagePage />} />
             {alphaEnabled ? (

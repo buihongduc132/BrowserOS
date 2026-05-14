@@ -13,7 +13,7 @@ This saves the clipboard image directly to the docs folder without manual file m
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **BrowserOS** (21961 symbols, 44387 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **wt-BrowserOS-slash-cmds** (22181 symbols, 44665 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -36,10 +36,10 @@ This project is indexed by GitNexus as **BrowserOS** (21961 symbols, 44387 relat
 
 | Resource | Use for |
 |----------|---------|
-| `gitnexus://repo/BrowserOS/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/BrowserOS/clusters` | All functional areas |
-| `gitnexus://repo/BrowserOS/processes` | All execution flows |
-| `gitnexus://repo/BrowserOS/process/{name}` | Step-by-step execution trace |
+| `gitnexus://repo/wt-BrowserOS-slash-cmds/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/wt-BrowserOS-slash-cmds/clusters` | All functional areas |
+| `gitnexus://repo/wt-BrowserOS-slash-cmds/processes` | All execution flows |
+| `gitnexus://repo/wt-BrowserOS-slash-cmds/process/{name}` | Step-by-step execution trace |
 
 ## CLI
 

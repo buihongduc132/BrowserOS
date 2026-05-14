@@ -20,6 +20,10 @@ export const PATHS = {
   SESSIONS_DIR_NAME: 'sessions',
   TOOL_OUTPUT_DIR_NAME: 'tool-output',
   SOUL_FILE_NAME: 'SOUL.md',
+  CORE_MEMORY_FILE_NAME: 'CORE.md',
+  SKILLS_DIR_NAME: 'skills',
+  BUILTIN_DIR_NAME: 'builtin',
+  COMMANDS_DIR_NAME: 'commands',
   SERVER_CONFIG_FILE_NAME: 'server.json',
   OPENCLAW_DIR_NAME: 'openclaw',
   get SOUL_MAX_LINES() {

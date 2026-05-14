@@ -27,6 +27,38 @@ export function getSessionsDir(): string {
   return join(getBrowserosDir(), PATHS.SESSIONS_DIR_NAME)
 }
 
+export function getSoulPath(): string {
+  return join(getBrowserosDir(), PATHS.SOUL_FILE_NAME)
+}
+
+export function getCoreMemoryPath(): string {
+  return join(getMemoryDir(), PATHS.CORE_MEMORY_FILE_NAME)
+}
+
+export function getSkillsDir(): string {
+  return join(getBrowserosDir(), PATHS.SKILLS_DIR_NAME)
+}
+
+export function getBuiltinSkillsDir(): string {
+  return join(getSkillsDir(), PATHS.BUILTIN_DIR_NAME)
+}
+
+export function getCommandsDir(): string {
+  return join(getBrowserosDir(), PATHS.COMMANDS_DIR_NAME)
+}
+
+export function getBuiltinCommandsDir(): string {
+  return join(getCommandsDir(), PATHS.BUILTIN_DIR_NAME)
+}
+
+export function getOpenClawDir(): string {
+  return join(getVmStateDir(), PATHS.OPENCLAW_DIR_NAME)
+}
+
+export function getLegacyOpenClawDir(): string {
+  return join(getBrowserosDir(), PATHS.OPENCLAW_DIR_NAME)
+}
+
 export function getCacheDir(): string {
   return join(getBrowserosDir(), PATHS.CACHE_DIR_NAME)
 }
@@ -88,6 +120,10 @@ export function removeServerConfigSync(): void {
 
 export async function ensureBrowserosDir(): Promise<void> {
   logDevelopmentBrowserosDir()
+  await mkdir(getMemoryDir(), { recursive: true })
+  await mkdir(getSkillsDir(), { recursive: true })
+  await mkdir(getBuiltinSkillsDir(), { recursive: true })
+  await mkdir(getCommandsDir(), { recursive: true })
   await mkdir(getSessionsDir(), { recursive: true })
   await mkdir(getLazyMonitoringRunsDir(), { recursive: true })
   await mkdir(getVmDisksDir(), { recursive: true })
