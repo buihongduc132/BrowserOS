@@ -13,4 +13,9 @@ export default [
     output: { file: 'dist/content-script.iife.js', format: 'iife' },
     plugins: [resolve({ browser: true }), commonjs(), typescript()],
   },
+  {
+    input: 'src/popup.ts',
+    output: { file: 'dist/popup.iife.js', format: 'iife', name: 'BrowserOSAdblockerPopup' },
+    plugins: [resolve({ browser: true }), commonjs(), typescript()],
+  },
 ];
