@@ -16,6 +16,12 @@ SERVER_LOG="${DEV_BOS_DIR}/server.log"
 cleanup_on_failure() {
   echo "[cleanup] start-dev failed — cleaning up orphaned processes..." >&2
   bash "${REPO_ROOT}/.mise/tasks/browseros/kill-dev" 2>/dev/null || true
+  # Show last error lines from server log for diagnostics
+  if [ -f "$SERVER_LOG" ]; then
+    echo "" >&2
+    echo "=== Server log (last 20 lines) ===" >&2
+    tail -20 "$SERVER_LOG" >&2
+  fi
 }
 trap cleanup_on_failure ERR
 
