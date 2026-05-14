@@ -145,24 +145,24 @@ export const ContextLimitBanner: FC<ContextLimitBannerProps> = ({
               isCompacting && 'pointer-events-none opacity-50',
             )}
           >
-            Start fresh with summary
+            Start fresh
           </button>
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={handleDismiss}
-        className={cn(
-          'shrink-0 rounded p-0.5 transition-colors hover:bg-black/5 dark:hover:bg-white/10',
-          isCritical
-            ? 'text-destructive/60 hover:text-destructive'
-            : 'text-amber-600/60 hover:text-amber-600 dark:text-amber-300/60 dark:hover:text-amber-300',
-        )}
-        aria-label="Dismiss"
-      >
-        <X className="h-3 w-3" />
-      </button>
+      {!isCritical && (
+        <button
+          type="button"
+          onClick={handleDismiss}
+          className={cn(
+            'shrink-0 rounded p-0.5 transition-colors hover:bg-black/5 dark:hover:bg-white/10',
+            'text-amber-600/60 hover:text-amber-600 dark:text-amber-300/60 dark:hover:text-amber-300',
+          )}
+          aria-label="Dismiss"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      )}
     </div>
   )
 }

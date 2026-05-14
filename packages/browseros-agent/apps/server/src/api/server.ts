@@ -11,6 +11,7 @@
  */
 
 import { Hono } from 'hono'
+import { type ModelMessage } from 'ai'
 import { cors } from 'hono/cors'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { HttpAgentError } from '../agent/errors'
@@ -145,17 +146,10 @@ export async function createHttpServer(config: HttpServerConfig) {
     // ------------------------------------------------------------------
     // Compaction routes — config CRUD + on-demand trigger
     // ------------------------------------------------------------------
-    // The trigger endpoint (POST /compact) requires runtime deps:
-    //   - getConversationMessages: loads messages from the in-memory session store
-    //   - createModel: creates a LanguageModel for summarization
-    //
-    // Currently the chat SessionStore is scoped inside createChatRoutes().
-    // To fully wire the trigger, either:
-    //   (a) lift the SessionStore to this level and inject into both
-    //       createChatRoutes and createCompactionRoutes, or
-    //   (b) expose a getMessages() method on ChatService.
-    //
-    // For now the trigger is registered but returns 503 until wired.
+    // getConversationMessages reads from the shared chat SessionStore.
+    // createModel is NOT wired yet — the POST /compact endpoint returns 503
+    // until a proper model factory is extracted from ChatService.
+    // The config CRUD (GET/PUT/DELETE) works fully.
     .route(
       '/compaction',
       new Hono<Env>()
@@ -166,22 +160,18 @@ export async function createHttpServer(config: HttpServerConfig) {
             getConversationMessages: async (conversationId: string) => {
               const session = sharedChatSessionStore.get(conversationId)
               if (!session) return null
-              // Convert UIMessage[] to ModelMessage[] — strip UI-specific parts
-              return session.agent.messages.map((m) => ({
-                role: m.role,
-                content: typeof m.content === 'string'
+              return session.agent.messages.map((m): ModelMessage => {
+                const text = typeof m.content === 'string'
                   ? m.content
-n                  : m.parts
+                  : m.parts
                     ?.filter((p: any) => p.type === 'text')
                     ?.map((p: any) => p.text)
-                    ?.join('\n') ?? '',
-              })) as any[]
+                    ?.join('\n') ?? ''
+                return { role: m.role, content: text } as ModelMessage
+              })
             },
-            createModel: () => {
-              // Reuse first active session's model config, or throw
-              // This is a best-effort — the model is tied to the session's provider
-              throw new Error('Model creation requires an active session context')
-            },
+            // createModel intentionally omitted — POST /compact returns 503
+            // until model factory is extracted from AiSdkAgent.
             getCompactionConfig: () => {
               const raw = config.compaction
               if (!raw) return undefined

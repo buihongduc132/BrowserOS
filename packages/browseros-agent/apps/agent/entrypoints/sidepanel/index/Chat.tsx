@@ -223,7 +223,7 @@ export const Chat = () => {
           setAttachedTabs([])
           return
         }
-        if (resolved.type === 'prompt') {
+        if (result.type === 'prompt') {
           track(SLASH_COMMAND_EXECUTED_EVENT, {
             command: messageText.split(' ')[0],
             type: 'prompt',
@@ -231,12 +231,12 @@ export const Chat = () => {
           if (attachedTabs.length) {
             const action = createBrowserOSAction({
               mode,
-              message: resolved.expandedText,
+              message: result.expandedText,
               tabs: attachedTabs,
             })
-            sendMessage({ text: resolved.expandedText, action })
+            sendMessage({ text: result.expandedText, action })
           } else {
-            sendMessage({ text: resolved.expandedText })
+            sendMessage({ text: result.expandedText })
           }
           setInput('')
           setAttachedTabs([])
