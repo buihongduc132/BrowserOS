@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock storage data
-const mockStorageData: Record<string, string> = {};
+const mockStorageData: Record<string, unknown> = {};
 const mockStorage = {
   local: {
     async get(key: string) {
       return { [key]: mockStorageData[key] };
     },
-    async set(obj: Record<string, string>) {
+    async set(obj: Record<string, unknown>) {
       Object.assign(mockStorageData, obj);
     },
   },
@@ -48,11 +48,10 @@ describe('updater', () => {
     await updateFilters();
 
     // Should have cached something
-    const stored = mockStorageData['browseros-adblocker-cached-engine'];
+    const stored = mockStorageData['browseros-adblocker-cached-engine'] as { data: string; timestamp: number };
     expect(stored).toBeDefined();
-    const parsed = JSON.parse(stored);
-    expect(parsed.data).toBeDefined();
-    expect(parsed.timestamp).toBeTypeOf('number');
+    expect(stored.data).toBeDefined();
+    expect(stored.timestamp).toBeTypeOf('number');
   });
 
   it('updateFilters() handles all-fetch-failure gracefully (no crash)', async () => {
