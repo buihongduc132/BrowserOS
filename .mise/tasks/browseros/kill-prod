@@ -28,6 +28,11 @@ if [ -n "$PIDS" ]; then
 fi
 
 rm -f "$PROD_BROWSER_PID" "$PROD_SERVER_PID"
+
+# ── Fallback: kill orphans by port (PID file may be missing/wrong) ──
+kill_port_orphan "$PROD_SERVER_PORT" "browseros"
+kill_port_orphan "$PROD_CDP_PORT" "browseros"
+
 clean_singleton_locks "$PROD_PROFILE"
 
 echo "=== kill-prod done ==="

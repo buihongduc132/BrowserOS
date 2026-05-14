@@ -42,6 +42,10 @@ else
   echo "[kill] Server not running."
 fi
 
+# ── Fallback: kill orphans by port (PID file may be missing/wrong) ──
+kill_port_orphan "$DEV_SERVER_PORT" "bun"
+kill_port_orphan "$DEV_CDP_PORT" "browseros"
+
 # ── Clean singleton locks if no browser process exists ──
 if ! is_browser_running "$DEV_BROWSER_PID"; then
   clean_singleton_locks "$DEV_PROFILE"

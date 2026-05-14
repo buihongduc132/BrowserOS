@@ -45,16 +45,28 @@ if is_browser_running "$DEV_BROWSER_PID"; then
   exit 1
 fi
 
-# ── Pre-flight: check BOTH ports (fixes H1) ──
+# ── Pre-flight: auto-cleanup orphans on BOTH ports ──
+# Instead of just erroring, kill any orphan that's squatting on our ports.
+# This prevents the recurring 'port collision' from untracked processes.
 if port_in_use "$DEV_CDP_PORT"; then
-  echo "[ERROR] CDP port $DEV_CDP_PORT already in use — dev instance may be running." >&2
-  echo "        Run 'mise run browseros:kill-dev' first." >&2
-  exit 1
+  echo "[preflight] CDP port $DEV_CDP_PORT occupied — attempting orphan cleanup..."
+  kill_port_orphan "$DEV_CDP_PORT" "browseros"
+  sleep 1
+  if port_in_use "$DEV_CDP_PORT"; then
+    echo "[ERROR] CDP port $DEV_CDP_PORT still in use after cleanup." >&2
+    echo "        Run 'mise run browseros:kill-dev' first." >&2
+    exit 1
+  fi
 fi
 if port_in_use "$DEV_SERVER_PORT"; then
-  echo "[ERROR] Server port $DEV_SERVER_PORT already in use." >&2
-  echo "        Run 'mise run browseros:kill-dev' first." >&2
-  exit 1
+  echo "[preflight] Server port $DEV_SERVER_PORT occupied — attempting orphan cleanup..."
+  kill_port_orphan "$DEV_SERVER_PORT" "bun"
+  sleep 1
+  if port_in_use "$DEV_SERVER_PORT"; then
+    echo "[ERROR] Server port $DEV_SERVER_PORT still in use after cleanup." >&2
+    echo "        Run 'mise run browseros:kill-dev' first." >&2
+    exit 1
+  fi
 fi
 
 # ── Pre-flight: check binary and extension ──
