@@ -45,6 +45,11 @@ export interface ListSessionsOptions {
 }
 
 export class AgentSessionStore {
+  /** Composite key: `${agentId}::${sessionId}` — prevents cross-agent session collision. */
+  private static key(agentId: string, sessionId: string): string {
+    return `${agentId}::${sessionId}`
+  }
+
   private sessions = new Map<string, ActiveSession>()
 
   /**
@@ -52,7 +57,8 @@ export class AgentSessionStore {
    * Otherwise creates a new entry with refCount = 1.
    */
   open(agentId: string, sessionId: string): ActiveSession {
-    const existing = this.sessions.get(sessionId)
+    const key = AgentSessionStore.key(agentId, sessionId)
+    const existing = this.sessions.get(key)
     if (existing) {
       existing.refCount++
       return existing
@@ -64,7 +70,7 @@ export class AgentSessionStore {
       refCount: 1,
       createdAt: Date.now(),
     }
-    this.sessions.set(sessionId, session)
+    this.sessions.set(key, session)
     return session
   }
 
@@ -73,13 +79,14 @@ export class AgentSessionStore {
    * Returns true only when the session was fully removed (refCount reached 0).
    * Returns false if session still has refs or doesn't exist.
    */
-  close(sessionId: string): boolean {
-    const session = this.sessions.get(sessionId)
+  close(agentId: string, sessionId: string): boolean {
+    const key = AgentSessionStore.key(agentId, sessionId)
+    const session = this.sessions.get(key)
     if (!session) return false
 
     session.refCount--
     if (session.refCount <= 0) {
-      this.sessions.delete(sessionId)
+      this.sessions.delete(key)
       return true
     }
     return false
@@ -101,19 +108,19 @@ export class AgentSessionStore {
   /**
    * Check if a session exists in the store.
    */
-  has(sessionId: string): boolean {
-    return this.sessions.has(sessionId)
+  has(agentId: string, sessionId: string): boolean {
+    return this.sessions.has(AgentSessionStore.key(agentId, sessionId))
   }
 
   /**
-   * Get a session by ID.
+   * Get a session by agentId + sessionId.
    */
-  get(sessionId: string): ActiveSession | undefined {
-    return this.sessions.get(sessionId)
+  get(agentId: string, sessionId: string): ActiveSession | undefined {
+    return this.sessions.get(AgentSessionStore.key(agentId, sessionId))
   }
 
   /**
-   * Total number of active sessions (unique IDs).
+   * Total number of active sessions (unique composite keys).
    */
   get size(): number {
     return this.sessions.size
@@ -129,13 +136,14 @@ export class AgentSessionStore {
     cwd?: string,
   ): Promise<SessionMeta> {
     this.open(agentId, sessionId)
+    const key = AgentSessionStore.key(agentId, sessionId)
     const meta: SessionMeta = {
       sessionId,
       agentId,
       cwd,
       createdAt: Date.now(),
     }
-    this.sessionMeta.set(sessionId, meta)
+    this.sessionMeta.set(key, meta)
     return meta
   }
 
@@ -155,7 +163,9 @@ export class AgentSessionStore {
           m.lastMessagePreview?.toLowerCase().includes(q),
       )
     }
-    results.sort((a, b) => (b.updatedAt ?? b.createdAt) - (a.updatedAt ?? a.createdAt))
+    results.sort(
+      (a, b) => (b.updatedAt ?? b.createdAt) - (a.updatedAt ?? a.createdAt),
+    )
     if (options?.cursor) {
       const idx = results.findIndex((m) => m.sessionId === options.cursor)
       if (idx >= 0) results = results.slice(idx + 1)
@@ -165,32 +175,30 @@ export class AgentSessionStore {
   }
 
   async getSessionMeta(
-    _agentId: string,
+    agentId: string,
     sessionId: string,
   ): Promise<SessionMeta | undefined> {
-    return this.sessionMeta.get(sessionId)
+    return this.sessionMeta.get(AgentSessionStore.key(agentId, sessionId))
   }
 
   async updateSessionMeta(
-    _agentId: string,
+    agentId: string,
     sessionId: string,
     updates: Partial<Omit<SessionMeta, 'sessionId' | 'agentId' | 'createdAt'>>,
   ): Promise<SessionMeta | undefined> {
-    const existing = this.sessionMeta.get(sessionId)
+    const key = AgentSessionStore.key(agentId, sessionId)
+    const existing = this.sessionMeta.get(key)
     if (!existing) return undefined
     Object.assign(existing, updates, { updatedAt: Date.now() })
     return existing
   }
 
-  async closeSession(
-    agentId: string,
-    sessionId: string,
-  ): Promise<number> {
-    const removed = this.close(sessionId)
+  async closeSession(agentId: string, sessionId: string): Promise<number> {
+    const removed = this.close(agentId, sessionId)
     if (removed) {
-      this.sessionMeta.delete(sessionId)
+      this.sessionMeta.delete(AgentSessionStore.key(agentId, sessionId))
     }
-    const remaining = this.get(sessionId)
+    const remaining = this.get(agentId, sessionId)
     return remaining?.refCount ?? 0
   }
 }

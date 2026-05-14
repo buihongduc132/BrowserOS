@@ -375,9 +375,11 @@ export function createAgentRoutes(deps: AgentRouteDeps = {}) {
           return handleAgentRouteError(c, err)
         }
       })
-      .get('/:agentId/sessions/main/history', async (c) => {
+      .get('/:agentId/sessions/:sessionId/history', async (c) => {
         try {
-          const sessionId = resolveSessionId(c.req.header('X-Session-Id'))
+          const sessionId =
+            c.req.param('sessionId') ||
+            resolveSessionId(c.req.header('X-Session-Id'))
           return c.json(
             await service.getHistory(c.req.param('agentId'), sessionId),
           )

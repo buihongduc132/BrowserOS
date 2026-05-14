@@ -69,6 +69,7 @@ export const sessionTags = sqliteTable(
     tag: text('tag').notNull(),
   },
   (table) => [
+    primaryKey({ columns: [table.sessionId, table.tag] }),
     index('session_tags_tag_idx').on(table.tag),
   ],
 )

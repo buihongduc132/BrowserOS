@@ -23,17 +23,17 @@ describe('AgentSessionStore', () => {
 
       // Close 4 times — should still exist
       for (let i = 0; i < 4; i++) {
-        const removed = store.close(id)
+        const removed = store.close('agent-a', id)
         if (i < 3) expect(removed).toBe(false) // not fully removed yet
       }
 
-      expect(store.has(id)).toBe(true)
-      expect(store.get(id)!.refCount).toBe(1)
+      expect(store.has('agent-a', id)).toBe(true)
+      expect(store.get('agent-a', id)?.refCount).toBe(1)
 
       // Final close — should remove
-      const removed = store.close(id)
+      const removed = store.close('agent-a', id)
       expect(removed).toBe(true)
-      expect(store.has(id)).toBe(false)
+      expect(store.has('agent-a', id)).toBe(false)
     })
 
     it('returns correct ActiveSession on each open', () => {
@@ -55,19 +55,19 @@ describe('AgentSessionStore', () => {
       const store = new AgentSessionStore()
       store.open('agent-a', 'sess-1')
 
-      const first = store.close('sess-1')
+      const first = store.close('agent-a', 'sess-1')
       expect(first).toBe(true)
 
-      const second = store.close('sess-1')
+      const second = store.close('agent-a', 'sess-1')
       expect(second).toBe(false)
     })
 
     it('does not crash on repeated close calls', () => {
       const store = new AgentSessionStore()
       store.open('agent-a', 'sess-1')
-      store.close('sess-1')
-      store.close('sess-1')
-      store.close('sess-1')
+      store.close('agent-a', 'sess-1')
+      store.close('agent-a', 'sess-1')
+      store.close('agent-a', 'sess-1')
 
       expect(store.size).toBe(0)
     })
@@ -76,18 +76,18 @@ describe('AgentSessionStore', () => {
   describe('unknown session operations', () => {
     it('returns false when closing non-existent session', () => {
       const store = new AgentSessionStore()
-      const result = store.close('does-not-exist')
+      const result = store.close('agent-a', 'does-not-exist')
       expect(result).toBe(false)
     })
 
     it('returns undefined for get on non-existent session', () => {
       const store = new AgentSessionStore()
-      expect(store.get('ghost')).toBeUndefined()
+      expect(store.get('agent-a', 'ghost')).toBeUndefined()
     })
 
     it('returns false for has on non-existent session', () => {
       const store = new AgentSessionStore()
-      expect(store.has('ghost')).toBe(false)
+      expect(store.has('agent-a', 'ghost')).toBe(false)
     })
   })
 
@@ -130,7 +130,7 @@ describe('AgentSessionStore', () => {
       const store = new AgentSessionStore()
       store.open('agent-a', 'sess-1')
       store.open('agent-a', 'sess-2')
-      store.close('sess-1')
+      store.close('agent-a', 'sess-1')
 
       const list = store.listByAgent('agent-a')
       expect(list).toHaveLength(1)
@@ -164,11 +164,11 @@ describe('AgentSessionStore', () => {
       store.open('agent-a', 'sess-1')
       store.open('agent-a', 'sess-1')
       store.open('agent-a', 'sess-1')
-      store.close('sess-1')
-      store.close('sess-1')
-      store.close('sess-1')
+      store.close('agent-a', 'sess-1')
+      store.close('agent-a', 'sess-1')
+      store.close('agent-a', 'sess-1')
 
-      expect(store.has('sess-1')).toBe(false)
+      expect(store.has('agent-a', 'sess-1')).toBe(false)
       expect(store.size).toBe(0)
 
       // Re-open after full close
@@ -181,9 +181,9 @@ describe('AgentSessionStore', () => {
       store.open('agent-a', 'sess-1')
 
       // Close more times than opens
-      store.close('sess-1')
-      store.close('sess-1')
-      store.close('sess-1')
+      store.close('agent-a', 'sess-1')
+      store.close('agent-a', 'sess-1')
+      store.close('agent-a', 'sess-1')
 
       // Re-open should work fresh
       const s = store.open('agent-a', 'sess-1')
@@ -203,11 +203,11 @@ describe('AgentSessionStore', () => {
       expect(typeof s.createdAt).toBe('number')
 
       // Get
-      expect(store.get('sess-crud')).toBe(s)
+      expect(store.get('agent-x', 'sess-crud')).toBe(s)
 
       // Has
-      expect(store.has('sess-crud')).toBe(true)
-      expect(store.has('other')).toBe(false)
+      expect(store.has('agent-x', 'sess-crud')).toBe(true)
+      expect(store.has('agent-x', 'other')).toBe(false)
 
       // List
       const list = store.listByAgent('agent-x')
@@ -218,10 +218,10 @@ describe('AgentSessionStore', () => {
       expect(store.size).toBe(1)
 
       // Close
-      const removed = store.close('sess-crud')
+      const removed = store.close('agent-x', 'sess-crud')
       expect(removed).toBe(true)
       expect(store.size).toBe(0)
-      expect(store.has('sess-crud')).toBe(false)
+      expect(store.has('agent-x', 'sess-crud')).toBe(false)
     })
 
     it('tracks size across multiple agents', () => {
@@ -233,8 +233,36 @@ describe('AgentSessionStore', () => {
 
       expect(store.size).toBe(3)
 
-      store.close('s2')
+      store.close('a1', 's2')
       expect(store.size).toBe(2)
+    })
+  })
+
+  describe('cross-agent isolation', () => {
+    it('isolates sessions across agents with same sessionId', () => {
+      const store = new AgentSessionStore()
+
+      // Both agents open a session with the same ID
+      store.open('agent-a', 'main')
+      store.open('agent-b', 'main')
+
+      // Both should exist independently
+      expect(store.has('agent-a', 'main')).toBe(true)
+      expect(store.has('agent-b', 'main')).toBe(true)
+      expect(store.size).toBe(2)
+
+      // Close agent-a's session — agent-b should be unaffected
+      store.close('agent-a', 'main')
+      expect(store.has('agent-a', 'main')).toBe(false)
+      expect(store.has('agent-b', 'main')).toBe(true)
+      expect(store.size).toBe(1)
+
+      // Agent-a and agent-b should have separate ref counts
+      const sA = store.open('agent-a', 'shared')
+      const sB = store.open('agent-b', 'shared')
+      expect(sA).not.toBe(sB)
+      expect(sA.agentId).toBe('agent-a')
+      expect(sB.agentId).toBe('agent-b')
     })
   })
 })
