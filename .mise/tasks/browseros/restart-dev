@@ -34,10 +34,16 @@ fi
 echo "[3/3] Starting dev instance..."
 bash .mise/tasks/browseros/start-dev
 
+SERVER_LOG="/tmp/browseros-dev-server.log"
 echo "[4/4] Running smoke test..."
 if ! python3 "${REPO_ROOT}/scripts/verify/smoke-dev.py" "$DEV_SERVER_PORT"; then
   echo "" >&2
   echo "[ERROR] Smoke test FAILED! Dev server is up but endpoints are broken." >&2
+  if [ -f "$SERVER_LOG" ]; then
+    echo "" >&2
+    echo "=== Server log (last 20 lines) ===" >&2
+    tail -20 "$SERVER_LOG" >&2
+  fi
   exit 1
 fi
 
