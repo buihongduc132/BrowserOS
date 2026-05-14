@@ -1,0 +1,29 @@
+{
+  "manifest_version": 2,
+  "name": "BrowserOS Ad Blocker",
+  "version": "1.0.0",
+  "description": "Built-in ad and tracker blocking",
+  "permissions": [
+    "webRequest",
+    "webRequestBlocking",
+    "webNavigation",
+    "tabs",
+    "storage",
+    "unlimitedStorage",
+    "alarms",
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "scripts": ["dist/background.iife.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["dist/content-script.iife.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true
+    }
+  ]
+}
