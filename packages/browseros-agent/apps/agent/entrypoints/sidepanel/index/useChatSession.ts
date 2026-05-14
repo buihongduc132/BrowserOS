@@ -10,7 +10,9 @@ import { Capabilities, Feature } from '@/lib/browseros/capabilities'
 import { useAgentServerUrl } from '@/lib/browseros/useBrowserOSProviders'
 import type { ChatAction } from '@/lib/chat-actions/types'
 import {
+  CONVERSATION_FORK_EVENT,
   CONVERSATION_RESET_EVENT,
+  CONVERSATION_UNDO_EVENT,
   GLOW_STOP_CLICKED_EVENT,
   MESSAGE_DISLIKE_EVENT,
   MESSAGE_LIKE_EVENT,
@@ -931,5 +933,6 @@ export const useChatSession = (options?: ChatSessionOptions) => {
     undoTurn,
     forkTurn,
     editTurn,
+    setMessages,
   }
 }

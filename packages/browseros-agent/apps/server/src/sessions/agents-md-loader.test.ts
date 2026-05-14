@@ -62,7 +62,7 @@ describe('AgentsMdLoader', () => {
 
     test('rejects path that resolves outside allowlist', async () => {
       // Create a subdir inside tmpDir1, then try to read from outside
-      const sub = mkdirSync(join(tmpDir1, 'sub'), { recursive: true })
+      const sub = mkdirSync(join(tmpDir1, 'sub'), { recursive: true }) ?? join(tmpDir1, 'sub')
       const loader = new AgentsMdLoader([tmpDir1])
       // Try to load from tmpDir2 (not in allowlist) via traversal
       const attackPath = join(sub, '..', '..', '..', 'etc', 'passwd')

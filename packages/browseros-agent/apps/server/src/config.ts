@@ -380,29 +380,3 @@ function parseAbsolutePath(val: unknown, baseDir: string): string | undefined {
   return toAbsolutePath(val, baseDir)
 }
 
-// ── Compaction strategy schema (used by /compaction API route) ──
-
-// VccConfigSchema and CompactionStrategySchema moved above ServerConfigSchema
-
-/**
- * Returns the resolved config file path, or null if no --config was provided.
- * Falls back to the server.json in the BrowserOS data directory.
- */
-export function getResolvedConfigFilePath(): string | null {
-  // Try to re-derive from CLI args
-  const configIdx = process.argv.indexOf('--config')
-  if (configIdx !== -1 && configIdx + 1 < process.argv.length) {
-    const p = process.argv[configIdx + 1]
-    return path.isAbsolute(p) ? p : path.resolve(process.cwd(), p)
-  }
-
-  // Fallback: server.json in the BrowserOS data directory
-  const override = process.env.BROWSEROS_DIR?.trim()
-  const dirName =
-    process.env.NODE_ENV === 'development' ? '.browseros-dev' : '.browseros'
-  const dir = override || path.join(require('node:os').homedir(), dirName)
-  const fallback = path.join(dir, 'server.json')
-  if (fs.existsSync(fallback)) return fallback
-
-  return null
-}

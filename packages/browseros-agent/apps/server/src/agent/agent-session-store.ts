@@ -16,11 +16,32 @@
  * when ref count hits 0, consumers should call SessionStore.delete(sessionId).
  */
 
+export interface SessionMeta {
+  sessionId: string
+  agentId: string
+  title?: string
+  turnCount?: number
+  lastMessagePreview?: string
+  lastMessageAt?: number
+  mode?: string
+  model?: string
+  meta?: Record<string, unknown>
+  cwd?: string
+  createdAt: number
+  updatedAt?: number
+}
+
 export interface ActiveSession {
   sessionId: string
   agentId: string
   refCount: number
   createdAt: number
+}
+
+export interface ListSessionsOptions {
+  search?: string
+  cursor?: string
+  limit?: number
 }
 
 export class AgentSessionStore {
@@ -96,5 +117,80 @@ export class AgentSessionStore {
    */
   get size(): number {
     return this.sessions.size
+  }
+
+  // ── Extended methods for ACP session routes ──
+
+  private sessionMeta = new Map<string, SessionMeta>()
+
+  async openSession(
+    agentId: string,
+    sessionId: string,
+    cwd?: string,
+  ): Promise<SessionMeta> {
+    this.open(agentId, sessionId)
+    const meta: SessionMeta = {
+      sessionId,
+      agentId,
+      cwd,
+      createdAt: Date.now(),
+    }
+    this.sessionMeta.set(sessionId, meta)
+    return meta
+  }
+
+  async listSessions(
+    agentId: string,
+    options?: ListSessionsOptions,
+  ): Promise<SessionMeta[]> {
+    let results: SessionMeta[] = []
+    for (const meta of this.sessionMeta.values()) {
+      if (meta.agentId === agentId) results.push(meta)
+    }
+    if (options?.search) {
+      const q = options.search.toLowerCase()
+      results = results.filter(
+        (m) =>
+          m.title?.toLowerCase().includes(q) ||
+          m.lastMessagePreview?.toLowerCase().includes(q),
+      )
+    }
+    results.sort((a, b) => (b.updatedAt ?? b.createdAt) - (a.updatedAt ?? a.createdAt))
+    if (options?.cursor) {
+      const idx = results.findIndex((m) => m.sessionId === options.cursor)
+      if (idx >= 0) results = results.slice(idx + 1)
+    }
+    if (options?.limit) results = results.slice(0, options.limit)
+    return results
+  }
+
+  async getSessionMeta(
+    _agentId: string,
+    sessionId: string,
+  ): Promise<SessionMeta | undefined> {
+    return this.sessionMeta.get(sessionId)
+  }
+
+  async updateSessionMeta(
+    _agentId: string,
+    sessionId: string,
+    updates: Partial<Omit<SessionMeta, 'sessionId' | 'agentId' | 'createdAt'>>,
+  ): Promise<SessionMeta | undefined> {
+    const existing = this.sessionMeta.get(sessionId)
+    if (!existing) return undefined
+    Object.assign(existing, updates, { updatedAt: Date.now() })
+    return existing
+  }
+
+  async closeSession(
+    agentId: string,
+    sessionId: string,
+  ): Promise<number> {
+    const removed = this.close(sessionId)
+    if (removed) {
+      this.sessionMeta.delete(sessionId)
+    }
+    const remaining = this.get(sessionId)
+    return remaining?.refCount ?? 0
   }
 }

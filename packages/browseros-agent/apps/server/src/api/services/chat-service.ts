@@ -305,6 +305,11 @@ export class ChatService {
       sessionStore.set(request.conversationId, session)
     }
 
+    // After this point, session is always defined (either pre-existing or just created)
+    if (!session) {
+      throw new Error('Session should exist after creation')
+    }
+
     session.agent.updateAclRules(request.aclRules)
 
     if (isNewSession && request.previousConversation?.length) {

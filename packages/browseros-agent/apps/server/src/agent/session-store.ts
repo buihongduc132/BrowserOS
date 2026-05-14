@@ -13,6 +13,8 @@ export interface AgentSession {
   workingDir?: string
   /** LLM config used when the session was created, for provider/model changes. */
   llmConfigKey?: string
+  /** Tool approval config key when the session was created, for approval changes. */
+  approvalConfigKey?: string
 }
 
 export class SessionStore {

@@ -9,7 +9,7 @@
 
 import { z } from 'zod'
 import { defineToolWithCategory } from './framework'
-import type { StorageArea } from '@browseros/cdp-protocol/generated/domains/extensions'
+import type { StorageArea } from '@browseros/cdp-protocol/domains/extensions'
 
 const defineExtTool = defineToolWithCategory('data-modification')
 const defineExtReadTool = defineToolWithCategory('observation')

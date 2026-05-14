@@ -89,7 +89,7 @@ describe('Storage migration v3', () => {
       updatedAt: 1715400000000,
     }
 
-    const result = migrateV3([provider])
+    const result = migrateV3([provider])!
     expect(result).toHaveLength(1)
     expect(result[0].models).toEqual([
       {
@@ -115,7 +115,7 @@ describe('Storage migration v3', () => {
       updatedAt: 1715400000000,
     }
 
-    const result = migrateV3([provider])
+    const result = migrateV3([provider])!
     const migrated = result[0]
 
     // All original fields must survive
@@ -141,7 +141,7 @@ describe('Storage migration v3', () => {
       updatedAt: 1715400000000,
     }
 
-    const result = migrateV3([provider])
+    const result = migrateV3([provider])!
     expect(result[0].models?.[0]).toEqual({
       id: 'llama-4',
       contextLength: 32000,
@@ -196,7 +196,7 @@ describe('Storage migration v3 edge cases', () => {
       models: existingModels,
     }
 
-    const result = migrateV3([provider])
+    const result = migrateV3([provider])!
     // models[] must be untouched
     expect(result[0].models).toEqual(existingModels)
   })
@@ -235,7 +235,7 @@ describe('Storage migration v3 edge cases', () => {
       },
     ]
 
-    const result = migrateV3(providers)
+    const result = migrateV3(providers)!
     expect(result).toHaveLength(2)
 
     // p1: synthesized

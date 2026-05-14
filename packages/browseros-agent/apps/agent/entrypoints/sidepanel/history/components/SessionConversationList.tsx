@@ -15,6 +15,8 @@ interface SessionConversationListProps {
   conversations: HistoryConversation[]
   activeConversationId: string
   onDelete?: (id: string) => void
+  onClearAll?: () => Promise<void>
+  isClearingAll?: boolean
   hasNextPage?: boolean
   isFetchingNextPage?: boolean
   onLoadMore?: () => void
