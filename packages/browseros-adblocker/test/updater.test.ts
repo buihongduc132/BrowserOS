@@ -19,6 +19,21 @@ const mockAlarmAddListener = vi.fn();
 
 vi.stubGlobal('chrome', {
   storage: mockStorage,
+  webRequest: {
+    onBeforeRequest: {
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+    },
+  },
+  browserAction: {
+    setBadgeText: vi.fn(),
+    setBadgeBackgroundColor: vi.fn(),
+  },
+  tabs: {
+    onRemoved: {
+      addListener: vi.fn(),
+    },
+  },
   alarms: {
     create: mockAlarmCreate,
     onAlarm: { addListener: mockAlarmAddListener },

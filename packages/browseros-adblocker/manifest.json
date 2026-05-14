@@ -17,6 +17,10 @@
   "background": {
     "scripts": ["dist/background.iife.js"]
   },
+  "browser_action": {
+    "default_title": "BrowserOS Ad Blocker",
+    "default_popup": "popup.html"
+  },
   "content_scripts": [
     {
       "matches": ["http://*/*", "https://*/*"],
