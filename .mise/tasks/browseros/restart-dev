@@ -15,9 +15,12 @@ echo ""
 echo "[1/3] Killing existing dev instance..."
 bash .mise/tasks/browseros/kill-dev
 
-# Wait for ports to be released after kill
+# Wait for ports to be released after kill (replaces fixed sleep)
 echo "        Waiting for ports to release..."
-sleep 2
+for i in $(seq 1 20); do
+  port_in_use "$DEV_CDP_PORT" || port_in_use "$DEV_SERVER_PORT" || break
+  sleep 0.5
+done
 
 echo "[2/3] Building dev extension..."
 if ! bash .mise/tasks/browseros/build-dev; then
@@ -30,6 +33,13 @@ fi
 
 echo "[3/3] Starting dev instance..."
 bash .mise/tasks/browseros/start-dev
+
+echo "[4/4] Running smoke test..."
+if ! python3 "${REPO_ROOT}/scripts/verify/smoke-dev.py" "$DEV_SERVER_PORT"; then
+  echo "" >&2
+  echo "[ERROR] Smoke test FAILED! Dev server is up but endpoints are broken." >&2
+  exit 1
+fi
 
 echo ""
 echo "=== restart-dev complete ==="

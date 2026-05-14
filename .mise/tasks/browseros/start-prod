@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+set -euo pipefail
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+[[ -d "${REPO_ROOT}/packages/browseros-agent" ]] || REPO_ROOT="$(pwd)"
+source "${REPO_ROOT}/scripts/launch/common.sh"
+
+APP="${BROWSEROS_APP_PATH:-$HOME/Downloads/alta/BrowserOS.AppImage}"
+PROD_LOG_DIR="${PROD_BOS_DIR}/logs"
+PROD_BROWSER_LOG="${PROD_LOG_DIR}/browser.log"
+SOAK_LOG="${PROD_LOG_DIR}/soak.log"
+MCP_PORT="$PROD_SERVER_PORT"
+PROXY_PORT="$PROD_PROXY_PORT"
+SERVER_RESOURCES_DIR="${BROWSEROS_SERVER_RESOURCES_DIR:-${REPO_ROOT}/.browseros-prod-resources}"
+
+mkdir -p "$PROD_BOS_DIR" "$PROD_LOG_DIR" "$SERVER_RESOURCES_DIR/bin" "$SERVER_RESOURCES_DIR/db/migrations/meta"
+
+if [ ! -x "$APP" ]; then
+  echo "[ERROR] BrowserOS AppImage missing: $APP" >&2
+  exit 1
+fi
+
+if is_browser_running "$PROD_BROWSER_PID"; then
+  OLD_PID=$(cat "$PROD_BROWSER_PID")
+  echo "[ERROR] Prod browser already running (PID $OLD_PID)." >&2
+  exit 1
+fi
+
+if [ ! -f "${HOME}/.local/share/applications/browseros.desktop" ]; then
+  "$REPO_ROOT/scripts/setup-desktop-entries.sh"
+fi
+
+clean_singleton_locks "$PROD_PROFILE"
+
+cp "$REPO_ROOT/packages/browseros-agent/dist/prod/server/linux-x64/resources/bin/browseros_server" "$SERVER_RESOURCES_DIR/bin/browseros_server"
+cp "$REPO_ROOT/packages/browseros-agent/apps/server/src/lib/db/migrations/"*.sql "$SERVER_RESOURCES_DIR/db/migrations/"
+cp "$REPO_ROOT/packages/browseros-agent/apps/server/src/lib/db/migrations/meta/"* "$SERVER_RESOURCES_DIR/db/migrations/meta/"
+chmod +x "$SERVER_RESOURCES_DIR/bin/browseros_server"
+
+nohup "$REPO_ROOT/scripts/launch/launch-browseros-prod.sh" > "$PROD_BROWSER_LOG" 2>&1 &
+
+python3 - "$MCP_PORT" <<'PY'
+import json, sys, time, urllib.request
+port = int(sys.argv[1])
+checks = [
+    (f"http://127.0.0.1:{port}/health", lambda data: data.get("status") == "ok"),
+    (f"http://127.0.0.1:{port}/agents/adapters", lambda data: isinstance(data.get("adapters"), list) and len(data["adapters"]) > 0),
+]
+for _ in range(240):
+    ready = True
+    for url, predicate in checks:
+        try:
+            with urllib.request.urlopen(url, timeout=3) as resp:
+                body = json.load(resp)
+            if not predicate(body):
+                ready = False
+                break
+        except Exception:
+            ready = False
+            break
+    if ready:
+        sys.exit(0)
+    time.sleep(0.5)
+print(f"[ERROR] BrowserOS prod endpoints did not become ready on port {port}", file=sys.stderr)
+sys.exit(1)
+PY
+
+python3 - "$MCP_PORT" "$PROXY_PORT" <<'PY' | tee "$SOAK_LOG"
+import json, sys, time, urllib.request
+http_port = int(sys.argv[1])
+proxy_port = int(sys.argv[2])
+checks = [
+    ("health", f"http://127.0.0.1:{http_port}/health", lambda data: data.get("status") == "ok"),
+    (
+        "agents_adapters",
+        f"http://127.0.0.1:{http_port}/agents/adapters",
+        lambda data: isinstance(data.get("adapters"), list) and len(data["adapters"]) > 0 and any(item.get("id") == "claude" for item in data["adapters"]),
+    ),
+    (
+        "mcp_proxy",
+        f"http://127.0.0.1:{proxy_port}/mcp",
+        lambda data: data.get("status") == "ok",
+    ),
+]
+
+for phase in range(2):
+    label = "smoke" if phase == 0 else "soak"
+    if phase == 1:
+        time.sleep(10)
+    for name, url, predicate in checks:
+        with urllib.request.urlopen(url, timeout=15) as resp:
+            body = json.load(resp)
+        if not predicate(body):
+            raise SystemExit(f"[ERROR] {label} check failed for {url}: {body}")
+        print(json.dumps({"phase": label, "check": name, "url": url, "body": body}))
+PY
+
+echo "=== browseros:start-prod complete ==="
+echo "HTTP: http://127.0.0.1:${MCP_PORT}"
+echo "MCP Proxy: http://127.0.0.1:${PROXY_PORT}/mcp"
+echo "Logs: ${PROD_LOG_DIR}"

@@ -1,0 +1,23 @@
+# SOURCE: coding-guard internal — JSON clone is lossy for complex types
+# SOURCE: https://developer.mozilla.org/en-US/docs/Web/API/structuredClone
+# BUILT_ON: https://ast-grep.com/
+id: no-lossy-json-clone
+message: "JSON.parse(JSON.stringify()) is lossy — use structuredClone() or spread operator"
+severity: warning
+language: TypeScript
+note: |
+  JSON.parse(JSON.stringify(x)) loses:
+  - undefined values
+  - Function properties
+  - Date objects (become strings)
+  - RegExp objects
+  - Map/Set/WeakMap/WeakSet
+  - Sparse arrays
+  Use structuredClone() for deep clone, or spread for shallow.
+rule:
+  pattern: JSON.parse(JSON.stringify($OBJ))
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'

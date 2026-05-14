@@ -1,0 +1,27 @@
+# SOURCE: coding-guard internal — prevents IndexedDB bloat from base64 attachments
+# SOURCE: https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API/Browser_storage_limits_and_eviction_criteria
+# BUILT_ON: https://ast-grep.com/
+id: no-raw-attachment-persist
+message: "Strip UserAttachmentPreview.dataUrl before persisting to IndexedDB — use stripAttachments() helper"
+severity: warning
+language: TypeScript
+note: |
+  UserAttachmentPreview.dataUrl contains base64-encoded images that can be
+  1-5MB each. Storing these in IndexedDB causes rapid storage bloat.
+  Always use the stripAttachments() helper before calling repo.appendMessage()
+  or repo.saveCompleteConversation().
+  
+  Flags direct calls to repo persistence methods that pass a variable named
+  turns, messages, or history without first calling stripAttachments().
+rule:
+  any:
+    - pattern: $REPO.saveCompleteConversation($$$, $TURNS)
+constraints:
+  TURNS:
+    regex: '(?i)^(turns|messages|history)$'
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/session-repo/helpers/strip-attachments.ts'

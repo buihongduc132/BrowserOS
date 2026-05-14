@@ -21,7 +21,10 @@ import { getDb } from '../lib/db'
 import { logger } from '../lib/logger'
 import { Sentry } from '../lib/sentry'
 import { requireTrustedOrigin } from './middleware/require-trusted-origin'
+import { createAgentRoutes } from './routes/agents'
 import { createChatRoutes } from './routes/chat'
+import { createCompactionRoutes } from './routes/compaction'
+import { createConfigRoutes } from './routes/config'
 import { createCreditsRoutes } from './routes/credits'
 import { createHealthRoute } from './routes/health'
 import { createKlavisRoutes } from './routes/klavis'
@@ -30,7 +33,6 @@ import { createMemoryRoutes } from './routes/memory'
 import { createOAuthRoutes } from './routes/oauth'
 import { createProviderRoutes } from './routes/provider'
 import { createRefinePromptRoutes } from './routes/refine-prompt'
-import { createSdkRoutes } from './routes/sdk'
 import { createShutdownRoute } from './routes/shutdown'
 import { createSkillsRoutes } from './routes/skills'
 import { createSoulRoutes } from './routes/soul'
@@ -121,6 +123,9 @@ export async function createHttpServer(config: HttpServerConfig) {
       }),
     )
     .route('/status', createStatusRoute({ browser }))
+    .route('/config', createConfigRoutes())
+    .route('/compaction', createCompactionRoutes())
+    .route('/agents', createAgentRoutes({ browser, browserosServerPort: port }))
     .route('/soul', createSoulRoutes())
     .route('/memory', createMemoryRoutes())
     .route('/skills', createSkillsRoutes())
@@ -162,14 +167,6 @@ export async function createHttpServer(config: HttpServerConfig) {
         registry,
         browserosId,
         aiSdkDevtoolsEnabled: config.aiSdkDevtoolsEnabled,
-      }),
-    )
-    .route(
-      '/sdk',
-      createSdkRoutes({
-        port,
-        browser,
-        browserosId,
       }),
     )
 

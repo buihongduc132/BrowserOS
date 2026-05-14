@@ -1,0 +1,25 @@
+# SOURCE: coding-guard internal — enforces Repository Pattern anti-corruption layer
+# SOURCE: https://martinfowler.com/eaaCatalog/repository.html (Repository pattern)
+# BUILT_ON: https://ast-grep.com/
+id: no-direct-storage-in-session-repo-consumers
+message: "Session data must go through SessionRepo — do not import underlying stores directly"
+severity: error
+language: TypeScript
+note: |
+  After Wave A of the session-repo plan, all session data access must go through
+  the SessionRepo interface. Direct imports from agent-session-list-store,
+  agent-conversations/storage, or conversationStorage in files that also
+  import from session-repo/ indicate a layer violation.
+rule:
+  pattern: import $IMPORT from $PATH
+constraints:
+  PATH:
+    regex: "'./(agent-session-list-store|agent-conversations/storage|conversations/conversationStorage)'"
+ignores:
+  - '**/session-repo/**'
+  - '**/*.test.ts'
+  - '**/*.test.tsx'
+  - '**/*.spec.ts'
+  - '**/*.spec.tsx'
+  - '**/test/**'
+  - '**/tests/**'
