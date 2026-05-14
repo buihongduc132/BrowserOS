@@ -94,11 +94,11 @@ export async function updateFilters(): Promise<void> {
 
   const newBlocker = WebExtensionBlocker.parse(rawLists.join('\n'));
 
-  // Hot-swap: disable old blocker, enable new one
+  // Hot-swap: enable new blocker first, then disable old one (avoid gap)
+  newBlocker.enableBlockingInBrowser(chrome);
   if (activeBlocker) {
     try { activeBlocker.disableBlockingInBrowser(chrome); } catch { /* ok */ }
   }
-  newBlocker.enableBlockingInBrowser(chrome);
   activeBlocker = newBlocker;
 
   await saveEngine(newBlocker.serialize());
