@@ -121,14 +121,14 @@ PYEOF
 install_desktop_entries() {
   mkdir -p "${APP_DIR}"
 
-  # ── Prod entry ──
+  # ── Prod entry — routes through launch script for --no-sandbox + port fix + singleton guard ──
   cat > "${APP_DIR}/browseros.desktop" <<EOF
 [Desktop Entry]
 Version=1.0
 Name=BrowserOS
 GenericName=Web Browser
 Comment=AI-powered browser agent
-Exec=${APPIMAGE} %U
+Exec=bash ${REPO_ROOT}/scripts/launch/launch-browseros-prod.sh %U
 Icon=browseros
 Terminal=false
 Type=Application
@@ -147,7 +147,7 @@ Version=1.0
 Name=BrowserOS (Dev)
 GenericName=Web Browser
 Comment=BrowserOS Development Instance — builds extension, starts server, singleton guard
-Exec=bash ${REPO_ROOT}/scripts/launch/launch-browseros-dev.sh
+Exec=env PATH="${HOME}/.local/bin:\$PATH" bash ${REPO_ROOT}/scripts/launch/launch-browseros-dev.sh
 Icon=browseros-dev
 Terminal=true
 Type=Application
