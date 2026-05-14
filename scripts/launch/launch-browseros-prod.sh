@@ -105,6 +105,7 @@ export BROWSEROS_CDP_PORT="$PROD_CDP_PORT"
 export BROWSEROS_SERVER_PORT="$PROD_SERVER_PORT"
 export BROWSEROS_EXTENSION_PORT="$PROD_EXTENSION_PORT"
 export BROWSEROS_PROXY_PORT="$PROD_SERVER_PORT"
+export BROWSEROS_SKIP_OPENCLAW=1
 
 # Start browser in background to capture real PID (exec loses $$)
 # CLI flags MUST match server_config.json written above.
