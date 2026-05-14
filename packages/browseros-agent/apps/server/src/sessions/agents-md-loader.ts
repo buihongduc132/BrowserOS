@@ -1,95 +1,148 @@
 /**
  * @license
  * Copyright 2025 BrowserOS
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import fs from 'node:fs/promises'
-import path from 'node:path'
+import { logger } from '../lib/logger'
+import { resolve, join } from 'node:path'
+import { stat, readFile, realpath } from 'node:fs/promises'
 
+/**
+ * Result of loading an AGENTS.md file from a workspace.
+ */
 export interface AgentsMdResult {
+  /** Absolute path to the AGENTS.md file */
   path: string
+  /** File contents (UTF-8) */
   content: string
+  /** File mtime in epoch milliseconds */
   lastModified: number
 }
 
-const MAX_FILE_SIZE = 100 * 1024 // 100KB
+const AGENTS_MD_FILENAME = 'AGENTS.md'
+const MAX_AGENTS_MD_SIZE = 100_000 // 100KB
 
-interface CacheEntry {
-  content: string
-  lastModified: number
-}
-
+/**
+ * Loads AGENTS.md files from workspace directories with:
+ * - Path allowlist (only registered workspaces)
+ * - Symlink escape detection
+ * - Size limit (100KB)
+ * - mtime-based cache
+ */
 export class AgentsMdLoader {
-  private allowedDirs: string[]
-  private cache = new Map<string, CacheEntry>()
+  private cache = new Map<string, { content: string; mtime: number }>()
+  private workspaceAllowlist: Set<string>
 
   constructor(registeredPaths: string[]) {
-    this.allowedDirs = registeredPaths.map((p) => path.resolve(p))
+    this.workspaceAllowlist = new Set(registeredPaths.map((p) => resolve(p)))
   }
 
+  /**
+   * Load AGENTS.md from a workspace path.
+   * Returns null if: not in allowlist, file missing, file too large,
+   * symlink escape detected, or any I/O error.
+   */
   async load(workspacePath: string): Promise<AgentsMdResult | null> {
-    const resolved = path.resolve(workspacePath)
+    const resolvedWorkspace = resolve(workspacePath)
 
-    // Security: validate resolved path is within an allowed directory
-    if (!this.isAllowed(resolved)) {
+    // Security check 1: workspace must be in allowlist
+    if (!this.workspaceAllowlist.has(resolvedWorkspace)) {
+      logger.debug('AgentsMdLoader: path not in allowlist', {
+        path: resolvedWorkspace,
+      })
       return null
     }
 
-    const agentsMdPath = path.join(resolved, 'AGENTS.md')
+    const filePath = join(resolvedWorkspace, AGENTS_MD_FILENAME)
 
-    // Check cache
-    const cached = this.cache.get(agentsMdPath)
-    if (cached) {
-      const stat = await this.safeStat(agentsMdPath)
-      if (stat && stat.mtimeMs === cached.lastModified) {
+    try {
+      // Resolve symlinks for security
+      let realFilePath: string
+      try {
+        realFilePath = await realpath(filePath)
+      } catch {
+        // File doesn't exist
+        return null
+      }
+
+      // Security check 2: resolved path must still be within the workspace
+      const realWorkspace = await realpath(resolvedWorkspace)
+      if (!realFilePath.startsWith(realWorkspace + '/') && realFilePath !== join(realWorkspace, AGENTS_MD_FILENAME)) {
+        logger.warn('AgentsMdLoader: symlink escape detected', {
+          workspace: resolvedWorkspace,
+          resolvedPath: realFilePath,
+          realWorkspace,
+        })
+        return null
+      }
+
+      const fileStat = await stat(realFilePath)
+
+      // Security check 3: file size limit
+      if (fileStat.size > MAX_AGENTS_MD_SIZE) {
+        logger.debug('AgentsMdLoader: file too large', {
+          path: realFilePath,
+          size: fileStat.size,
+          max: MAX_AGENTS_MD_SIZE,
+        })
+        return null
+      }
+
+      // Cache check: return cached content if mtime unchanged
+      const cached = this.cache.get(resolvedWorkspace)
+      if (cached && cached.mtime === fileStat.mtimeMs) {
         return {
-          path: agentsMdPath,
+          path: realFilePath,
           content: cached.content,
-          lastModified: cached.lastModified,
+          lastModified: fileStat.mtimeMs,
         }
       }
+
+      // Read file
+      const content = await readFile(realFilePath, 'utf-8')
+
+      // Update cache
+      this.cache.set(resolvedWorkspace, {
+        content,
+        mtime: fileStat.mtimeMs,
+      })
+
+      return {
+        path: realFilePath,
+        content,
+        lastModified: fileStat.mtimeMs,
+      }
+    } catch (error) {
+      logger.debug('AgentsMdLoader: failed to load', {
+        path: resolvedWorkspace,
+        error: String(error),
+      })
+      return null
     }
-
-    // Stat for size check and mtime
-    const stat = await this.safeStat(agentsMdPath)
-    if (!stat) return null
-    if (stat.size > MAX_FILE_SIZE) return null
-
-    const content = await fs.readFile(agentsMdPath, 'utf-8')
-
-    const result: AgentsMdResult = {
-      path: agentsMdPath,
-      content,
-      lastModified: stat.mtimeMs,
-    }
-
-    this.cache.set(agentsMdPath, {
-      content,
-      lastModified: stat.mtimeMs,
-    })
-
-    return result
   }
 
-  async loadMultiple(paths: string[]): Promise<AgentsMdResult[]> {
-    const results = await Promise.all(paths.map((p) => this.load(p)))
+  /**
+   * Load AGENTS.md from multiple workspaces. Filters out nulls.
+   */
+  async loadMultiple(workspaces: string[]): Promise<AgentsMdResult[]> {
+    if (workspaces.length === 0) return []
+
+    const results = await Promise.all(workspaces.map((w) => this.load(w)))
     return results.filter((r): r is AgentsMdResult => r !== null)
   }
 
-  private isAllowed(resolvedPath: string): boolean {
-    return this.allowedDirs.some(
-      (dir) => resolvedPath === dir || resolvedPath.startsWith(dir + path.sep),
-    )
+  /**
+   * Update the allowlist (e.g., when user adds/removes workspaces).
+   */
+  updateAllowlist(paths: string[]): void {
+    this.workspaceAllowlist = new Set(paths.map((p) => resolve(p)))
   }
 
-  private async safeStat(
-    filePath: string,
-  ): Promise<{ size: number; mtimeMs: number } | null> {
-    try {
-      const stat = await fs.stat(filePath)
-      return { size: stat.size, mtimeMs: stat.mtimeMs }
-    } catch {
-      return null
-    }
+  /**
+   * Check if a path is in the allowlist.
+   */
+  isAllowed(workspacePath: string): boolean {
+    return this.workspaceAllowlist.has(resolve(workspacePath))
   }
 }
