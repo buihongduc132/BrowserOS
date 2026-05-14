@@ -1,7 +1,5 @@
 import { Loader2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useCommands } from '@/entrypoints/app/command-settings/command-queries'
-import { useAgentServerUrl } from '@/lib/browseros/useBrowserOSProviders'
 import { createBrowserOSAction } from '@/lib/chat-actions/types'
 import {
   SIDEPANEL_AI_TRIGGERED_EVENT,
@@ -30,15 +28,9 @@ import { ChatEmptyState } from './ChatEmptyState'
 import { ChatError } from './ChatError'
 import { ChatFooter } from './ChatFooter'
 import { ChatMessages } from './ChatMessages'
+import { ContextLimitBanner } from './ContextLimitBanner'
 import type { ChatMode } from './chatTypes'
-import {
-  BUILTIN_ACTION_TYPES,
-  BUILTIN_COMMAND_NAMES,
-  type CommandResolution,
-  isModelAvailable,
-  parseSlashCommand,
-  resolveTemplate,
-} from './slash-command-resolver'
+import { useContextLimit } from './useContextLimit'
 
 /**
  * @public
@@ -96,6 +88,9 @@ export const Chat = () => {
   const [mounted, setMounted] = useState(false)
   const [slashCommandOpen, setSlashCommandOpen] = useState(false)
   const [slashFilterText, setSlashFilterText] = useState('')
+  const [isCompactingFromBanner, setIsCompactingFromBanner] = useState(false)
+
+  const { isNearLimit, isOverLimit, usageRatio } = useContextLimit(messages)
 
   // Available model IDs for model override validation
   const availableModelIds = providers
@@ -305,6 +300,26 @@ export const Chat = () => {
     track(SIDEPANEL_VOICE_RECORDING_STOPPED_EVENT)
   }
 
+  // Compact conversation from banner — sends /compact as a message
+  const handleCompactFromBanner = useCallback(() => {
+    setIsCompactingFromBanner(true)
+    executeMessage('/compact')
+    // Reset compacting state after a delay (compaction runs async)
+    setTimeout(() => setIsCompactingFromBanner(false), 3000)
+  }, [executeMessage])
+
+  // Start fresh with summary — reset conversation (MVP: just resets)
+  const handleStartFreshWithSummary = useCallback(() => {
+    resetConversation()
+  }, [resetConversation])
+
+  // Auto-dismiss compacting state when status returns to ready
+  useEffect(() => {
+    if (status === 'ready') {
+      setIsCompactingFromBanner(false)
+    }
+  }, [status])
+
   const voiceState = {
     isRecording: voice.isRecording,
     isTranscribing: voice.isTranscribing,
@@ -361,6 +376,16 @@ export const Chat = () => {
           <ChatError error={chatError} providerType={selectedProvider?.type} />
         )}
       </main>
+
+      <ContextLimitBanner
+        isNearLimit={isNearLimit}
+        isOverLimit={isOverLimit}
+        usageRatio={usageRatio}
+        conversationId={conversationId}
+        isCompacting={isCompactingFromBanner || status === 'streaming'}
+        onCompact={handleCompactFromBanner}
+        onStartFreshWithSummary={handleStartFreshWithSummary}
+      />
 
       <ChatFooter
         mode={mode}

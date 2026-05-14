@@ -307,4 +307,25 @@ export const CONVERSATION_FORK_EVENT = 'ui.conversation.fork'
 /** @public */
 export const CONVERSATION_EDIT_EVENT = 'ui.conversation.edit'
 
+/** @public */
+export const CONTEXT_LIMIT_BANNER_SHOWN_EVENT =
+  'sidepanel.context_limit.banner_shown'
+
+/** @public */
+export const CONTEXT_LIMIT_COMPACT_CLICKED_EVENT =
+  'sidepanel.context_limit.compact_clicked'
+
+/** @public */
+export const CONTEXT_LIMIT_SUMMARY_CLICKED_EVENT =
+  'sidepanel.context_limit.summary_clicked'
+
 export const SLASH_COMMAND_EXECUTED_EVENT = 'ui.slash_command.executed'
+
+/** @public */
+export const SIDEPANEL_SESSION_CREATED_EVENT = 'sidepanel.session.created'
+
+/** @public */
+export const SIDEPANEL_SESSION_SWITCHED_EVENT = 'sidepanel.session.switched'
+
+/** @public */
+export const SIDEPANEL_SESSION_DELETED_EVENT = 'sidepanel.session.deleted'

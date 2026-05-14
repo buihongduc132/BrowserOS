@@ -25,12 +25,15 @@ import { getDb } from '../lib/db'
 import { logger } from '../lib/logger'
 import { Sentry } from '../lib/sentry'
 import { requireTrustedOrigin } from './middleware/require-trusted-origin'
+import { requireTrustedAppOrigin } from './utils/request-auth'
 import { AgentSessionStore } from '../agent/agent-session-store'
+import { SessionStore } from '../agent/session-store'
 import { createAgentRoutes } from './routes/agents'
 import { createAgentSessionRoutes } from './routes/agent-sessions'
 import { createAssistantSessionRoutes } from './routes/assistant-sessions'
 import { createChatRoutes } from './routes/chat'
-import { createCompactionRoutes } from './routes/compaction'
+import { createCompactionRoutes, type CompactionRouteDeps } from './routes/compaction'
+import { resolveCompactionConfig } from '../agent/compaction-config'
 import { createConfigRoutes } from './routes/config'
 import { createCreditsRoutes } from './routes/credits'
 import { createHealthRoute } from './routes/health'
@@ -147,6 +150,8 @@ export async function createHttpServer(config: HttpServerConfig) {
     .route('/status', createStatusRoute({ browser }))
     // Single shared AgentSessionStore — harness and routes see the same instance
     const sharedSessionStore = new AgentSessionStore()
+    // Shared chat SessionStore — lifts from createChatRoutes so compaction can access messages
+    const sharedChatSessionStore = new SessionStore()
     .route(
       '/agents',
       createAgentRoutes({ browser, browserosServerPort: port, sessionMetaStore: sharedSessionStore }),
@@ -155,11 +160,53 @@ export async function createHttpServer(config: HttpServerConfig) {
       '/agents',
       createAgentSessionRoutes({ sessionStore: sharedSessionStore }),
     )
+    // ------------------------------------------------------------------
+    // Compaction routes — config CRUD + on-demand trigger
+    // ------------------------------------------------------------------
+    // The trigger endpoint (POST /compact) requires runtime deps:
+    //   - getConversationMessages: loads messages from the in-memory session store
+    //   - createModel: creates a LanguageModel for summarization
+    //
+    // Currently the chat SessionStore is scoped inside createChatRoutes().
+    // To fully wire the trigger, either:
+    //   (a) lift the SessionStore to this level and inject into both
+    //       createChatRoutes and createCompactionRoutes, or
+    //   (b) expose a getMessages() method on ChatService.
+    //
+    // For now the trigger is registered but returns 503 until wired.
     .route(
       '/compaction',
       new Hono<Env>()
         .use('/*', requireTrustedAppOrigin())
-        .route('/', createCompactionRoutes()),
+        .route(
+          '/',
+          createCompactionRoutes({
+            getConversationMessages: async (conversationId: string) => {
+              const session = sharedChatSessionStore.get(conversationId)
+              if (!session) return null
+              // Convert UIMessage[] to ModelMessage[] — strip UI-specific parts
+              return session.agent.messages.map((m) => ({
+                role: m.role,
+                content: typeof m.content === 'string'
+                  ? m.content
+n                  : m.parts
+                    ?.filter((p: any) => p.type === 'text')
+                    ?.map((p: any) => p.text)
+                    ?.join('\n') ?? '',
+              })) as any[]
+            },
+            createModel: () => {
+              // Reuse first active session's model config, or throw
+              // This is a best-effort — the model is tied to the session's provider
+              throw new Error('Model creation requires an active session context')
+            },
+            getCompactionConfig: () => {
+              const raw = config.compaction
+              if (!raw) return undefined
+              try { return resolveCompactionConfig(raw) } catch { return undefined }
+            },
+          } as unknown as CompactionRouteDeps),
+        ),
     )
     .route('/soul', createSoulRoutes())
     .route('/memory', createMemoryRoutes())
@@ -205,6 +252,7 @@ export async function createHttpServer(config: HttpServerConfig) {
         klavisRef,
         aiSdkDevtoolsEnabled: config.aiSdkDevtoolsEnabled,
         compaction: config.compaction,
+        sessionStore: sharedChatSessionStore,
       }),
     )
   // Error handler
