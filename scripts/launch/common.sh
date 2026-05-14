@@ -198,6 +198,38 @@ kill_tree() {
   sleep 0.3
 }
 
+# ── Kill any process listening on a port (orphan fallback) ──
+# Usage: kill_port_orphan <port> [expected_cmdline_substring]
+# Uses ss to find the PID, then kills it. Skips if PID matches expected substring
+# (to avoid killing a process from a different instance).
+# If no expected substring given, kills anything on that port.
+kill_port_orphan() {
+  local port="$1"
+  local expected="${2:-}"
+
+  # Find PIDs listening on this port
+  local pids
+  pids=$(ss -tlnp "sport = :$port" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | sort -u) || true
+
+  if [[ -z "$pids" ]]; then
+    return 0  # Nothing on this port
+  fi
+
+  for pid in $pids; do
+    if [[ -n "$expected" ]]; then
+      local cmdline
+      cmdline=$(cat "/proc/${pid}/cmdline" 2>/dev/null | tr '\0' ' ') || continue
+      case "$cmdline" in
+        *"$expected"*) ;;  # matches — proceed to kill
+        *) continue ;;      # doesn't match — skip
+      esac
+    fi
+
+    echo "[orphan] Killing PID $pid on port $port (no PID file match)"
+    kill_tree "$pid"
+  done
+}
+
 # ── Clean stale Chromium singleton locks (safe: call only after verifying no process) ──
 # Usage: clean_singleton_locks <profile_dir>
 clean_singleton_locks() {
