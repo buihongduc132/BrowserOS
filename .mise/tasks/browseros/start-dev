@@ -8,9 +8,9 @@ cd "${REPO_ROOT}/packages/browseros-agent"
 source "${REPO_ROOT}/scripts/launch/common.sh"
 
 APP="${BROWSEROS_APP_PATH:-$HOME/Downloads/alta/BrowserOS.AppImage}"
-EXT_DIR="apps/agent/dist/chrome-mv3-dev"
-BROWSER_LOG="/tmp/browseros-dev-browser.log"
-SERVER_LOG="/tmp/browseros-dev-server.log"
+EXT_DIR="$(cd 'apps/agent/dist/chrome-mv3-dev' 2>/dev/null && pwd)"
+BROWSER_LOG="${DEV_BOS_DIR}/browser.log"
+SERVER_LOG="${DEV_BOS_DIR}/server.log"
 
 # ── Fallback cleanup on ANY failure (fixes H2) ──
 cleanup_on_failure() {
@@ -52,6 +52,8 @@ if port_in_use "$DEV_SERVER_PORT"; then
 fi
 
 # ── Pre-flight: check binary and extension ──
+command -v python3 >/dev/null || { echo "[ERROR] python3 required but not in PATH" >&2; exit 1; }
+command -v bun >/dev/null || { echo "[ERROR] bun required but not in PATH" >&2; exit 1; }
 if [ ! -x "$APP" ]; then
   echo "[ERROR] BrowserOS AppImage missing: $APP" >&2
   echo "        Set BROWSEROS_APP_PATH env var to override." >&2
@@ -62,12 +64,17 @@ if [ ! -d "$EXT_DIR" ]; then
   exit 1
 fi
 
-# ── Update desktop entries ──
-"$REPO_ROOT/scripts/setup-desktop-entries.sh" 2>/dev/null || true
-update-desktop-database ~/.local/share/applications/ 2>/dev/null || true
+# ── Desktop entries: only install if missing (prevents GNOME losing window tracking) ──
+if [ ! -f "${HOME}/.local/share/applications/browseros-dev.desktop" ]; then
+  "$REPO_ROOT/scripts/setup-desktop-entries.sh" 2>/dev/null || true
+fi
 
 # ── Clean stale singleton locks ──
 clean_singleton_locks "$DEV_PROFILE"
+
+# ── Rotate previous logs (keep .prev for crash debugging) ──
+[ -f "$BROWSER_LOG" ] && mv -f "$BROWSER_LOG" "${BROWSER_LOG}.prev"
+[ -f "$SERVER_LOG" ] && mv -f "$SERVER_LOG" "${SERVER_LOG}.prev"
 
 # ── Start dev browser ──
 echo "[start] Launching BrowserOS Dev (CDP=$DEV_CDP_PORT, Server=$DEV_SERVER_PORT)..."
@@ -80,6 +87,7 @@ nohup "$APP" \
   --disable-browseros-server \
   --disable-browseros-extensions \
   --name=BrowserOS-Dev \
+  --class=browseros-dev \
   --remote-debugging-port="$DEV_CDP_PORT" \
   --browseros-mcp-port="$DEV_SERVER_PORT" \
   --browseros-server-port="$DEV_SERVER_PORT" \
@@ -92,9 +100,9 @@ echo "$BROWSER_PID" > "$DEV_BROWSER_PID"
 
 # ── Wait for CDP port — pass port as CLI arg (fixes M4) ──
 python3 - "$DEV_CDP_PORT" <<"PY"
-import socket, time, sys
+import socket, time, sys, os
 port = int(sys.argv[1])
-for _ in range(60):
+for i in range(60):
     s = socket.socket()
     s.settimeout(0.5)
     try:
@@ -102,8 +110,13 @@ for _ in range(60):
         s.close()
         sys.exit(0)
     except OSError:
+        if i % 10 == 0:
+            sys.stderr.write(f"  waiting for CDP port {port}... ({i}/60)\n")
+            sys.stderr.flush()
         time.sleep(0.5)
 print(f"[ERROR] BrowserOS CDP port {port} did not open", file=sys.stderr)
+if os.path.exists("/home/bhd/.browseros-dev/browser.log"):
+    os.system("tail -20 /home/bhd/.browseros-dev/browser.log >&2")
 sys.exit(1)
 PY
 echo "[start] Browser ready on CDP port $DEV_CDP_PORT"
@@ -122,20 +135,28 @@ echo "$SERVER_PID" > "$DEV_SERVER_PID"
 
 # ── Wait for server health — pass port as CLI arg (fixes M4) ──
 python3 - "$DEV_SERVER_PORT" <<"PY"
-import json, time, urllib.request, sys
+import json, time, urllib.request, sys, os
 port = sys.argv[1]
 url = f"http://127.0.0.1:{port}/health"
-for _ in range(60):
+for i in range(60):
     try:
         with urllib.request.urlopen(url, timeout=1) as r:
             data = json.load(r)
         if data.get("status") == "ok" and data.get("cdpConnected") is True:
             print(json.dumps(data))
             sys.exit(0)
+        if i % 10 == 0:
+            sys.stderr.write(f"  waiting for server health... ({i}/60)\n")
+            sys.stderr.flush()
         time.sleep(1)
     except Exception:
+        if i % 10 == 0:
+            sys.stderr.write(f"  waiting for server... ({i}/60)\n")
+            sys.stderr.flush()
         time.sleep(0.5)
 print(f"[ERROR] BrowserOS server health check failed on {url}", file=sys.stderr)
+if os.path.exists("/home/bhd/.browseros-dev/server.log"):
+    os.system("tail -20 /home/bhd/.browseros-dev/server.log >&2")
 sys.exit(1)
 PY
 echo "[start] Server ready on port $DEV_SERVER_PORT"

@@ -1,0 +1,148 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# browseros:setup — First-time bootstrap / prerequisite verification
+# Run once after cloning or when env changes. Safe to re-run idempotently.
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+[[ -d "${REPO_ROOT}/packages/browseros-agent" ]] || REPO_ROOT="$(pwd)"
+
+PASS=0
+FAIL=0
+# Note: use VAR=$((VAR+1)) not ((VAR++)) — the latter fails under set -e when VAR was 0
+
+check() {
+  local label="$1"
+  shift
+  if "$@" &>/dev/null; then
+    printf "  ✓ %s\n" "$label"
+    PASS=$((PASS+1))
+  else
+    printf "  ✗ %s\n" "$label"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+check_version() {
+  local label="$1" min_ver="$2" current_ver="$3"
+  # Compare semver: split by '.', compare numerically
+  local IFS='.'
+  read -ra MIN <<< "$min_ver"
+  read -ra CUR <<< "$current_ver"
+  local ok=true
+  for i in 0 1 2; do
+    local m="${MIN[$i]:-0}"
+    local c="${CUR[$i]:-0}"
+    if (( c > m )); then break; fi
+    if (( c < m )); then ok=false; break; fi
+  done
+  if $ok; then
+    printf "  ✓ %s (v%s ≥ %s)\n" "$label" "$current_ver" "$min_ver"
+    PASS=$((PASS+1))
+  else
+    printf "  ✗ %s (v%s < %s)\n" "$label" "$current_ver" "$min_ver"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+echo "╔═══════════════════════════════════════════════════╗"
+echo "║  BrowserOS Dev Setup — Prerequisite Check        ║"
+echo "╚═══════════════════════════════════════════════════╝"
+echo ""
+
+# ── 1. Go ≥ 1.21 ──
+if command -v go &>/dev/null; then
+  GO_VER=$(go version 2>/dev/null | grep -oP 'go\K[0-9]+\.[0-9]+' | head -1)
+  check_version "Go" "1.21" "${GO_VER}.0"
+else
+  echo "  ✗ Go (not found — install via brew install go)"
+  FAIL=$((FAIL+1))
+fi
+
+# ── 2. Bun ──
+if command -v bun &>/dev/null; then
+  BUN_VER=$(bun --version 2>/dev/null)
+  printf "  ✓ Bun (v%s)\n" "$BUN_VER"
+  PASS=$((PASS+1))
+else
+  echo "  ✗ Bun (not found — install via curl -fsSL https://bun.sh/install | bash)"
+  FAIL=$((FAIL+1))
+fi
+
+# ── 3. Python3 ──
+if command -v python3 &>/dev/null; then
+  PY_VER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+  printf "  ✓ Python3 (v%s)\n" "$PY_VER"
+  PASS=$((PASS+1))
+else
+  echo "  ✗ Python3 (not found)"
+  FAIL=$((FAIL+1))
+fi
+
+# ── 4. mise ──
+check "mise" command -v mise
+
+# ── 5. AppImage ──
+APP="${BROWSEROS_APP_PATH:-$HOME/Downloads/alta/BrowserOS.AppImage}"
+if [ -x "$APP" ]; then
+  printf "  ✓ AppImage (%s)\n" "$APP"
+  PASS=$((PASS+1))
+else
+  printf "  ✗ AppImage (missing or not executable: %s)\n" "$APP"
+  FAIL=$((FAIL+1))
+fi
+
+# ── 6. Desktop entries ──
+if [ -f "${HOME}/.local/share/applications/browseros.desktop" ] && \
+   [ -f "${HOME}/.local/share/applications/browseros-dev.desktop" ]; then
+  echo "  ✓ Desktop entries (.desktop files exist)"
+  PASS=$((PASS+1))
+else
+  echo "  → Installing desktop entries..."
+  if bash "${REPO_ROOT}/scripts/setup-desktop-entries.sh" &>/dev/null; then
+    echo "  ✓ Desktop entries (installed)"
+    PASS=$((PASS+1))
+  else
+    echo "  ✗ Desktop entries (setup failed)"
+    FAIL=$((FAIL+1))
+  fi
+fi
+
+# ── 7. .env.development ──
+ENV_FILE="${REPO_ROOT}/packages/browseros-agent/apps/server/.env.development"
+if [ -f "$ENV_FILE" ]; then
+  printf "  ✓ .env.development\n"
+  PASS=$((PASS+1))
+else
+  printf "  ✗ .env.development (missing: %s)\n" "$ENV_FILE"
+  FAIL=$((FAIL+1))
+fi
+
+# ── 8. Extension build ──
+EXT_DIR="${REPO_ROOT}/packages/browseros-agent/apps/agent/dist/chrome-mv3-dev"
+if [ -d "$EXT_DIR" ]; then
+  printf "  ✓ Extension build (%s)\n" "$EXT_DIR"
+  PASS=$((PASS+1))
+else
+  echo "  ✗ Extension build (not built — run: mise run browseros:build-dev)"
+  FAIL=$((FAIL+1))
+fi
+
+# ── 9. State dirs ──
+mkdir -p "${HOME}/.browseros-dev" "${HOME}/.browseros"
+echo "  ✓ State dirs (~/.browseros-dev, ~/.browseros)"
+PASS=$((PASS+1))
+
+# ── Summary ──
+echo ""
+echo "───────────────────────────────────────────────────"
+TOTAL=$((PASS + FAIL))
+if [ "$FAIL" -eq 0 ]; then
+  printf "  All %d checks passed. Ready to develop.\n" "$TOTAL"
+  echo ""
+  echo "  Quick start:"
+  echo "    mise run browseros:restart-dev"
+  exit 0
+else
+  printf "  %d/%d checks passed, %d failed.\n" "$PASS" "$TOTAL" "$FAIL"
+  echo "  Fix the ✗ items above, then re-run: mise run browseros:setup"
+  exit 1
+fi

@@ -1,0 +1,26 @@
+# SOURCE: coding-guard internal — async storage/fetch operations need error handling
+# SOURCE: https://rules.sonarsource.com/typescript/RSPEC-4822/ (no ignored error from promise)
+# BUILT_ON: https://ast-grep.com/
+id: no-async-without-error-handling
+message: "Async function with storage/fetch operations but no try-catch — add error handling"
+severity: info
+language: TypeScript
+note: |
+  Async functions that call localStorage, IndexedDB, fetch, or other I/O
+  operations should have try-catch error handling. Storage operations can
+  fail due to quota limits, permissions, or corruption.
+  
+  This is an info-level rule — review and add try-catch where appropriate.
+rule:
+  pattern: |
+    async function $FN($$$PARAMS) {
+      $$$BODY
+    }
+constraints:
+  BODY:
+    regex: '(localStorage|sessionStorage|IndexedDB|idb|fetch\(|storage\.|\.catch)'
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'

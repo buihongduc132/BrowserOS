@@ -21,10 +21,18 @@ DEV_SERVER_PID="${DEV_BOS_DIR}/server.pid"
 PROD_BROWSER_PID="${PROD_BOS_DIR}/browser.pid"
 PROD_SERVER_PID="${PROD_BOS_DIR}/server.pid"
 
-# ── Default ports ──
-DEV_CDP_PORT="${BROWSEROS_CDP_PORT:-9010}"
-DEV_SERVER_PORT="${BROWSEROS_SERVER_PORT:-9110}"
-DEV_EXTENSION_PORT="${BROWSEROS_EXTENSION_PORT:-9305}"
+# ── Dev ports (override with BROWSEROS_DEV_CDP_PORT etc.) ──
+# Dev uses +10 offset from prod defaults to allow side-by-side operation.
+DEV_CDP_PORT="${BROWSEROS_DEV_CDP_PORT:-9010}"
+DEV_SERVER_PORT="${BROWSEROS_DEV_SERVER_PORT:-9115}"
+DEV_EXTENSION_PORT="${BROWSEROS_DEV_EXTENSION_PORT:-9305}"
+
+# ── Prod ports (override with BROWSEROS_CDP_PORT etc.) ──
+PROD_CDP_PORT="${BROWSEROS_CDP_PORT:-9104}"
+PROD_SERVER_PORT="${BROWSEROS_SERVER_PORT:-9110}"
+PROD_EXTENSION_PORT="${BROWSEROS_EXTENSION_PORT:-9300}"
+# proxy_port always equals server_port (unified port model since v0.39)
+PROD_PROXY_PORT="$PROD_SERVER_PORT"
 
 # ── Verify a PID is alive AND matches expected process ──
 # Usage: verify_pid <pid> <expected_cmdline_substring>
@@ -122,6 +130,72 @@ kill_by_pidfile() {
 
   rm -f "$pid_file"
   return 0
+}
+
+# ── Kill an entire process tree (parent + all descendants) ──
+# Usage: kill_tree <pid> [signal]
+# Uses /proc to walk the process tree recursively, then waits for cleanup.
+kill_tree() {
+  local pid="$1"
+  local sig="${2:-TERM}"
+
+  if ! kill -0 "$pid" 2>/dev/null; then
+    return 0
+  fi
+
+  # Try process-group kill first (most reliable for Chromium)
+  # Read PGID from /proc/$pid/stat (field 5)
+  local pgid
+  pgid=$(awk '{print $5}' "/proc/${pid}/stat" 2>/dev/null) || pgid=""
+  if [ -n "$pgid" ] && [ "$pgid" != "$pid" ]; then
+    kill -s "$sig" -- "-$pgid" 2>/dev/null || true
+  fi
+
+  # Also collect descendants via BFS as fallback (catches children in different groups)
+  local all_pids=("$pid")
+  local queue=("$pid")
+  local idx=0
+  while [ $idx -lt ${#queue[@]} ]; do
+    local ppid="${queue[$idx]}"
+    idx=$((idx + 1))
+    local children
+    children=$(ps --ppid "$ppid" -o pid= 2>/dev/null) || true
+    if [ -n "$children" ]; then
+      local child
+      for child in $children; do
+        case " ${all_pids[*]} " in
+          *" $child "*) continue ;;  # already tracked
+        esac
+        all_pids+=("$child")
+        queue+=("$child")
+      done
+    fi
+  done
+
+  # Send signal to all PIDs in tree
+  local p
+  for p in "${all_pids[@]}"; do
+    kill -s "$sig" "$p" 2>/dev/null || true
+  done
+
+  # Wait up to 5s for all to die
+  local attempt
+  for attempt in $(seq 1 10); do
+    local alive=0
+    for p in "${all_pids[@]}"; do
+      kill -0 "$p" 2>/dev/null && alive=1 && break
+    done
+    [ "$alive" -eq 0 ] && break
+    sleep 0.5
+  done
+
+  # SIGKILL any survivors
+  for p in "${all_pids[@]}"; do
+    if kill -0 "$p" 2>/dev/null; then
+      kill -9 "$p" 2>/dev/null || true
+    fi
+  done
+  sleep 0.3
 }
 
 # ── Clean stale Chromium singleton locks (safe: call only after verifying no process) ──

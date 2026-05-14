@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -euo pipefail
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+[[ -d "${REPO_ROOT}/packages/browseros-agent" ]] || REPO_ROOT="$(pwd)"
+source "${REPO_ROOT}/scripts/launch/common.sh"
+
+echo "=== browseros:kill-prod ==="
+
+if is_browser_running "$PROD_BROWSER_PID"; then
+  PID=$(cat "$PROD_BROWSER_PID")
+  echo "[kill] Stopping BrowserOS prod (PID $PID)..."
+  kill_by_pidfile "$PROD_BROWSER_PID" "browseros" || kill_by_pidfile "$PROD_BROWSER_PID" "BrowserOS" || true
+else
+  echo "[kill] Browser not running."
+fi
+
+pkill -f "browseros_server.*config.*browser-os" 2>/dev/null && echo "[kill] Stopped BrowserOS server" || true
+pkill -f "mount_Browse.*opt/browseros/browseros" 2>/dev/null && echo "[kill] Killed orphaned browser process" || true
+# Only kill AppImage launchers that are NOT using the dev profile
+PIDS=$(pgrep -f "BrowserOS.AppImage" 2>/dev/null || true)
+if [ -n "$PIDS" ]; then
+  for pid in $PIDS; do
+    if cat "/proc/$pid/cmdline" 2>/dev/null | tr '\0' '\n' | grep -q "browseros-dev-chrome"; then
+      continue  # skip dev instance
+    fi
+    kill "$pid" 2>/dev/null && echo "[kill] Killed prod AppImage (PID $pid)" || true
+  done
+fi
+
+rm -f "$PROD_BROWSER_PID" "$PROD_SERVER_PID"
+clean_singleton_locks "$PROD_PROFILE"
+
+echo "=== kill-prod done ==="

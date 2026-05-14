@@ -25,7 +25,9 @@ import { getDb } from '../lib/db'
 import { logger } from '../lib/logger'
 import { Sentry } from '../lib/sentry'
 import { requireTrustedOrigin } from './middleware/require-trusted-origin'
+import { createAgentRoutes } from './routes/agents'
 import { createChatRoutes } from './routes/chat'
+import { createCompactionRoutes } from './routes/compaction'
 import { createConfigRoutes } from './routes/config'
 import { createCreditsRoutes } from './routes/credits'
 import { createHealthRoute } from './routes/health'
@@ -137,12 +139,9 @@ export async function createHttpServer(config: HttpServerConfig) {
       }),
     )
     .route('/status', createStatusRoute({ browser }))
-    .route(
-      '/config',
-      new Hono<Env>()
-        .use('/*', requireTrustedAppOrigin())
-        .route('/', createConfigRoutes()),
-    )
+    .route('/config', createConfigRoutes())
+    .route('/compaction', createCompactionRoutes())
+    .route('/agents', createAgentRoutes({ browser, browserosServerPort: port }))
     .route('/soul', createSoulRoutes())
     .route('/memory', createMemoryRoutes())
     .route('/skills', createSkillsRoutes())
@@ -188,7 +187,6 @@ export async function createHttpServer(config: HttpServerConfig) {
         aiSdkDevtoolsEnabled: config.aiSdkDevtoolsEnabled,
       }),
     )
-    .route('/agents', agentRoutes)
 
   // Error handler
   app.onError((err, c) => {

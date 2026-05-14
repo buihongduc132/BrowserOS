@@ -36,3 +36,4 @@ packages/browseros/build/tools/
 .gitnexus
 identity/
 browseros-server.log
+.browseros-prod-resources/bin/browseros_server.vendor
