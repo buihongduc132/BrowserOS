@@ -124,7 +124,7 @@ export class AcpxRuntime implements AgentRuntime {
 
   async getHistory(input: {
     agent: AgentPromptInput['agent']
-    sessionId: 'main'
+    sessionId: string
   }): Promise<AgentHistoryPage> {
     const record = await this.loadLatestSessionRecord(input.agent)
     if (!record) {
@@ -142,7 +142,7 @@ export class AcpxRuntime implements AgentRuntime {
    */
   async getRowSnapshot(input: {
     agent: AgentPromptInput['agent']
-    sessionId: 'main'
+    sessionId: string
   }): Promise<AgentRowSnapshot | null> {
     const record = await this.loadLatestSessionRecord(input.agent)
     if (!record) return null
@@ -219,6 +219,45 @@ export class AcpxRuntime implements AgentRuntime {
       if (latestRecord) return latestRecord
     }
     return (await this.sessionStore.load(agent.sessionKey)) ?? null
+  }
+
+  /**
+   * Public accessor for conversation mutation routes (undo/fork).
+   * Loads the latest session record for an agent by ID.
+   */
+  async loadSessionRecord(agentId: string): Promise<AcpSessionRecord | null> {
+    const paths = resolveAgentRuntimePaths({
+      browserosDir: this.browserosDir,
+      agentId,
+    })
+    const latest = await loadLatestRuntimeState(paths.runtimeStatePath)
+    if (latest) {
+      const record = await this.sessionStore.load(latest.runtimeSessionKey)
+      if (record) return record
+    }
+    return null
+  }
+
+  /**
+   * Save (overwrite) the session record for an agent.
+   * Used by undo to truncate messages in-place.
+   */
+  async saveSessionRecord(
+    agentId: string,
+    record: AcpSessionRecord,
+  ): Promise<void> {
+    await this.sessionStore.save(record)
+  }
+
+  /**
+   * Save a forked session record as a new session.
+   * Creates a new entry in the session store without affecting the original.
+   */
+  async saveSessionRecordToFork(
+    _agentId: string,
+    record: AcpSessionRecord,
+  ): Promise<void> {
+    await this.sessionStore.save(record)
   }
 
   private async prepareRuntimeContext(
@@ -319,7 +358,7 @@ type AcpxToolResult = AcpxAgentMessage['tool_results'][string]
 
 function mapAcpxSessionRecordToHistory(
   agent: AgentDefinition,
-  sessionId: 'main',
+  sessionId: string,
   record: AcpSessionRecord,
 ): AgentHistoryPage {
   const createdAt = parseRecordTimestamp(record)
@@ -369,7 +408,7 @@ function mapAcpxSessionRecordToHistory(
 function mapAgentMessageToHistoryEntry(input: {
   id: string
   agentId: string
-  sessionId: 'main'
+  sessionId: string
   createdAt: number
   message: AcpxAgentMessage
 }): AgentHistoryEntry | null {

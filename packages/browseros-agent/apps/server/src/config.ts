@@ -16,6 +16,21 @@ import { VERSION } from './version'
 
 const portSchema = z.number().int()
 
+export const CompactionStrategySchema = z.object({
+  method: z.enum(['default', 'vcc']).optional(),
+  customPrompt: z.string().optional(),
+  vccConfig: z
+    .object({
+      maxTranscriptLines: z.number().min(0).optional(),
+      maxGoalLines: z.number().min(0).optional(),
+      maxFileEntries: z.number().min(0).optional(),
+      maxCommitEntries: z.number().min(0).optional(),
+      maxPreferenceLines: z.number().min(0).optional(),
+      maxOutstandingLines: z.number().min(0).optional(),
+    })
+    .optional(),
+})
+
 export const ServerConfigSchema = z.object({
   cdpPort: portSchema.nullable(),
   serverPort: portSchema,
@@ -30,6 +45,7 @@ export const ServerConfigSchema = z.object({
   instanceBrowserosVersion: z.string().optional(),
   instanceChromiumVersion: z.string().optional(),
   aiSdkDevtoolsEnabled: z.boolean(),
+  compaction: CompactionStrategySchema.optional(),
 })
 
 export type ServerConfig = z.infer<typeof ServerConfigSchema>
@@ -46,6 +62,16 @@ interface ParsedCliArgs {
   overrides: PartialConfig
 }
 
+let _resolvedConfigFilePath: string | null = null
+
+/**
+ * Returns the absolute path to the config file passed via --config,
+ * or null if no config file was specified.
+ */
+export function getResolvedConfigFilePath(): string | null {
+  return _resolvedConfigFilePath
+}
+
 export function loadServerConfig(
   argv: string[] = process.argv,
 ): ConfigResult<ServerConfig> {
@@ -55,6 +81,14 @@ export function loadServerConfig(
 
   // 2. Parse config file (only if --config provided)
   const file = parseConfigFile(cli.value.configPath)
+
+  // Store the resolved config file path for API routes
+  if (cli.value.configPath) {
+    const absPath = path.isAbsolute(cli.value.configPath)
+      ? cli.value.configPath
+      : path.resolve(process.cwd(), cli.value.configPath)
+    _resolvedConfigFilePath = absPath
+  }
   if (!file.ok) return file
 
   // 3. Parse runtime environment variables
@@ -242,6 +276,7 @@ function parseConfigFile(filePath?: string): ConfigResult<PartialConfig> {
           typeof cfg.instance?.chromium_version === 'string'
             ? cfg.instance.chromium_version
             : undefined,
+        compaction: cfg.compaction,
       }),
     }
   } catch (e: unknown) {

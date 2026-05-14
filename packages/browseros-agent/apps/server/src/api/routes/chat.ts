@@ -17,12 +17,15 @@ interface ChatRouteDeps {
   browserosId?: string
   klavisRef?: KlavisProxyRef
   aiSdkDevtoolsEnabled?: boolean
+  compaction?: import('../../config').ServerConfig['compaction']
+  /** External session store — when provided, used instead of creating a new one */
+  sessionStore?: SessionStore
 }
 
 export function createChatRoutes(deps: ChatRouteDeps) {
   const { browserosId } = deps
 
-  const sessionStore = new SessionStore()
+  const sessionStore = deps.sessionStore ?? new SessionStore()
   const service = new ChatService({
     sessionStore,
     klavisRef: deps.klavisRef,
@@ -30,6 +33,7 @@ export function createChatRoutes(deps: ChatRouteDeps) {
     registry: deps.registry,
     browserosId,
     aiSdkDevtoolsEnabled: deps.aiSdkDevtoolsEnabled,
+    compaction: deps.compaction,
   })
 
   return new Hono()

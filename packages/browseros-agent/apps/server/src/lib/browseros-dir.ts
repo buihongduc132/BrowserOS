@@ -1,9 +1,10 @@
 import { unlinkSync } from 'node:fs'
-import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { PATHS } from '@browseros/shared/constants/paths'
 import type { ServerDiscoveryConfig } from '@browseros/shared/types/server-config'
+import { ensureDirectory } from './ensure-directory'
 import { logger } from './logger'
 
 export function getBrowserosDir(): string {
@@ -47,12 +48,12 @@ export function getBuiltinSkillsDir(): string {
   return join(getSkillsDir(), PATHS.BUILTIN_DIR_NAME)
 }
 
-export function getCommandsDir(): string {
-  return join(getBrowserosDir(), PATHS.COMMANDS_DIR_NAME)
+export function getSkillsSourcesPath(): string {
+  return join(getSkillsDir(), 'sources.json')
 }
 
-export function getBuiltinCommandsDir(): string {
-  return join(getCommandsDir(), PATHS.BUILTIN_DIR_NAME)
+export function getSkillsStatePath(): string {
+  return join(getSkillsDir(), 'state.json')
 }
 
 export function getOpenClawDir(): string {
@@ -124,13 +125,13 @@ export function removeServerConfigSync(): void {
 
 export async function ensureBrowserosDir(): Promise<void> {
   logDevelopmentBrowserosDir()
-  await mkdir(getMemoryDir(), { recursive: true })
-  await mkdir(getSkillsDir(), { recursive: true })
-  await mkdir(getBuiltinSkillsDir(), { recursive: true })
-  await mkdir(getCommandsDir(), { recursive: true })
-  await mkdir(getSessionsDir(), { recursive: true })
-  await mkdir(getLazyMonitoringRunsDir(), { recursive: true })
-  await mkdir(getVmDisksDir(), { recursive: true })
+  await ensureDirectory(getMemoryDir())
+  await ensureDirectory(getSkillsDir())
+  await ensureDirectory(getCommandsDir())
+  await ensureDirectory(getBuiltinSkillsDir())
+  await ensureDirectory(getSessionsDir())
+  await ensureDirectory(getLazyMonitoringRunsDir())
+  await ensureDirectory(getVmDisksDir())
 }
 
 export async function cleanOldSessions(): Promise<void> {

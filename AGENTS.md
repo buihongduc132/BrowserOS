@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **wt-BrowserOS-slash-cmds** (22181 symbols, 44665 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **BrowserOS-wt-session-backend** (22238 symbols, 44860 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -24,10 +24,10 @@ This project is indexed by GitNexus as **wt-BrowserOS-slash-cmds** (22181 symbol
 
 | Resource | Use for |
 |----------|---------|
-| `gitnexus://repo/wt-BrowserOS-slash-cmds/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/wt-BrowserOS-slash-cmds/clusters` | All functional areas |
-| `gitnexus://repo/wt-BrowserOS-slash-cmds/processes` | All execution flows |
-| `gitnexus://repo/wt-BrowserOS-slash-cmds/process/{name}` | Step-by-step execution trace |
+| `gitnexus://repo/BrowserOS-wt-session-backend/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/BrowserOS-wt-session-backend/clusters` | All functional areas |
+| `gitnexus://repo/BrowserOS-wt-session-backend/processes` | All execution flows |
+| `gitnexus://repo/BrowserOS-wt-session-backend/process/{name}` | Step-by-step execution trace |
 
 ## CLI
 

@@ -9,19 +9,13 @@ import {
   useState,
 } from 'react'
 import { TabPickerPopover } from '@/components/elements/tab-picker-popover'
-import { useCommands } from '@/entrypoints/app/command-settings/command-queries'
+import type { SlashCommand } from '@/lib/slash-commands/types'
 import { cn } from '@/lib/utils'
 import type { VoiceInputState } from '@/lib/voice/useVoiceInput'
 import type { ChatMode } from './chatTypes'
-import { type SlashCommandItem, SlashCommandMenu } from './SlashCommandMenu'
+import { SlashCommandAutocomplete } from './SlashCommandAutocomplete'
 
 interface MentionState {
-  isOpen: boolean
-  filterText: string
-  startPosition: number
-}
-
-interface SlashCommandState {
   isOpen: boolean
   filterText: string
   startPosition: number
@@ -37,9 +31,12 @@ interface ChatInputProps {
   selectedTabs: chrome.tabs.Tab[]
   onToggleTab: (tab: chrome.tabs.Tab) => void
   onTabMentionOpenChange?: (isOpen: boolean) => void
-  /** Callback when user selects a slash command from the autocomplete menu */
-  onSlashCommandSelect?: (command: SlashCommandItem) => void
   voice?: VoiceInputState
+  slashCommandOpen?: boolean
+  slashFilterText?: string
+  slashCommands?: SlashCommand[]
+  onSlashSelect?: (cmd: SlashCommand) => void
+  onSlashOpenChange?: (isOpen: boolean) => void
 }
 
 export interface ChatInputHandle {
@@ -47,12 +44,6 @@ export interface ChatInputHandle {
   closeTabMention: () => void
   toggleTabMention: () => void
   focus: () => void
-}
-
-const INITIAL_SLASH_STATE: SlashCommandState = {
-  isOpen: false,
-  filterText: '',
-  startPosition: 0,
 }
 
 export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
@@ -67,8 +58,12 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       selectedTabs,
       onToggleTab,
       onTabMentionOpenChange,
-      onSlashCommandSelect,
       voice,
+      slashCommandOpen: slashCommandOpenProp = false,
+      slashFilterText = '',
+      slashCommands = [],
+      onSlashSelect,
+      onSlashOpenChange,
     },
     ref,
   ) => {
@@ -78,35 +73,20 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       filterText: '',
       startPosition: 0,
     })
-    const [slashState, setSlashState] =
-      useState<SlashCommandState>(INITIAL_SLASH_STATE)
-    const [slashAnchorRect, setSlashAnchorRect] = useState<DOMRect | null>(null)
-
-    const { commands: apiCommands } = useCommands()
-
-    // Map to SlashCommandItem for the menu
-    const slashCommands: SlashCommandItem[] = apiCommands.map((cmd) => ({
-      id: cmd.id,
-      name: cmd.name,
-      description: cmd.description,
-      builtIn: cmd.builtIn,
-    }))
+    const [localSlashOpen, setLocalSlashOpen] = useState(false)
+    const slashOpen = slashCommandOpenProp || localSlashOpen
 
     const inputRef = useRef(input)
     const mentionStateRef = useRef(mentionState)
-    const slashStateRef = useRef(slashState)
 
     useEffect(() => {
       inputRef.current = input
       mentionStateRef.current = mentionState
-      slashStateRef.current = slashState
     })
 
     useEffect(() => {
       onTabMentionOpenChange?.(mentionState.isOpen)
     }, [mentionState.isOpen, onTabMentionOpenChange])
-
-    // ─── @ Mention state machine ──────────────────────────────────────────
 
     const closeMention = useCallback(() => {
       const state = mentionStateRef.current
@@ -173,94 +153,6 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       openMentionAtCursor()
     }, [closeMention, openMentionAtCursor])
 
-    // ─── Slash command state machine ──────────────────────────────────────
-
-    /** Dismiss slash menu AND remove the `/filterText` from input */
-    const closeSlash = useCallback(() => {
-      const state = slashStateRef.current
-      if (state.isOpen) {
-        const currentInput = inputRef.current
-        const before = currentInput.slice(0, state.startPosition)
-        const after = currentInput.slice(
-          state.startPosition + 1 + state.filterText.length,
-        )
-        const nextInput = before + after
-        inputRef.current = nextInput
-        onInputChange(nextInput)
-        slashStateRef.current = INITIAL_SLASH_STATE
-        setSlashState(INITIAL_SLASH_STATE)
-        setSlashAnchorRect(null)
-
-        requestAnimationFrame(() => {
-          textareaRef.current?.focus()
-          const newPosition = before.length
-          textareaRef.current?.setSelectionRange(newPosition, newPosition)
-        })
-      }
-    }, [onInputChange])
-
-    /** Dismiss slash menu WITHOUT removing text (for mutual exclusion) */
-    const _dismissSlashMenuOnly = useCallback(() => {
-      slashStateRef.current = INITIAL_SLASH_STATE
-      setSlashState(INITIAL_SLASH_STATE)
-      setSlashAnchorRect(null)
-    }, [])
-
-    /** Dismiss mention WITHOUT removing text (for mutual exclusion) */
-    const _dismissMentionMenuOnly = useCallback(() => {
-      const state = mentionStateRef.current
-      if (state.isOpen) {
-        // Remove the @ character
-        const currentInput = inputRef.current
-        const before = currentInput.slice(0, state.startPosition)
-        const after = currentInput.slice(state.startPosition + 1)
-        const nextInput = before + after
-        inputRef.current = nextInput
-        onInputChange(nextInput)
-        mentionStateRef.current = {
-          isOpen: false,
-          filterText: '',
-          startPosition: 0,
-        }
-        setMentionState({ isOpen: false, filterText: '', startPosition: 0 })
-
-        requestAnimationFrame(() => {
-          textareaRef.current?.focus()
-          textareaRef.current?.setSelectionRange(before.length, before.length)
-        })
-      }
-    }, [onInputChange])
-
-    const handleSlashCommandSelect = useCallback(
-      (command: SlashCommandItem) => {
-        const state = slashStateRef.current
-        const currentInput = inputRef.current
-        // Replace /filterText with /command + space
-        const before = currentInput.slice(0, state.startPosition)
-        const after = currentInput.slice(
-          state.startPosition + 1 + state.filterText.length,
-        )
-        const replacement = `${command.name} `
-        const nextInput = before + replacement + after
-        inputRef.current = nextInput
-        onInputChange(nextInput)
-        slashStateRef.current = INITIAL_SLASH_STATE
-        setSlashState(INITIAL_SLASH_STATE)
-        setSlashAnchorRect(null)
-
-        onSlashCommandSelect?.(command)
-
-        requestAnimationFrame(() => {
-          textareaRef.current?.focus()
-          const newPosition = before.length + replacement.length
-          textareaRef.current?.setSelectionRange(newPosition, newPosition)
-        })
-      },
-      [onInputChange, onSlashCommandSelect],
-    )
-
-    // ─── Imperative handle ────────────────────────────────────────────────
-
     useImperativeHandle(
       ref,
       () => ({
@@ -280,11 +172,6 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         closeMention()
         return
       }
-      if (slashStateRef.current.isOpen) {
-        // Don't submit while slash menu is open
-        e.preventDefault()
-        return
-      }
       if (isBusy) {
         e.preventDefault()
         return
@@ -292,18 +179,13 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       onSubmitProp(e)
     }
 
-    // ─── Input change handler (both @ and / detection) ───────────────────
-
     const handleInputChange = (value: string) => {
       const textarea = textareaRef.current
       const cursorPosition = textarea?.selectionStart ?? value.length
 
-      const mentionOpen = mentionStateRef.current.isOpen
-      const slashOpen = slashStateRef.current.isOpen
+      const state = mentionStateRef.current
 
-      // ── Track @ mention state ──
-      if (mentionOpen) {
-        const state = mentionStateRef.current
+      if (state.isOpen) {
         const textAfterAt = value.slice(state.startPosition + 1)
         const spaceIndex = textAfterAt.search(/\s/)
         const filterText =
@@ -325,8 +207,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           mentionStateRef.current = nextMentionState
           setMentionState(nextMentionState)
         }
-      } else if (!slashOpen) {
-        // Only detect @ trigger when / menu is NOT open
+      } else {
         const charBeforeCursor = value[cursorPosition - 1]
         const textBeforeAt = value.slice(0, cursorPosition - 1)
         const isAtWordBoundary = /(?:^|[\s\n])$/.test(textBeforeAt)
@@ -342,59 +223,11 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         }
       }
 
-      // ── Track slash command state ──
-      if (slashOpen) {
-        const state = slashStateRef.current
-        const textAfterSlash = value.slice(state.startPosition + 1)
-        const spaceIndex = textAfterSlash.search(/\s/)
-        const filterText =
-          spaceIndex === -1
-            ? textAfterSlash
-            : textAfterSlash.slice(0, spaceIndex)
-
-        if (
-          cursorPosition <= state.startPosition ||
-          value[state.startPosition] !== '/'
-        ) {
-          slashStateRef.current = INITIAL_SLASH_STATE
-          setSlashState(INITIAL_SLASH_STATE)
-          setSlashAnchorRect(null)
-        } else {
-          const nextSlashState = { ...state, filterText }
-          slashStateRef.current = nextSlashState
-          setSlashState(nextSlashState)
-        }
-      } else if (!mentionOpen) {
-        // Only detect / trigger when @ menu is NOT open
-        const charBeforeCursor = value[cursorPosition - 1]
-        const textBeforeSlash = value.slice(0, cursorPosition - 1)
-        // Word boundary: position 0 or after whitespace
-        const isAtWordBoundary =
-          cursorPosition === 1 || /[\s\n]$/.test(textBeforeSlash)
-
-        if (charBeforeCursor === '/' && isAtWordBoundary) {
-          const textareaEl = textareaRef.current
-          if (textareaEl) {
-            setSlashAnchorRect(textareaEl.getBoundingClientRect())
-          }
-          const nextSlashState = {
-            isOpen: true,
-            filterText: '',
-            startPosition: cursorPosition - 1,
-          }
-          slashStateRef.current = nextSlashState
-          setSlashState(nextSlashState)
-        }
-      }
-
       inputRef.current = value
       onInputChange(value)
     }
 
-    // ─── Keyboard handler ─────────────────────────────────────────────────
-
     const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-      // When @ mention is open, delegate navigation keys to the popover
       if (mentionState.isOpen) {
         if (
           e.key === 'ArrowDown' ||
@@ -411,17 +244,15 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         }
       }
 
-      // When slash menu is open, delegate navigation keys to the menu
-      if (slashState.isOpen) {
-        if (
-          e.key === 'ArrowDown' ||
-          e.key === 'ArrowUp' ||
-          e.key === 'Enter' ||
-          e.key === 'Escape' ||
-          e.key === 'Tab'
-        ) {
+      // Slash command autocomplete: close on Escape or Tab
+      if (slashOpen) {
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          setLocalSlashOpen(false)
+          onSlashOpenChange?.(false)
           return
         }
+        // Let the popover handle arrow keys and enter via cmdk
       }
 
       if (
@@ -431,31 +262,16 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         !e.ctrlKey &&
         !e.nativeEvent.isComposing
       ) {
+        if (slashOpen) {
+          // Don't submit while autocomplete is open — let cmdk handle selection
+          return
+        }
         e.preventDefault()
         if (input.trim() && !isBusy) {
           e.currentTarget.form?.requestSubmit()
         }
       }
     }
-
-    // ─── Click outside effects ────────────────────────────────────────────
-
-    useEffect(() => {
-      if (!slashState.isOpen) return
-
-      const handleClickOutside = (e: MouseEvent) => {
-        const target = e.target as HTMLElement
-        if (
-          !textareaRef.current?.contains(target) &&
-          !target.closest('[data-slot="slash-command-menu"]')
-        ) {
-          closeSlash()
-        }
-      }
-
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => document.removeEventListener('mousedown', handleClickOutside)
-    }, [slashState.isOpen, closeSlash])
 
     useEffect(() => {
       if (!mentionState.isOpen) return
@@ -474,8 +290,6 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       document.addEventListener('mousedown', handleClickOutside)
       return () => document.removeEventListener('mousedown', handleClickOutside)
     }, [mentionState.isOpen, closeMention])
-
-    // ─── Render ────────────────────────────────────────────────────────────
 
     const renderVoiceButton = () => {
       if (!voice) return null
@@ -561,13 +375,20 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           onClose={closeMention}
           anchorRef={textareaRef}
         />
-        <SlashCommandMenu
-          isOpen={slashState.isOpen}
-          filterText={slashState.filterText}
+        <SlashCommandAutocomplete
+          isOpen={slashOpen && !mentionState.isOpen}
+          filterText={slashFilterText}
           commands={slashCommands}
-          onSelect={handleSlashCommandSelect}
-          onClose={closeSlash}
-          anchorRect={slashAnchorRect}
+          onSelect={(cmd) => {
+            onSlashSelect?.(cmd)
+            setLocalSlashOpen(false)
+            onSlashOpenChange?.(false)
+          }}
+          onClose={() => {
+            setLocalSlashOpen(false)
+            onSlashOpenChange?.(false)
+          }}
+          anchorRef={textareaRef}
         />
         {voice?.isRecording ? (
           <div className="flex min-h-[42px] flex-1 items-center justify-center gap-1 rounded-2xl border border-red-500/50 bg-muted/50 px-4 py-2.5 pr-[4.5rem]">

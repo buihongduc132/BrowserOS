@@ -54,6 +54,8 @@ import {
 import type { FilePreview } from '../services/openclaw/file-preview'
 import type { Env } from '../types'
 import { resolveBrowserContextPageIds } from '../utils/resolve-browser-context-page-ids'
+import { createSyntheticCommandStream } from './acp-command-response'
+import { dispatchCommand } from './acp-slash-commands-builtins'
 
 type AgentRouteService = {
   listAgents(): Promise<AgentDefinition[]>
@@ -96,7 +98,7 @@ type AgentRouteService = {
     turnId: string
     lastSeq?: number
   }): ReadableStream<TurnFrame> | null
-  getActiveTurn(agentId: string, sessionId?: 'main'): ActiveTurnInfo | null
+  getActiveTurn(agentId: string, sessionId?: string): ActiveTurnInfo | null
   cancelTurn(input: {
     agentId: string
     turnId?: string
@@ -156,6 +158,8 @@ type AgentRouteDeps = {
    * chat panel sees, so no second WS observer is needed.
    */
   onTurnLifecycle?: import('../services/agents/agent-harness-service').TurnLifecycleListener
+  /** Shared session metadata store. Forwarded to AgentHarnessService. */
+  sessionMetaStore?: import('../../agent/agent-session-store').AgentSessionStore
 }
 
 type SidepanelAgentChatRequest = {
@@ -168,6 +172,11 @@ type SidepanelAgentChatRequest = {
   userWorkingDir?: string
 }
 
+import {
+  createConversationMutationRoutes,
+  createConversationMutationsService,
+} from './conversation-mutations'
+
 export function createAgentRoutes(deps: AgentRouteDeps = {}) {
   const service =
     deps.service ??
@@ -175,6 +184,7 @@ export function createAgentRoutes(deps: AgentRouteDeps = {}) {
       browserosServerPort: deps.browserosServerPort,
       openclawGateway: deps.openclawGateway,
       openclawProvisioner: deps.openclawProvisioner,
+      sessionMetaStore: deps.sessionMetaStore,
     })
   if (deps.onTurnLifecycle && service instanceof AgentHarnessService) {
     service.onTurnLifecycle(deps.onTurnLifecycle)
@@ -280,6 +290,38 @@ export function createAgentRoutes(deps: AgentRouteDeps = {}) {
             ? `${parsed.userSystemPrompt.trim()}\n\n${userContent}`
             : userContent
 
+          // ── ACP Slash Command Dispatch ─────────────────────────────
+          // Check if the message is a slash command BEFORE startTurn().
+          // Handled commands return a synthetic response; errors return
+          // an error message; passthrough falls through to normal LLM.
+          if (parsed.message.startsWith('/')) {
+            const cmdResult = await dispatchCommand(parsed.message, {
+              agentId: agent.id,
+              conversationId: parsed.conversationId,
+              sessionId: 'main',
+              args: '',
+            })
+
+            if (cmdResult.type === 'handled') {
+              const syntheticEvents = createSyntheticCommandStream(
+                cmdResult.response ?? 'Command executed.',
+              )
+              return createAcpUIMessageStreamResponse(syntheticEvents, {
+                headers: { 'X-Session-Id': 'main' },
+              })
+            }
+
+            if (cmdResult.type === 'error') {
+              const errorEvents = createSyntheticCommandStream(
+                `⚠️ ${cmdResult.error}`,
+              )
+              return createAcpUIMessageStreamResponse(errorEvents, {
+                headers: { 'X-Session-Id': 'main' },
+              })
+            }
+            // 'passthrough' → fall through to normal LLM call
+          }
+
           let started: { turnId: string; frames: ReadableStream<TurnFrame> }
           try {
             started = await service.startTurn({
@@ -365,12 +407,49 @@ export function createAgentRoutes(deps: AgentRouteDeps = {}) {
           return handleAgentRouteError(c, err)
         }
       })
-      .get('/:agentId/sessions/main/history', async (c) => {
+      .get('/:agentId/sessions/:sessionId/history', async (c) => {
         try {
+          const sessionId = c.req.param('sessionId') || 'main'
           return c.json(await service.getHistory(c.req.param('agentId')))
+          void sessionId // TODO: forward to service once multi-session history is supported
         } catch (err) {
           return handleAgentRouteError(c, err)
         }
+      })
+      // ── Conversation mutations (undo / fork) ────────────────────
+      .post('/:agentId/conversation/undo', async (c) => {
+        const agentId = c.req.param('agentId')
+        const acpxRuntime =
+          service instanceof AgentHarnessService
+            ? service.getAcpxRuntime()
+            : null
+        if (!acpxRuntime) {
+          return c.json({ error: 'Undo not available' }, 501)
+        }
+        const mutationService = createConversationMutationsService({
+          runtime: acpxRuntime,
+        })
+        const routes = createConversationMutationRoutes({
+          service: mutationService,
+        })
+        return routes.handleUndo(c, agentId)
+      })
+      .post('/:agentId/conversation/fork', async (c) => {
+        const agentId = c.req.param('agentId')
+        const acpxRuntime =
+          service instanceof AgentHarnessService
+            ? service.getAcpxRuntime()
+            : null
+        if (!acpxRuntime) {
+          return c.json({ error: 'Fork not available' }, 501)
+        }
+        const mutationService = createConversationMutationsService({
+          runtime: acpxRuntime,
+        })
+        const routes = createConversationMutationRoutes({
+          service: mutationService,
+        })
+        return routes.handleFork(c, agentId)
       })
       .post('/:agentId/chat', async (c) => {
         const agentId = c.req.param('agentId')
@@ -985,6 +1064,8 @@ async function readJsonBody(
   }
   return { value: body as Record<string, unknown> }
 }
+
+// ── Conversation undo/fork helpers are in ./conversation-mutations.ts ──
 
 function handleAgentRouteError(c: Context<Env>, err: unknown) {
   if (err instanceof UnknownAgentError) {
