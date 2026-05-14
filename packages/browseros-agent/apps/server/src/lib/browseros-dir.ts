@@ -51,6 +51,10 @@ export function getSkillsStatePath(): string {
   return join(getSkillsDir(), 'state.json')
 }
 
+export function getCommandsDir(): string {
+  return join(getBrowserosDir(), PATHS.COMMANDS_DIR_NAME)
+}
+
 export function getOpenClawDir(): string {
   return join(getVmStateDir(), PATHS.OPENCLAW_DIR_NAME)
 }

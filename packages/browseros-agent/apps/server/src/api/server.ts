@@ -148,10 +148,13 @@ export async function createHttpServer(config: HttpServerConfig) {
       }),
     )
     .route('/status', createStatusRoute({ browser }))
-    // Single shared AgentSessionStore — harness and routes see the same instance
-    const sharedSessionStore = new AgentSessionStore()
-    // Shared chat SessionStore — lifts from createChatRoutes so compaction can access messages
-    const sharedChatSessionStore = new SessionStore()
+    .route('/config', createConfigRoutes())
+  // Single shared AgentSessionStore — harness and routes see the same instance
+  const sharedSessionStore = new AgentSessionStore()
+  // Shared chat SessionStore — lifts from createChatRoutes so compaction can access messages
+  const sharedChatSessionStore = new SessionStore()
+
+  app
     .route(
       '/agents',
       createAgentRoutes({ browser, browserosServerPort: port, sessionMetaStore: sharedSessionStore }),

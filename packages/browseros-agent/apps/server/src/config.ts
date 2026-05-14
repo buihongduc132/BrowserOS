@@ -16,20 +16,25 @@ import { VERSION } from './version'
 
 const portSchema = z.number().int()
 
-export const CompactionStrategySchema = z.object({
-  method: z.enum(['default', 'vcc']).optional(),
-  customPrompt: z.string().optional(),
-  vccConfig: z
-    .object({
-      maxTranscriptLines: z.number().min(0).optional(),
-      maxGoalLines: z.number().min(0).optional(),
-      maxFileEntries: z.number().min(0).optional(),
-      maxCommitEntries: z.number().min(0).optional(),
-      maxPreferenceLines: z.number().min(0).optional(),
-      maxOutstandingLines: z.number().min(0).optional(),
-    })
-    .optional(),
+const VccConfigSchema = z.object({
+  maxTranscriptLines: z.number().int().nonnegative().optional(),
+  maxGoalLines: z.number().int().nonnegative().optional(),
+  maxFileEntries: z.number().int().nonnegative().optional(),
+  maxCommitEntries: z.number().int().nonnegative().optional(),
+  maxPreferenceLines: z.number().int().nonnegative().optional(),
+  maxOutstandingLines: z.number().int().nonnegative().optional(),
 })
+
+export const CompactionStrategySchema = z.discriminatedUnion('method', [
+  z.object({
+    method: z.literal('default'),
+    customPrompt: z.string().min(1).optional(),
+  }),
+  z.object({
+    method: z.literal('vcc'),
+    vccConfig: VccConfigSchema.optional(),
+  }),
+])
 
 export const ServerConfigSchema = z.object({
   cdpPort: portSchema.nullable(),
@@ -377,25 +382,7 @@ function parseAbsolutePath(val: unknown, baseDir: string): string | undefined {
 
 // ── Compaction strategy schema (used by /compaction API route) ──
 
-const VccConfigSchema = z.object({
-  maxTranscriptLines: z.number().int().nonnegative().optional(),
-  maxGoalLines: z.number().int().nonnegative().optional(),
-  maxFileEntries: z.number().int().nonnegative().optional(),
-  maxCommitEntries: z.number().int().nonnegative().optional(),
-  maxPreferenceLines: z.number().int().nonnegative().optional(),
-  maxOutstandingLines: z.number().int().nonnegative().optional(),
-})
-
-export const CompactionStrategySchema = z.discriminatedUnion('method', [
-  z.object({
-    method: z.literal('default'),
-    customPrompt: z.string().min(1).optional(),
-  }),
-  z.object({
-    method: z.literal('vcc'),
-    vccConfig: VccConfigSchema.optional(),
-  }),
-])
+// VccConfigSchema and CompactionStrategySchema moved above ServerConfigSchema
 
 /**
  * Returns the resolved config file path, or null if no --config was provided.
