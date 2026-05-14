@@ -9,6 +9,8 @@
     "webNavigation",
     "tabs",
     "storage",
+    "unlimitedStorage",
+    "alarms",
     "http://*/*",
     "https://*/*"
   ],

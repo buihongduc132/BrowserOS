@@ -57,9 +57,8 @@ describe('cache', () => {
     const parsed = JSON.parse(stored);
     expect(parsed.data).toBeDefined();
     expect(parsed.timestamp).toBeTypeOf('number');
-    expect(parsed.data.length).toBe(serialized.length);
-    // Data should be Array.from(Uint8Array)
-    expect(Array.isArray(parsed.data)).toBe(true);
+    // Data should be base64 string
+    expect(typeof parsed.data).toBe('string');
   });
 
   it('loadCachedEngine() returns deserialized engine if fresh (< 24h)', async () => {
@@ -68,7 +67,7 @@ describe('cache', () => {
 
     // Store with current timestamp (fresh)
     mockStorageData['browseros-adblocker-cached-engine'] = JSON.stringify({
-      data: Array.from(serialized),
+      data: btoa(String.fromCharCode(...serialized)),
       timestamp: Date.now(),
     });
 
@@ -83,7 +82,7 @@ describe('cache', () => {
     // Store with timestamp 25h ago (expired)
     const expiredTimestamp = Date.now() - 25 * 60 * 60 * 1000;
     mockStorageData['browseros-adblocker-cached-engine'] = JSON.stringify({
-      data: Array.from(serialized),
+      data: btoa(String.fromCharCode(...serialized)),
       timestamp: expiredTimestamp,
     });
 

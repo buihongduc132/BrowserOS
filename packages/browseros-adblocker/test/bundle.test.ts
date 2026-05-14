@@ -22,6 +22,8 @@ describe('Bundle integration', () => {
     expect(manifest.manifest_version).toBe(2);
     expect(manifest.permissions).toContain('webRequest');
     expect(manifest.permissions).toContain('webRequestBlocking');
+    expect(manifest.permissions).toContain('alarms');
+    expect(manifest.permissions).toContain('unlimitedStorage');
     expect(manifest.background).toBeDefined();
     expect(manifest.content_scripts).toBeDefined();
     expect(manifest.content_scripts[0].run_at).toBe('document_start');

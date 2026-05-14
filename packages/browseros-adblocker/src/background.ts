@@ -7,11 +7,29 @@ const CACHE_TTL = 24 * 60 * 60 * 1000; // 24h
 const ALARM_NAME = 'browseros-filter-update';
 const UPDATE_INTERVAL_MINUTES = 24 * 60;
 
+// Uint8Array → base64 (1.33x vs 3.4x for Array.from)
+function toBase64(data: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < data.length; i++) {
+    binary += String.fromCharCode(data[i]);
+  }
+  return btoa(binary);
+}
+
+function fromBase64(b64: string): Uint8Array {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
 // Cache helpers
 export async function saveEngine(data: Uint8Array): Promise<void> {
   await chrome.storage.local.set({
     [CACHE_KEY]: JSON.stringify({
-      data: Array.from(data),
+      data: toBase64(data),
       timestamp: Date.now(),
     }),
   });
@@ -24,7 +42,7 @@ export async function loadCachedEngine(): Promise<WebExtensionBlocker | null> {
   try {
     const { data, timestamp } = JSON.parse(result[CACHE_KEY]);
     if (Date.now() - timestamp > CACHE_TTL) return null;
-    return WebExtensionBlocker.deserialize(new Uint8Array(data));
+    return WebExtensionBlocker.deserialize(fromBase64(data));
   } catch {
     return null;
   }
@@ -78,9 +96,12 @@ export async function updateFilters(): Promise<void> {
 
 export function startAutoUpdate(): void {
   chrome.alarms.create(ALARM_NAME, { periodInMinutes: UPDATE_INTERVAL_MINUTES });
-  chrome.alarms.onAlarm.addListener((alarm) => {
+  chrome.alarms.onAlarm.addListener((alarm: { name: string }) => {
     if (alarm.name === ALARM_NAME) updateFilters().catch(console.error);
   });
 }
 
-loadBlocker().then(() => startAutoUpdate()).catch(console.error);
+// Only run in extension context (not in tests)
+if (typeof chrome !== 'undefined' && chrome.storage) {
+  loadBlocker().then(() => startAutoUpdate()).catch(console.error);
+}
