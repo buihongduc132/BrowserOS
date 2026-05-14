@@ -11,6 +11,7 @@
  */
 
 import { Hono } from 'hono'
+import { type ModelMessage } from 'ai'
 import { cors } from 'hono/cors'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { HttpAgentError } from '../agent/errors'
@@ -21,12 +22,15 @@ import { getDb } from '../lib/db'
 import { logger } from '../lib/logger'
 import { Sentry } from '../lib/sentry'
 import { requireTrustedOrigin } from './middleware/require-trusted-origin'
+import { requireTrustedAppOrigin } from './utils/request-auth'
 import { AgentSessionStore } from '../agent/agent-session-store'
+import { SessionStore } from '../agent/session-store'
 import { createAgentRoutes } from './routes/agents'
 import { createAgentSessionRoutes } from './routes/agent-sessions'
 import { createAssistantSessionRoutes } from './routes/assistant-sessions'
 import { createChatRoutes } from './routes/chat'
-import { createCompactionRoutes } from './routes/compaction'
+import { createCompactionRoutes, type CompactionRouteDeps } from './routes/compaction'
+import { resolveCompactionConfig } from '../agent/compaction-config'
 import { createConfigRoutes } from './routes/config'
 import { createCreditsRoutes } from './routes/credits'
 import { createHealthRoute } from './routes/health'
@@ -129,6 +133,8 @@ export async function createHttpServer(config: HttpServerConfig) {
     .route('/status', createStatusRoute({ browser }))
     // Single shared AgentSessionStore — harness and routes see the same instance
     const sharedSessionStore = new AgentSessionStore()
+    // Shared chat SessionStore — lifts from createChatRoutes so compaction can access messages
+    const sharedChatSessionStore = new SessionStore()
     .route(
       '/agents',
       createAgentRoutes({ browser, browserosServerPort: port, sessionMetaStore: sharedSessionStore }),
@@ -137,11 +143,42 @@ export async function createHttpServer(config: HttpServerConfig) {
       '/agents',
       createAgentSessionRoutes({ sessionStore: sharedSessionStore }),
     )
+    // ------------------------------------------------------------------
+    // Compaction routes — config CRUD + on-demand trigger
+    // ------------------------------------------------------------------
+    // getConversationMessages reads from the shared chat SessionStore.
+    // createModel is NOT wired yet — the POST /compact endpoint returns 503
+    // until a proper model factory is extracted from ChatService.
+    // The config CRUD (GET/PUT/DELETE) works fully.
     .route(
       '/compaction',
       new Hono<Env>()
         .use('/*', requireTrustedAppOrigin())
-        .route('/', createCompactionRoutes()),
+        .route(
+          '/',
+          createCompactionRoutes({
+            getConversationMessages: async (conversationId: string) => {
+              const session = sharedChatSessionStore.get(conversationId)
+              if (!session) return null
+              return session.agent.messages.map((m): ModelMessage => {
+                const text = typeof m.content === 'string'
+                  ? m.content
+                  : m.parts
+                    ?.filter((p: any) => p.type === 'text')
+                    ?.map((p: any) => p.text)
+                    ?.join('\n') ?? ''
+                return { role: m.role, content: text } as ModelMessage
+              })
+            },
+            // createModel intentionally omitted — POST /compact returns 503
+            // until model factory is extracted from AiSdkAgent.
+            getCompactionConfig: () => {
+              const raw = config.compaction
+              if (!raw) return undefined
+              try { return resolveCompactionConfig(raw) } catch { return undefined }
+            },
+          } as unknown as CompactionRouteDeps),
+        ),
     )
     .route('/soul', createSoulRoutes())
     .route('/memory', createMemoryRoutes())
@@ -186,6 +223,7 @@ export async function createHttpServer(config: HttpServerConfig) {
         browserosId,
         aiSdkDevtoolsEnabled: config.aiSdkDevtoolsEnabled,
         compaction: config.compaction,
+        sessionStore: sharedChatSessionStore,
       }),
     )
   // Error handler

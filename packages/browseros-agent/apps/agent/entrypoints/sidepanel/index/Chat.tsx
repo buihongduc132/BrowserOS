@@ -1,5 +1,5 @@
 import { Loader2 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createBrowserOSAction } from '@/lib/chat-actions/types'
 import {
   SIDEPANEL_AI_TRIGGERED_EVENT,
@@ -28,7 +28,9 @@ import { ChatEmptyState } from './ChatEmptyState'
 import { ChatError } from './ChatError'
 import { ChatFooter } from './ChatFooter'
 import { ChatMessages } from './ChatMessages'
+import { ContextLimitBanner } from './ContextLimitBanner'
 import type { ChatMode } from './chatTypes'
+import { useContextLimit } from './useContextLimit'
 
 /**
  * @public
@@ -84,6 +86,9 @@ export const Chat = () => {
   const [mounted, setMounted] = useState(false)
   const [slashCommandOpen, setSlashCommandOpen] = useState(false)
   const [slashFilterText, setSlashFilterText] = useState('')
+  const [isCompactingFromBanner, setIsCompactingFromBanner] = useState(false)
+
+  const { isNearLimit, isOverLimit, usageRatio } = useContextLimit(messages)
 
   useEffect(() => {
     setMounted(true)
@@ -218,7 +223,7 @@ export const Chat = () => {
           setAttachedTabs([])
           return
         }
-        if (resolved.type === 'prompt') {
+        if (result.type === 'prompt') {
           track(SLASH_COMMAND_EXECUTED_EVENT, {
             command: messageText.split(' ')[0],
             type: 'prompt',
@@ -226,12 +231,12 @@ export const Chat = () => {
           if (attachedTabs.length) {
             const action = createBrowserOSAction({
               mode,
-              message: resolved.expandedText,
+              message: result.expandedText,
               tabs: attachedTabs,
             })
-            sendMessage({ text: resolved.expandedText, action })
+            sendMessage({ text: result.expandedText, action })
           } else {
-            sendMessage({ text: resolved.expandedText })
+            sendMessage({ text: result.expandedText })
           }
           setInput('')
           setAttachedTabs([])
@@ -282,6 +287,26 @@ export const Chat = () => {
     await voice.stopRecording()
     track(SIDEPANEL_VOICE_RECORDING_STOPPED_EVENT)
   }
+
+  // Compact conversation from banner — sends /compact as a message
+  const handleCompactFromBanner = useCallback(() => {
+    setIsCompactingFromBanner(true)
+    executeMessage('/compact')
+    // Reset compacting state after a delay (compaction runs async)
+    setTimeout(() => setIsCompactingFromBanner(false), 3000)
+  }, [executeMessage])
+
+  // Start fresh with summary — reset conversation (MVP: just resets)
+  const handleStartFreshWithSummary = useCallback(() => {
+    resetConversation()
+  }, [resetConversation])
+
+  // Auto-dismiss compacting state when status returns to ready
+  useEffect(() => {
+    if (status === 'ready') {
+      setIsCompactingFromBanner(false)
+    }
+  }, [status])
 
   const voiceState = {
     isRecording: voice.isRecording,
@@ -339,6 +364,16 @@ export const Chat = () => {
           <ChatError error={chatError} providerType={selectedProvider?.type} />
         )}
       </main>
+
+      <ContextLimitBanner
+        isNearLimit={isNearLimit}
+        isOverLimit={isOverLimit}
+        usageRatio={usageRatio}
+        conversationId={conversationId}
+        isCompacting={isCompactingFromBanner || status === 'streaming'}
+        onCompact={handleCompactFromBanner}
+        onStartFreshWithSummary={handleStartFreshWithSummary}
+      />
 
       <ChatFooter
         mode={mode}

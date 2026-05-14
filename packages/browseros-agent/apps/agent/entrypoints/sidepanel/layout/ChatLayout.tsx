@@ -15,6 +15,7 @@ const ChatLayoutContent: FC = () => {
     messages,
     isLoading,
     conversationId,
+    sendMessage,
   } = useChatSessionContext()
 
   if (isLoading || !selectedProvider) {
@@ -34,6 +35,9 @@ const ChatLayoutContent: FC = () => {
         onNewConversation={resetConversation}
         hasMessages={messages.length > 0}
         conversationId={conversationId}
+        onCompact={() => {
+          sendMessage({ text: '/compact' })
+        }}
       />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <Outlet />
