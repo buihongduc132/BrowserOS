@@ -47,6 +47,14 @@ export function getBuiltinSkillsDir(): string {
   return join(getSkillsDir(), PATHS.BUILTIN_DIR_NAME)
 }
 
+export function getCommandsDir(): string {
+  return join(getBrowserosDir(), PATHS.COMMANDS_DIR_NAME)
+}
+
+export function getBuiltinCommandsDir(): string {
+  return join(getCommandsDir(), PATHS.BUILTIN_DIR_NAME)
+}
+
 export function getOpenClawDir(): string {
   return join(getVmStateDir(), PATHS.OPENCLAW_DIR_NAME)
 }
@@ -119,6 +127,7 @@ export async function ensureBrowserosDir(): Promise<void> {
   await mkdir(getMemoryDir(), { recursive: true })
   await mkdir(getSkillsDir(), { recursive: true })
   await mkdir(getBuiltinSkillsDir(), { recursive: true })
+  await mkdir(getCommandsDir(), { recursive: true })
   await mkdir(getSessionsDir(), { recursive: true })
   await mkdir(getLazyMonitoringRunsDir(), { recursive: true })
   await mkdir(getVmDisksDir(), { recursive: true })

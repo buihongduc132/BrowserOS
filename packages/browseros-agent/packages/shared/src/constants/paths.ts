@@ -24,6 +24,7 @@ export const PATHS = {
   CORE_MEMORY_FILE_NAME: 'CORE.md',
   SKILLS_DIR_NAME: 'skills',
   BUILTIN_DIR_NAME: 'builtin',
+  COMMANDS_DIR_NAME: 'commands',
   SERVER_CONFIG_FILE_NAME: 'server.json',
   OPENCLAW_DIR_NAME: 'openclaw',
   get SOUL_MAX_LINES() {

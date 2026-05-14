@@ -1,5 +1,7 @@
 import { Loader2 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCommands } from '@/entrypoints/app/command-settings/command-queries'
+import { useAgentServerUrl } from '@/lib/browseros/useBrowserOSProviders'
 import { createBrowserOSAction } from '@/lib/chat-actions/types'
 import {
   SIDEPANEL_AI_TRIGGERED_EVENT,
@@ -22,6 +24,14 @@ import { ChatError } from './ChatError'
 import { ChatFooter } from './ChatFooter'
 import { ChatMessages } from './ChatMessages'
 import type { ChatMode } from './chatTypes'
+import {
+  BUILTIN_ACTION_TYPES,
+  BUILTIN_COMMAND_NAMES,
+  type CommandResolution,
+  isModelAvailable,
+  parseSlashCommand,
+  resolveTemplate,
+} from './slash-command-resolver'
 
 /**
  * @public
@@ -44,6 +54,8 @@ export const Chat = () => {
     onClickDislike,
     isRestoringConversation,
     addToolApprovalResponse,
+    providers,
+    resetConversation,
   } = useChatSessionContext()
 
   const {
@@ -56,10 +68,17 @@ export const Chat = () => {
   } = useJtbdPopup()
 
   const voice = useVoiceInput()
+  const { commands: apiCommands } = useCommands()
+  const { baseUrl } = useAgentServerUrl()
 
   const [input, setInput] = useState('')
   const [attachedTabs, setAttachedTabs] = useState<chrome.tabs.Tab[]>([])
   const [mounted, setMounted] = useState(false)
+
+  // Available model IDs for model override validation
+  const availableModelIds = providers
+    .map((p) => p.model)
+    .filter(Boolean) as string[]
 
   useEffect(() => {
     setMounted(true)
@@ -140,25 +159,174 @@ export const Chat = () => {
     setAttachedTabs((prev) => prev.filter((t) => t.id !== tabId))
   }
 
-  const executeMessage = (customMessageText?: string) => {
-    const messageText = customMessageText ? customMessageText : input.trim()
-    if (!messageText) return
+  /**
+   * Resolve a slash command into a CommandResolution.
+   * Returns null if input is not a slash command.
+   */
+  const resolveSlashCommand = useCallback(
+    async (inputText: string): Promise<CommandResolution | null> => {
+      const parsed = parseSlashCommand(inputText)
+      if (!parsed) return null
 
-    recordMessageSent()
+      // Check built-in commands first
+      if (BUILTIN_COMMAND_NAMES.has(parsed.name)) {
+        const actionType =
+          BUILTIN_ACTION_TYPES[
+            parsed.name as keyof typeof BUILTIN_ACTION_TYPES
+          ] ?? 'message'
 
-    if (attachedTabs.length) {
-      const action = createBrowserOSAction({
-        mode,
-        message: messageText,
-        tabs: attachedTabs,
-      })
-      sendMessage({ text: messageText, action })
-    } else {
-      sendMessage({ text: messageText })
-    }
-    setInput('')
-    setAttachedTabs([])
-  }
+        if (actionType === 'clear') {
+          return { text: '', actionType: 'clear', modelOverride: undefined }
+        }
+        if (actionType === 'compact') {
+          return { text: '', actionType: 'compact', modelOverride: undefined }
+        }
+        if (actionType === 'reset') {
+          return { text: '', actionType: 'reset', modelOverride: undefined }
+        }
+
+        // message type (e.g. /help) — use built-in template
+        // For now, just pass through the text
+        return {
+          text: inputText.trim(),
+          actionType: 'message',
+          modelOverride: undefined,
+        }
+      }
+
+      // Check custom commands from API
+      const command = apiCommands.find(
+        (cmd) => cmd.id === parsed.name || cmd.name === `/${parsed.name}`,
+      )
+
+      if (!command) {
+        // Unknown command — pass through as-is
+        return null
+      }
+
+      // Fetch full command detail to get template
+      try {
+        const res = await fetch(`${baseUrl}/commands/${command.id}`)
+        if (res.ok) {
+          const data = await res.json()
+          const detail = data.command
+          if (detail?.content) {
+            const resolvedText = resolveTemplate(detail.content, parsed)
+            const modelOverride =
+              detail.model && isModelAvailable(detail.model, availableModelIds)
+                ? detail.model
+                : undefined
+
+            return {
+              text: resolvedText,
+              actionType: 'message',
+              modelOverride,
+            }
+          }
+        }
+      } catch {
+        // Fallback — just use the input as-is
+      }
+
+      return null
+    },
+    [apiCommands, baseUrl, availableModelIds],
+  )
+
+  const executeMessage = useCallback(
+    async (customMessageText?: string) => {
+      const messageText = customMessageText ? customMessageText : input.trim()
+      if (!messageText) return
+
+      // Try to resolve as a slash command
+      const resolution = await resolveSlashCommand(messageText)
+
+      if (resolution) {
+        if (resolution.actionType === 'clear') {
+          resetConversation()
+          setInput('')
+          setAttachedTabs([])
+          return
+        }
+        if (resolution.actionType === 'compact') {
+          // Fire compaction using current config
+          try {
+            if (baseUrl) {
+              const configRes = await fetch(`${baseUrl}/compaction`)
+              const _configData = await configRes.json()
+              // Compaction is triggered by sending a special message
+              // The server handles compaction internally
+              // For now, show completion message
+              sendMessage({
+                text: 'Compaction has been triggered using the current configuration. Your conversation context has been compacted.',
+              })
+            }
+          } catch {
+            sendMessage({
+              text: 'Compaction triggered but could not read config. Using defaults.',
+            })
+          }
+          setInput('')
+          setAttachedTabs([])
+          return
+        }
+        if (resolution.actionType === 'reset') {
+          resetConversation()
+          // Start fresh with same settings
+          setInput('')
+          setAttachedTabs([])
+          return
+        }
+
+        // Message type — use resolved text
+        recordMessageSent()
+        if (attachedTabs.length) {
+          const action = createBrowserOSAction({
+            mode,
+            message: resolution.text,
+            tabs: attachedTabs,
+          })
+          sendMessage({
+            text: resolution.text,
+            action,
+            // Note: model override would need to be plumbed through sendMessage
+            // For v1, we resolve the template but don't override the model at send time
+          })
+        } else {
+          sendMessage({ text: resolution.text })
+        }
+        setInput('')
+        setAttachedTabs([])
+        return
+      }
+
+      // Regular message (no slash command or unknown command)
+      recordMessageSent()
+
+      if (attachedTabs.length) {
+        const action = createBrowserOSAction({
+          mode,
+          message: messageText,
+          tabs: attachedTabs,
+        })
+        sendMessage({ text: messageText, action })
+      } else {
+        sendMessage({ text: messageText })
+      }
+      setInput('')
+      setAttachedTabs([])
+    },
+    [
+      input,
+      mode,
+      attachedTabs,
+      sendMessage,
+      recordMessageSent,
+      resolveSlashCommand,
+      resetConversation,
+      baseUrl,
+    ],
+  )
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()

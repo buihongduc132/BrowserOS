@@ -13,6 +13,7 @@ import {
   Settings2,
   ShieldAlert,
   ShieldCheck,
+  Terminal,
 } from 'lucide-react'
 import type { FC } from 'react'
 import { NavLink } from 'react-router'
@@ -103,6 +104,7 @@ const primarySettingsSections: NavSection[] = [
       },
       { name: 'Advanced Config', to: '/settings/advanced', icon: Settings2 },
       { name: 'Compaction', to: '/settings/compaction', icon: Layers },
+      { name: 'Commands', to: '/settings/commands', icon: Terminal },
     ],
   },
 ]
