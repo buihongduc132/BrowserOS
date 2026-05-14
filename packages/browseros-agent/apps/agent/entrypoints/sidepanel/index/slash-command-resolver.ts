@@ -52,18 +52,14 @@ export function resolveTemplate(
   template: string,
   parsed: ParsedCommand,
 ): string {
-  let result = template
-
-  // Replace positional args $1, $2, etc.
-  for (let i = parsed.positional.length - 1; i >= 0; i--) {
-    const placeholder = `$${i + 1}`
-    result = result.replaceAll(placeholder, parsed.positional[i])
-  }
-
-  // Replace $ARGUMENTS with all args as single string
-  result = result.replaceAll('$ARGUMENTS', parsed.args)
-
-  return result
+  // Single-pass replacement to avoid sequential corruption
+  return template.replace(/\$(ARGUMENTS|\d+)/g, (match) => {
+    if (match === '$ARGUMENTS') return parsed.args
+    const idx = Number.parseInt(match.slice(1), 10) - 1
+    return idx >= 0 && idx < parsed.positional.length
+      ? parsed.positional[idx]
+      : match
+  })
 }
 
 /**
