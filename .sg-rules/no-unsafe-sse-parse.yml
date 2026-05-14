@@ -1,0 +1,32 @@
+# SOURCE: coding-guard internal — SSE event parsing needs exhaustive type handling
+# SOURCE: https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events
+# BUILT_ON: https://ast-grep.com/
+id: no-unsafe-sse-parse
+message: "SSE event type switch — ensure all known types handled (text_delta, tool_call, produced_files, done, error, status) plus default case"
+severity: info
+language: TypeScript
+note: |
+  SSE handlers should exhaustively handle all known event types and include
+  a default case for unknown events. Known BrowserOS agent harness event types:
+  text_delta, tool_call, produced_files, done, error, status.
+  
+  Missing a 'default' case means new event types from the server will be
+  silently ignored. When adding new session-repo persistence, every event
+  type must be handled alongside its React state update.
+  
+  This rule flags switch statements on event.type in agent-conversation
+  files as a reminder for exhaustive handling.
+rule:
+  all:
+    - pattern: switch ($X) { $$$ }
+    - any:
+        - pattern: switch ($X.type) { $$$ }
+        - pattern: switch ($X) { $$$ }
+constraints:
+  X:
+    regex: '(event|evt|e|streamEvent|sseEvent|agentEvent)'
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'

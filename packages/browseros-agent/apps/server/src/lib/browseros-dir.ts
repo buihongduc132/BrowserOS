@@ -127,6 +127,7 @@ export async function ensureBrowserosDir(): Promise<void> {
   logDevelopmentBrowserosDir()
   await ensureDirectory(getMemoryDir())
   await ensureDirectory(getSkillsDir())
+  await ensureDirectory(getCommandsDir())
   await ensureDirectory(getBuiltinSkillsDir())
   await ensureDirectory(getSessionsDir())
   await ensureDirectory(getLazyMonitoringRunsDir())

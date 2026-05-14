@@ -16,7 +16,9 @@ export interface SlashCommand {
   /** If true, can execute while the AI is streaming */
   allowDuringBusy?: boolean
   /** Execute the command */
-  execute: (ctx: SlashCommandContext) => SlashCommandResult | Promise<SlashCommandResult>
+  execute: (
+    ctx: SlashCommandContext,
+  ) => SlashCommandResult | Promise<SlashCommandResult>
 }
 
 /**

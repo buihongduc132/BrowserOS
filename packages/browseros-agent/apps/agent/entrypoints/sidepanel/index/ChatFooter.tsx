@@ -36,7 +36,9 @@ interface ChatFooterProps {
   slashCommandOpen?: boolean
   slashFilterText?: string
   slashCommands?: import('@/lib/slash-commands/types').SlashCommand[]
-  onSlashSelect?: (cmd: import('@/lib/slash-commands/types').SlashCommand) => void
+  onSlashSelect?: (
+    cmd: import('@/lib/slash-commands/types').SlashCommand,
+  ) => void
   onSlashOpenChange?: (isOpen: boolean) => void
 }
 

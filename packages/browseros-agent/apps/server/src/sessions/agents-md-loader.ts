@@ -77,10 +77,14 @@ export class AgentsMdLoader {
   }
 
   private isAllowed(resolvedPath: string): boolean {
-    return this.allowedDirs.some((dir) => resolvedPath === dir || resolvedPath.startsWith(dir + path.sep))
+    return this.allowedDirs.some(
+      (dir) => resolvedPath === dir || resolvedPath.startsWith(dir + path.sep),
+    )
   }
 
-  private async safeStat(filePath: string): Promise<{ size: number; mtimeMs: number } | null> {
+  private async safeStat(
+    filePath: string,
+  ): Promise<{ size: number; mtimeMs: number } | null> {
     try {
       const stat = await fs.stat(filePath)
       return { size: stat.size, mtimeMs: stat.mtimeMs }

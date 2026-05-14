@@ -1,5 +1,5 @@
-import { useMemo } from 'react'
 import type { UIMessage } from 'ai'
+import { useMemo } from 'react'
 import { useLlmProviders } from '@/lib/llm-providers/useLlmProviders'
 
 /** Default context window when provider doesn't specify one (128k tokens) */
@@ -51,16 +51,11 @@ function estimateTokensFromMessages(messages: UIMessage[]): number {
  *
  * @public
  */
-export function useContextLimit(
-  messages: UIMessage[],
-): UseContextLimitResult {
+export function useContextLimit(messages: UIMessage[]): UseContextLimitResult {
   const { selectedProvider } = useLlmProviders()
 
   const contextLimit = useMemo(() => {
-    if (
-      selectedProvider?.contextWindow &&
-      selectedProvider.contextWindow > 0
-    ) {
+    if (selectedProvider?.contextWindow && selectedProvider.contextWindow > 0) {
       return selectedProvider.contextWindow
     }
     return DEFAULT_CONTEXT_LIMIT

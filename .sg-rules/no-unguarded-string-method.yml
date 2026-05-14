@@ -1,0 +1,32 @@
+# SOURCE: coding-guard internal — unguarded string methods crash on null/undefined
+# SOURCE: https://typescript-eslint.io/rules/no-unnecessary-condition/ (related null safety)
+# BUILT_ON: https://ast-grep.com/
+id: no-unguarded-string-method
+message: "Null-unsafe string method — use optional chaining (val?.trim()) or ((val ?? '').trim())"
+severity: warning
+language: TypeScript
+note: |
+  String methods crash when called on null/undefined. Use val?.method()
+  or (val ?? '').method(). This pattern caused a real production crash
+  in agent config handling (fixed in commit 06a16cee).
+  
+  The regex constraint matches variable/property chains (a.b.c) but
+  excludes optional chaining (a?.b) since ? is not in \w.
+rule:
+  any:
+    - pattern: $OBJ.trim()
+    - pattern: $OBJ.toLowerCase()
+    - pattern: $OBJ.toUpperCase()
+constraints:
+  OBJ:
+    regex: '^\w+(\.\w+)*$'
+ignores:
+  - '**/*.test.ts'
+  - '**/*.test.tsx'
+  - '**/*.spec.ts'
+  - '**/*.spec.tsx'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - '**/fixtures/**'

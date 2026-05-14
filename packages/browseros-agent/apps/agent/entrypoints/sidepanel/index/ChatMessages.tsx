@@ -127,7 +127,9 @@ export const ChatMessages: FC<ChatMessagesProps> = ({
                                   <ToolBatch
                                     key={segment.key}
                                     tools={segment.tools}
-                                    isLastBatch={segment.key === lastToolBatchKey}
+                                    isLastBatch={
+                                      segment.key === lastToolBatchKey
+                                    }
                                     isLastMessage={isLastMessage}
                                     isStreaming={isStreaming}
                                     onApprove={onToolApprove}

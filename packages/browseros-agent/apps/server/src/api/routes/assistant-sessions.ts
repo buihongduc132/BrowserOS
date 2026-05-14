@@ -14,19 +14,9 @@ import type { Env } from '../types'
  */
 export function createAssistantSessionRoutes() {
   return new Hono<Env>()
-    .get('/sessions', (c) =>
-      c.json({ error: 'Not Implemented' }, 501),
-    )
-    .post('/sessions', (c) =>
-      c.json({ error: 'Not Implemented' }, 501),
-    )
-    .get('/sessions/:id', (c) =>
-      c.json({ error: 'Not Implemented' }, 501),
-    )
-    .patch('/sessions/:id', (c) =>
-      c.json({ error: 'Not Implemented' }, 501),
-    )
-    .delete('/sessions/:id', (c) =>
-      c.json({ error: 'Not Implemented' }, 501),
-    )
+    .get('/sessions', (c) => c.json({ error: 'Not Implemented' }, 501))
+    .post('/sessions', (c) => c.json({ error: 'Not Implemented' }, 501))
+    .get('/sessions/:id', (c) => c.json({ error: 'Not Implemented' }, 501))
+    .patch('/sessions/:id', (c) => c.json({ error: 'Not Implemented' }, 501))
+    .delete('/sessions/:id', (c) => c.json({ error: 'Not Implemented' }, 501))
 }

@@ -374,3 +374,48 @@ function parseAbsolutePath(val: unknown, baseDir: string): string | undefined {
   if (typeof val !== 'string') return undefined
   return toAbsolutePath(val, baseDir)
 }
+
+// ── Compaction strategy schema (used by /compaction API route) ──
+
+const VccConfigSchema = z.object({
+  maxTranscriptLines: z.number().int().nonnegative().optional(),
+  maxGoalLines: z.number().int().nonnegative().optional(),
+  maxFileEntries: z.number().int().nonnegative().optional(),
+  maxCommitEntries: z.number().int().nonnegative().optional(),
+  maxPreferenceLines: z.number().int().nonnegative().optional(),
+  maxOutstandingLines: z.number().int().nonnegative().optional(),
+})
+
+export const CompactionStrategySchema = z.discriminatedUnion('method', [
+  z.object({
+    method: z.literal('default'),
+    customPrompt: z.string().min(1).optional(),
+  }),
+  z.object({
+    method: z.literal('vcc'),
+    vccConfig: VccConfigSchema.optional(),
+  }),
+])
+
+/**
+ * Returns the resolved config file path, or null if no --config was provided.
+ * Falls back to the server.json in the BrowserOS data directory.
+ */
+export function getResolvedConfigFilePath(): string | null {
+  // Try to re-derive from CLI args
+  const configIdx = process.argv.indexOf('--config')
+  if (configIdx !== -1 && configIdx + 1 < process.argv.length) {
+    const p = process.argv[configIdx + 1]
+    return path.isAbsolute(p) ? p : path.resolve(process.cwd(), p)
+  }
+
+  // Fallback: server.json in the BrowserOS data directory
+  const override = process.env.BROWSEROS_DIR?.trim()
+  const dirName =
+    process.env.NODE_ENV === 'development' ? '.browseros-dev' : '.browseros'
+  const dir = override || path.join(require('node:os').homedir(), dirName)
+  const fallback = path.join(dir, 'server.json')
+  if (fs.existsSync(fallback)) return fallback
+
+  return null
+}

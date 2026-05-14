@@ -21,6 +21,10 @@ export class McpPortError extends Error {
  * @public
  */
 export async function getAgentServerUrl(): Promise<string> {
+  if (env.VITE_BROWSEROS_SERVER_PORT) {
+    return `http://127.0.0.1:${env.VITE_BROWSEROS_SERVER_PORT}`
+  }
+
   const supportsUnifiedPort = await Capabilities.supports(
     Feature.UNIFIED_PORT_SUPPORT,
   )
@@ -70,6 +74,10 @@ async function getMcpPort(): Promise<number> {
  * @public
  */
 export async function getMcpServerUrl(): Promise<string> {
+  if (env.VITE_BROWSEROS_SERVER_PORT) {
+    return `http://127.0.0.1:${env.VITE_BROWSEROS_SERVER_PORT}/mcp`
+  }
+
   const supportsProxy = await Capabilities.supports(Feature.PROXY_SUPPORT)
   if (supportsProxy) {
     const port = await getProxyPort()
@@ -113,6 +121,10 @@ export async function getProxyServerUrl(): Promise<string> {
  * @public
  */
 export async function getHealthCheckUrl(): Promise<string> {
+  if (env.VITE_BROWSEROS_SERVER_PORT) {
+    return `http://127.0.0.1:${env.VITE_BROWSEROS_SERVER_PORT}/health`
+  }
+
   const supportsProxy = await Capabilities.supports(Feature.PROXY_SUPPORT)
   if (supportsProxy) {
     const port = await getProxyPort()

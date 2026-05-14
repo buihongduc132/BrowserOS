@@ -10,8 +10,8 @@
  * process.env is read at import time with the overridden value.
  */
 
-import path from 'node:path'
 import { describe, expect, it } from 'bun:test'
+import path from 'node:path'
 
 import { spawnWithEnv } from './test-utils'
 
@@ -25,7 +25,8 @@ const LIMITS_MODULE_PATH = JSON.stringify(
 
 describe('AGENT_LIMITS defaults', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { AGENT_LIMITS } = require('../../src/constants/limits.ts') as typeof import('../../src/constants/limits')
+  const { AGENT_LIMITS } =
+    require('../../src/constants/limits.ts') as typeof import('../../src/constants/limits')
 
   it('exports exactly 23 keys', () => {
     expect(Object.keys(AGENT_LIMITS)).toHaveLength(23)
@@ -46,7 +47,8 @@ describe('AGENT_LIMITS defaults', () => {
 
 describe('TOOL_LIMITS defaults', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { TOOL_LIMITS } = require('../../src/constants/limits.ts') as typeof import('../../src/constants/limits')
+  const { TOOL_LIMITS } =
+    require('../../src/constants/limits.ts') as typeof import('../../src/constants/limits')
 
   it('exports exactly 3 keys', () => {
     expect(Object.keys(TOOL_LIMITS)).toHaveLength(3)
@@ -67,7 +69,8 @@ describe('TOOL_LIMITS defaults', () => {
 
 describe('AGENT_LIMITS non-overridable defaults', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { AGENT_LIMITS } = require('../../src/constants/limits.ts') as typeof import('../../src/constants/limits')
+  const { AGENT_LIMITS } =
+    require('../../src/constants/limits.ts') as typeof import('../../src/constants/limits')
 
   it('has correct COMPRESSION_MIN_HEADROOM', () => {
     expect(AGENT_LIMITS.COMPRESSION_MIN_HEADROOM).toBe(10_000)
@@ -255,7 +258,8 @@ describe('AGENT_LIMITS edge-case env handling', () => {
 
 describe('AGENT_LIMITS structural checks', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { AGENT_LIMITS } = require('../../src/constants/limits.ts') as typeof import('../../src/constants/limits')
+  const { AGENT_LIMITS } =
+    require('../../src/constants/limits.ts') as typeof import('../../src/constants/limits')
 
   it('all AGENT_LIMITS values are positive finite numbers', () => {
     for (const [key, value] of Object.entries(AGENT_LIMITS)) {

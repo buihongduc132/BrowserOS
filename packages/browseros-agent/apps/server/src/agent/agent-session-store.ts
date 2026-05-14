@@ -100,7 +100,10 @@ export class AgentSessionStore {
     return sessions
   }
 
-  async getSessionMeta(agentId: string, sessionId: string): Promise<ActiveSession | null> {
+  async getSessionMeta(
+    agentId: string,
+    sessionId: string,
+  ): Promise<ActiveSession | null> {
     return this.sessions.get(this.compositeKey(agentId, sessionId)) ?? null
   }
 

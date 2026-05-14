@@ -1,8 +1,4 @@
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAgentServerUrl } from '@/lib/browseros/useBrowserOSProviders'
 
 // ---------------------------------------------------------------------------
@@ -174,8 +170,7 @@ export function useAgentSession(
 
   const query = useQuery<ActiveSession, Error>({
     queryKey: SESSION_KEYS.detail(agentId ?? '', sessionId ?? ''),
-    queryFn: () =>
-      fetchSession(baseUrl as string, agentId!, sessionId!),
+    queryFn: () => fetchSession(baseUrl as string, agentId!, sessionId!),
     enabled: !!baseUrl && !!agentId && !!sessionId && !urlLoading,
   })
 
@@ -231,9 +226,8 @@ export function useUpdateAgentSession(
   const queryClient = useQueryClient()
 
   const mutation = useMutation({
-    mutationFn: (
-      updates: Parameters<typeof updateSession>[3],
-    ) => updateSession(baseUrl as string, agentId!, sessionId!, updates),
+    mutationFn: (updates: Parameters<typeof updateSession>[3]) =>
+      updateSession(baseUrl as string, agentId!, sessionId!, updates),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: SESSION_KEYS.all(agentId ?? ''),
@@ -252,9 +246,7 @@ export function useUpdateAgentSession(
 /**
  * Delete a session.
  */
-export function useDeleteAgentSession(
-  agentId: string | undefined,
-) {
+export function useDeleteAgentSession(agentId: string | undefined) {
   const {
     baseUrl,
     isLoading: urlLoading,

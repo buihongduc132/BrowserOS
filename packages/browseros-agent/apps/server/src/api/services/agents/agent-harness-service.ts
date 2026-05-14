@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
+import { AgentSessionStore } from '../../../agent/agent-session-store'
 import {
   AcpxRuntime,
   type OpenclawGatewayAccessor,
@@ -24,7 +25,6 @@ import {
   type QueuedMessage,
   type QueuedMessageAttachment,
 } from '../../../lib/agents/message-queue'
-import { AgentSessionStore } from '../../../agent/agent-session-store'
 import { writeHermesPerAgentProvider } from '../hermes/hermes-paths'
 import { getHermesProviderMapping } from '../hermes/hermes-provider-map'
 
@@ -1113,12 +1113,16 @@ export class AgentHarnessService {
       // Update session metadata after the turn completes. Skip on
       // explicit cancel — the user didn't want the side effects.
       if (!turn.abortController.signal.aborted) {
-        const meta = await this.sessionMetaStore.getSessionMeta(agent.id, 'main')
+        const meta = await this.sessionMetaStore.getSessionMeta(
+          agent.id,
+          'main',
+        )
         if (meta) {
-          const preview = input.message
-            .split('\n')
-            .find((l) => l.trim())
-            ?.slice(0, 200) ?? null
+          const preview =
+            input.message
+              .split('\n')
+              .find((l) => l.trim())
+              ?.slice(0, 200) ?? null
           await this.sessionMetaStore.updateSessionMeta(agent.id, 'main', {
             turnCount: meta.turnCount + 1,
             lastMessagePreview: preview,

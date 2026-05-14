@@ -67,22 +67,22 @@ describe('createAgentSessionRoutes', () => {
       expect(res.status).toBe(200)
       const body = await res.json()
       expect(body.sessions).toHaveLength(2)
-      expect(body.sessions.map((s: { sessionId: string }) => s.sessionId)).toEqual(
-        expect.arrayContaining(['s1', 's2']),
-      )
+      expect(
+        body.sessions.map((s: { sessionId: string }) => s.sessionId),
+      ).toEqual(expect.arrayContaining(['s1', 's2']))
     })
 
     it('supports search filtering', async () => {
       const store = new AgentSessionStore()
       await store.openSession('agent-1', 's1')
-      await store.updateSessionMeta('agent-1', 's1', { title: 'Bug fix session' })
+      await store.updateSessionMeta('agent-1', 's1', {
+        title: 'Bug fix session',
+      })
       await store.openSession('agent-1', 's2')
       await store.updateSessionMeta('agent-1', 's2', { title: 'Feature work' })
 
       const app = createApp(store)
-      const res = await app.request(
-        '/agents/agent-1/sessions?search=bug+fix',
-      )
+      const res = await app.request('/agents/agent-1/sessions?search=bug+fix')
 
       expect(res.status).toBe(200)
       const body = await res.json()

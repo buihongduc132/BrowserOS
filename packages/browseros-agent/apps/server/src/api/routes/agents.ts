@@ -14,8 +14,6 @@ import { stream } from 'hono/streaming'
 import { formatUserMessage } from '../../agent/format-message'
 import type { Browser } from '../../browser/browser'
 import { createAcpUIMessageStreamResponse } from '../../lib/agents/acp-ui-message-stream'
-import { createSyntheticCommandStream } from './acp-command-response'
-import { dispatchCommand } from './acp-slash-commands-builtins'
 import type { OpenclawGatewayAccessor } from '../../lib/agents/acpx-runtime'
 import type {
   ActiveTurnInfo,
@@ -56,6 +54,8 @@ import {
 import type { FilePreview } from '../services/openclaw/file-preview'
 import type { Env } from '../types'
 import { resolveBrowserContextPageIds } from '../utils/resolve-browser-context-page-ids'
+import { createSyntheticCommandStream } from './acp-command-response'
+import { dispatchCommand } from './acp-slash-commands-builtins'
 
 type AgentRouteService = {
   listAgents(): Promise<AgentDefinition[]>
@@ -630,7 +630,6 @@ export function createAgentRoutes(deps: AgentRouteDeps = {}) {
           return handleAgentRouteError(c, err)
         }
       })
-
   )
 }
 

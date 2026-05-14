@@ -12,8 +12,8 @@ import { TabPickerPopover } from '@/components/elements/tab-picker-popover'
 import type { SlashCommand } from '@/lib/slash-commands/types'
 import { cn } from '@/lib/utils'
 import type { VoiceInputState } from '@/lib/voice/useVoiceInput'
-import { SlashCommandAutocomplete } from './SlashCommandAutocomplete'
 import type { ChatMode } from './chatTypes'
+import { SlashCommandAutocomplete } from './SlashCommandAutocomplete'
 
 interface MentionState {
   isOpen: boolean

@@ -57,9 +57,7 @@ export function registerAcpCommand(cmd: AcpServerCommand): void {
 }
 
 /** Look up a command by name */
-export function getAcpCommand(
-  name: string,
-): AcpServerCommand | undefined {
+export function getAcpCommand(name: string): AcpServerCommand | undefined {
   return commands.get(name)
 }
 
@@ -95,7 +93,9 @@ export async function dispatchCommand(
   if (!cmd) {
     return {
       type: 'error',
-      error: `Unknown command: /${cmdName}. Available: ${Array.from(commands.keys())
+      error: `Unknown command: /${cmdName}. Available: ${Array.from(
+        commands.keys(),
+      )
         .map((k) => '/' + k)
         .join(', ')}`,
     }

@@ -1,7 +1,12 @@
-import { describe, expect, it, beforeEach } from 'bun:test'
+import { beforeEach, describe, expect, it } from 'bun:test'
 import type { UIMessage } from 'ai'
-import { processSlashCommand, clearCommands, getAllCommands, getCommand } from './registry'
 import { registerBuiltinCommands } from './builtins'
+import {
+  clearCommands,
+  getAllCommands,
+  getCommand,
+  processSlashCommand,
+} from './registry'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -26,12 +31,21 @@ function makeDeps(overrides?: { messages?: UIMessage[] }) {
   messagesReplaced = null
 
   return {
-    messages: overrides?.messages ?? [makeUIMessage('user', 'hello'), makeUIMessage('assistant', 'hi')],
+    messages: overrides?.messages ?? [
+      makeUIMessage('user', 'hello'),
+      makeUIMessage('assistant', 'hi'),
+    ],
     conversationId: 'test-conv-1',
-    setMessages: (msgs: UIMessage[]) => { messagesReplaced = msgs },
-    resetConversation: () => { resetCalled = true },
+    setMessages: (msgs: UIMessage[]) => {
+      messagesReplaced = msgs
+    },
+    resetConversation: () => {
+      resetCalled = true
+    },
     mode: 'chat' as const,
-    setMode: (mode: 'chat' | 'agent') => { modeSetTo = mode },
+    setMode: (mode: 'chat' | 'agent') => {
+      modeSetTo = mode
+    },
   }
 }
 
@@ -106,7 +120,10 @@ describe('slash-commands', () => {
     })
 
     it('captures single-line args', () => {
-      const result = processSlashCommand('/compact performance issues', makeDeps())
+      const result = processSlashCommand(
+        '/compact performance issues',
+        makeDeps(),
+      )
       expect(result.type).toBe('prompt')
       if (result.type === 'prompt') {
         expect(result.expandedText).toContain('focusing on: performance issues')
@@ -123,7 +140,10 @@ describe('slash-commands', () => {
     })
 
     it('captures args with special characters', () => {
-      const result = processSlashCommand('/compact @user #tag $money %pct', makeDeps())
+      const result = processSlashCommand(
+        '/compact @user #tag $money %pct',
+        makeDeps(),
+      )
       expect(result.type).toBe('prompt')
       if (result.type === 'prompt') {
         expect(result.expandedText).toContain('@user #tag $money %pct')

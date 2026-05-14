@@ -1,0 +1,22 @@
+# SOURCE: coding-guard internal — unsafe JSON.parse without error handling
+# SOURCE: https://rules.sonarsource.com/typescript/RSPEC-4323/ (parsing JSON should be wrapped)
+# BUILT_ON: https://ast-grep.com/
+id: no-unsafe-json-parse
+message: "JSON.parse() without try-catch — malformed data will crash at runtime"
+severity: error
+language: TypeScript
+note: |
+  JSON.parse() throws on malformed input. In SSE/streaming contexts,
+  data can be incomplete or corrupted. Always wrap in try-catch or use
+  a safe parse helper (safeJsonParse / try-catch with fallback).
+  
+  False positives: this flags ALL JSON.parse calls. Check if the call is
+  already inside a try-catch block before fixing.
+rule:
+  pattern: JSON.parse($DATA)
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'

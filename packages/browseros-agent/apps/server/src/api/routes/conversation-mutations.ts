@@ -54,7 +54,11 @@ export function findTurnStart(
   if (messageIndex < 0 || messageIndex >= messages.length) return 0
   // Walk backwards to find the nearest User message
   for (let i = messageIndex; i >= 0; i--) {
-    if (messages[i] && typeof messages[i] === 'object' && 'User' in messages[i]) {
+    if (
+      messages[i] &&
+      typeof messages[i] === 'object' &&
+      'User' in messages[i]
+    ) {
       return i
     }
   }

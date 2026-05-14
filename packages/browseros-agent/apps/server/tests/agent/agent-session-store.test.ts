@@ -100,10 +100,14 @@ describe('AgentSessionStore', () => {
 
     it('searches sessions by title (case-insensitive)', async () => {
       await store.openSession('agent-1', 'session-1')
-      await store.updateSessionMeta('agent-1', 'session-1', { title: 'Fix Login Bug' })
+      await store.updateSessionMeta('agent-1', 'session-1', {
+        title: 'Fix Login Bug',
+      })
 
       await store.openSession('agent-1', 'session-2')
-      await store.updateSessionMeta('agent-1', 'session-2', { title: 'Update README' })
+      await store.updateSessionMeta('agent-1', 'session-2', {
+        title: 'Update README',
+      })
 
       await store.openSession('agent-1', 'session-3')
       await store.updateSessionMeta('agent-1', 'session-3', {
@@ -119,7 +123,9 @@ describe('AgentSessionStore', () => {
 
     it('returns empty when search matches nothing', async () => {
       await store.openSession('agent-1', 'session-1')
-      await store.updateSessionMeta('agent-1', 'session-1', { title: 'Fix Login Bug' })
+      await store.updateSessionMeta('agent-1', 'session-1', {
+        title: 'Fix Login Bug',
+      })
 
       const results = await store.listSessions('agent-1', {
         search: 'xyznonexistent',
@@ -193,13 +199,17 @@ describe('AgentSessionStore', () => {
       expect(updated?.model).toBe('gpt-4o')
       expect(updated?.lastMessagePreview).toBe('Hello world')
       await Bun.sleep(1)
-      const afterUpdate = await store.updateSessionMeta('agent-1', 'session-1', {
-        title: 'My Session',
-        turnCount: 5,
-        mode: 'code',
-        model: 'gpt-4o',
-        lastMessagePreview: 'Hello world',
-      })
+      const afterUpdate = await store.updateSessionMeta(
+        'agent-1',
+        'session-1',
+        {
+          title: 'My Session',
+          turnCount: 5,
+          mode: 'code',
+          model: 'gpt-4o',
+          lastMessagePreview: 'Hello world',
+        },
+      )
 
       expect(afterUpdate?.updatedAt).toBeGreaterThan(afterUpdate?.createdAt)
     })
@@ -213,7 +223,9 @@ describe('AgentSessionStore', () => {
 
     it('preserves unmodified fields on partial update', async () => {
       await store.openSession('agent-1', 'session-1', '/home/user')
-      await store.updateSessionMeta('agent-1', 'session-1', { title: 'New Title' })
+      await store.updateSessionMeta('agent-1', 'session-1', {
+        title: 'New Title',
+      })
 
       const session = await store.getSessionMeta('agent-1', 'session-1')
       expect(session?.title).toBe('New Title')
@@ -260,7 +272,9 @@ describe('AgentSessionStore', () => {
     expect(sessionsB[0].cwd).toBe('/project-b')
 
     // Update agent-A's session should not affect agent-B
-    await store.updateSessionMeta('agent-A', 'main', { title: 'Agent A session' })
+    await store.updateSessionMeta('agent-A', 'main', {
+      title: 'Agent A session',
+    })
     const bSession = await store.getSessionMeta('agent-B', 'main')
     expect(bSession?.title).toBeNull()
 

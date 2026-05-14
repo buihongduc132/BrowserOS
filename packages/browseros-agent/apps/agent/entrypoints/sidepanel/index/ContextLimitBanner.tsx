@@ -1,5 +1,5 @@
 import { AlertTriangle, Loader2, Sparkles, X } from 'lucide-react'
-import { useCallback, useEffect, useState, type FC } from 'react'
+import { type FC, useCallback, useEffect, useState } from 'react'
 import { track } from '@/lib/metrics/track'
 import { cn } from '@/lib/utils'
 
