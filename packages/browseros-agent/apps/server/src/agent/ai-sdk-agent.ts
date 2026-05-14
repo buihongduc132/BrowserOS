@@ -233,6 +233,7 @@ export class AiSdkAgent {
       declinedApps: config.resolvedConfig.declinedApps,
       skillsCatalog,
       origin: config.resolvedConfig.origin,
+      workspaceAgentsMd: config.resolvedConfig.workspaceAgentsMd,
     })
 
     // Configure compaction for context window management
