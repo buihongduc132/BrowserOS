@@ -24,7 +24,7 @@ interface McpRouteDeps {
   browser: Browser
   executionDir: string
   resourcesDir: string
-  policyService: GlobalAclPolicyService
+  policyService?: GlobalAclPolicyService
   klavisRef?: KlavisProxyRef
 }
 
@@ -40,7 +40,9 @@ export function createMcpRoutes(deps: McpRouteDeps) {
     if (accept.includes('text/event-stream')) {
       const mcpServer = createMcpServer({
         ...deps,
-        aclRules: await resolveAclPolicyForMcpRequest({ policyService: deps.policyService }),
+        aclRules: deps.policyService
+          ? await resolveAclPolicyForMcpRequest({ policyService: deps.policyService })
+          : undefined,
       })
       const transport = new StreamableHTTPTransport({
         sessionIdGenerator: undefined,
@@ -73,9 +75,9 @@ export function createMcpRoutes(deps: McpRouteDeps) {
       monitoringService.resolveSessionForMcpRequest(explicitAgentId)
     const agentId = activeSession?.agentId
     metrics.log('mcp.request', { scopeId })
-    const aclRules = await resolveAclPolicyForMcpRequest({
-      policyService: deps.policyService,
-    })
+    const aclRules = deps.policyService
+      ? await resolveAclPolicyForMcpRequest({ policyService: deps.policyService })
+      : undefined
     const monitoringSessionId = activeSession?.monitoringSessionId
     const observer =
       monitoringSessionId && agentId
