@@ -37,12 +37,36 @@ function parseOptionalNumber(value: string | undefined): number | undefined {
 export function createMcpRoutes(deps: McpRouteDeps) {
   const app = new Hono<Env>()
 
-  app.get('/', (c) =>
-    c.json({
+  // GET / handles both health-check and SSE stream requests.
+  // StreamableHTTPTransport.handleGetRequest opens an SSE stream for
+  // MCP clients that connect via SSE transport (backward compat).
+  // Non-MCP GETs (no Accept: text/event-stream) get a JSON status.
+  app.get('/', async (c) => {
+    const accept = c.req.header('Accept') ?? ''
+    if (accept.includes('text/event-stream')) {
+      const mcpServer = createMcpServer({
+        ...deps,
+        aclRules: await resolveAclPolicyForMcpRequest({ policyService: deps.policyService }),
+      })
+      const transport = new StreamableHTTPTransport({
+        sessionIdGenerator: undefined,
+        enableJsonResponse: true,
+      })
+      try {
+        await mcpServer.connect(transport)
+        return transport.handleRequest(c)
+      } catch {
+        return c.json(
+          { jsonrpc: '2.0', error: { code: -32603, message: 'Internal server error' }, id: null },
+          500,
+        )
+      }
+    }
+    return c.json({
       status: 'ok',
       message: 'MCP server is running. Use POST to interact.',
-    }),
-  )
+    })
+  })
 
   app.post('/', async (c) => {
     const scopeId = c.req.header('X-BrowserOS-Scope-Id') || 'ephemeral'
