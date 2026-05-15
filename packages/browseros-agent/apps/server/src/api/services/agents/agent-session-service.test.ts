@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import { describe, expect, it, beforeEach } from 'bun:test'
-import { AgentSessionService } from './agent-session-service'
+import { beforeEach, describe, expect, it } from 'bun:test'
 import { AgentSessionStore } from '../../../agent/agent-session-store'
+import { AgentSessionService } from './agent-session-service'
 
 describe('AgentSessionService', () => {
   let service: AgentSessionService
@@ -61,7 +61,10 @@ describe('AgentSessionService', () => {
   describe('full lifecycle', () => {
     it('create → list → get → updateTitle → close', async () => {
       // Create
-      const created = await service.createSession('agent-1', '/home/user/project')
+      const created = await service.createSession(
+        'agent-1',
+        '/home/user/project',
+      )
       expect(created.id).toBeTruthy()
       expect(created.agentId).toBe('agent-1')
       expect(created.cwd).toBe('/home/user/project')
@@ -102,7 +105,7 @@ describe('AgentSessionService', () => {
       const listed = await service.listSessions('agent-1')
       expect(listed.sessions).toHaveLength(3)
 
-      const ids = listed.sessions.map(s => s.id)
+      const ids = listed.sessions.map((s) => s.id)
       expect(ids).toContain(s1.id)
       expect(ids).toContain(s2.id)
       expect(ids).toContain(s3.id)
@@ -141,15 +144,15 @@ describe('AgentSessionService', () => {
   describe('ref-count integration with mem store', () => {
     it('createSession opens a handle in mem store', async () => {
       const session = await service.createSession('agent-1')
-      expect(memStore.has(session.id)).toBe(true)
-      expect(memStore.get(session.id)!.agentId).toBe('agent-1')
+      expect(memStore.has('agent-1', session.id)).toBe(true)
+      expect(memStore.get('agent-1', session.id)?.agentId).toBe('agent-1')
     })
 
     it('closeSession removes from mem store when ref hits 0', async () => {
       const session = await service.createSession('agent-1')
-      expect(memStore.has(session.id)).toBe(true)
+      expect(memStore.has('agent-1', session.id)).toBe(true)
       await service.closeSession(session.id)
-      expect(memStore.has(session.id)).toBe(false)
+      expect(memStore.has('agent-1', session.id)).toBe(false)
     })
   })
 })

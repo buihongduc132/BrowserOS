@@ -5,7 +5,10 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { AgentSessionStore, type ActiveSession } from '../../../agent/agent-session-store'
+import type {
+  ActiveSession,
+  AgentSessionStore,
+} from '../../../agent/agent-session-store'
 
 /**
  * Persistent session metadata for an ACP agent session.
@@ -110,7 +113,7 @@ export class AgentSessionService {
     this.sessions.delete(sessionId)
 
     // Remove from in-memory ref-counted store
-    return this.memStore.close(sessionId)
+    return this.memStore.close(session.agentId, sessionId)
   }
 
   async updateTitle(sessionId: string, title: string): Promise<void> {
