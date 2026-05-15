@@ -10,6 +10,7 @@ import type { AgentAdapterHealth } from '@/entrypoints/app/agents/agent-row/agen
 import { PinToggle } from '@/entrypoints/app/agents/agent-row/PinToggle'
 import type { AgentLiveness } from '@/entrypoints/app/agents/LivenessDot'
 import { cn } from '@/lib/utils'
+import { AgentModeSwitch } from './AgentModeSwitch'
 
 interface ConversationHeaderProps {
   agent: HarnessAgent | null
@@ -22,6 +23,10 @@ interface ConversationHeaderProps {
   onPinToggle: (next: boolean) => void
   /** Optional trailing slot — currently used for the Outputs rail toggle. */
   headerExtra?: ReactNode
+  /** Current agent ID — passed to AgentModeSwitch for capability gating. */
+  agentId?: string
+  /** Current session ID — passed to AgentModeSwitch. */
+  sessionId?: string
 }
 
 /**
@@ -43,6 +48,8 @@ export const ConversationHeader: FC<ConversationHeaderProps> = ({
   onGoHome,
   onPinToggle,
   headerExtra,
+  agentId,
+  sessionId,
 }) => {
   const BackIcon = backTarget === 'home' ? Home : ArrowLeft
   const adapter = agent?.adapter ?? fallbackAdapter
@@ -105,6 +112,9 @@ export const ConversationHeader: FC<ConversationHeaderProps> = ({
             </span>
           </div>
         </div>
+        {agentId && sessionId ? (
+          <AgentModeSwitch agentId={agentId} sessionId={sessionId} />
+        ) : null}
         {headerExtra ? (
           <div className="flex shrink-0 items-center">{headerExtra}</div>
         ) : null}
