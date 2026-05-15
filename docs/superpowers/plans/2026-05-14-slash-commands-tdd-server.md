@@ -1,3 +1,4 @@
+<!-- status: DONE — merged via PR #15 (feat(slash-commands): /command autocomplete + settings page + custom commands) -->
 # TDD: Slash Commands — Server Side
 
 **Date:** 2026-05-14

@@ -1,3 +1,4 @@
+<!-- status: DONE — verification report for PR #15 (slash commands) -->
 # Verification Report: Slash Commands UI Plan
 
 **Verifier:** @V

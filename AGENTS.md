@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **BrowserOS-wt-acp-session-improve** (21300 symbols, 43320 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **BrowserOS** (24146 symbols, 48373 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -24,10 +24,10 @@ This project is indexed by GitNexus as **BrowserOS-wt-acp-session-improve** (213
 
 | Resource | Use for |
 |----------|---------|
-| `gitnexus://repo/BrowserOS-wt-acp-session-improve/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/BrowserOS-wt-acp-session-improve/clusters` | All functional areas |
-| `gitnexus://repo/BrowserOS-wt-acp-session-improve/processes` | All execution flows |
-| `gitnexus://repo/BrowserOS-wt-acp-session-improve/process/{name}` | Step-by-step execution trace |
+| `gitnexus://repo/BrowserOS/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/BrowserOS/clusters` | All functional areas |
+| `gitnexus://repo/BrowserOS/processes` | All execution flows |
+| `gitnexus://repo/BrowserOS/process/{name}` | Step-by-step execution trace |
 
 ## CLI
 
