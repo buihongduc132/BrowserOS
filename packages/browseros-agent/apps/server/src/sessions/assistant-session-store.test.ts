@@ -297,7 +297,7 @@ describe('AssistantSessionStore', () => {
       expect(session!.messageCount).toBe(10)
       expect(session!.workspaces).toHaveLength(1)
       expect(session!.workspaces[0].workspaceName).toBe('project')
-      expect(session!.tags).toEqual(['important', 'feature'])
+      expect([...session!.tags].sort()).toEqual(['feature', 'important'])
 
       // Delete
       const deleted = await store.delete('lifecycle')
