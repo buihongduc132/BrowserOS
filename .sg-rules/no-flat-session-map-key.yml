@@ -1,0 +1,49 @@
+# SOURCE: coding-guard internal — codified from verifier loop Round 1-3 reject
+# SOURCE: PR #18/#19 — cross-agent isolation regression (composite key removed)
+# BUILT_ON: https://ast-grep.com/
+id: no-flat-session-map-key
+message: "Session store Map operations must use composite key (agentId::sessionId), not bare sessionId — prevents cross-agent session collision"
+severity: error
+language: TypeScript
+note: |
+  AgentSessionStore uses a composite key `agentId::sessionId` for both the
+  `sessions` and `sessionMeta` Maps. Any Map operation (.get, .set, .has,
+  .delete) that uses bare `sessionId` as the key will break cross-agent
+  isolation — agent-A opening session "main" will collide with agent-B's
+  "main".
+
+  Always use `AgentSessionStore.key(agentId, sessionId)` or a local `key`
+  variable computed from both agentId and sessionId.
+
+  History: This bug appeared in 3 consecutive verifier rounds (Round 1-3)
+  because cherry-pick/rebase kept overwriting the composite-key fix with
+  the old flat-key code.
+rule:
+  any:
+    # Pattern: this.sessions.get(sessionId) — should be .get(key) or .get(AgentSessionStore.key(agentId, sessionId))
+    - pattern: |
+        this.sessions.get($SESSION_ID)
+    - pattern: |
+        this.sessions.set($SESSION_ID, $$$REST)
+    - pattern: |
+        this.sessions.has($SESSION_ID)
+    - pattern: |
+        this.sessions.delete($SESSION_ID)
+    # Same for sessionMeta
+    - pattern: |
+        this.sessionMeta.get($SESSION_ID)
+    - pattern: |
+        this.sessionMeta.set($SESSION_ID, $$$$REST)
+    - pattern: |
+        this.sessionMeta.has($SESSION_ID)
+    - pattern: |
+        this.sessionMeta.delete($SESSION_ID)
+constraints:
+  SESSION_ID:
+    # Only flag when the arg is a plain variable named sessionId or id (not 'key' or a composite expression)
+    regex: '^(sessionId|id)$'
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
