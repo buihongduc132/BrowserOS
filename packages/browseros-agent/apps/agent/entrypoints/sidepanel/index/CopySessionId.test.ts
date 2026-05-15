@@ -33,7 +33,7 @@ describe('copySessionIdToClipboard', () => {
 
     //#then
     expect(writeText).toHaveBeenCalled()
-    expect(writeText.mock.calls[0][0]).toBe(conversationId)
+    expect(writeText).toHaveBeenCalledWith(conversationId)
   })
 
   test('returns false for empty string conversationId and does not copy', async () => {
@@ -57,7 +57,7 @@ describe('copySessionIdToClipboard', () => {
     globalThis.navigator = { clipboard: { writeText } }
 
     //#when
-    // @ts-expect-error — intentionally passing null
+    // intentionally passing null
     const result = await copySessionIdToClipboard(null)
 
     //#then
@@ -133,9 +133,9 @@ describe('buildSessionIdLabel', () => {
     //#given — nullish input
 
     //#when
-    // @ts-expect-error — intentionally passing null
+    // intentionally passing null
     const labelNull = buildSessionIdLabel(null)
-    // @ts-expect-error — intentionally passing undefined
+    // intentionally passing undefined
     const labelUndef = buildSessionIdLabel(undefined)
 
     //#then

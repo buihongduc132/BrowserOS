@@ -533,7 +533,7 @@ function getWorkspace(
   options?: BuildSystemPromptOptions,
 ): string {
   if (!options?.workspaceDir) return ''
-  return `<workspace>
+  const section = `<workspace>
 ## Workspace
 
 Working directory: ${options.workspaceDir}
@@ -551,6 +551,18 @@ You can read, write, search, and execute files in this directory:
 Use the filesystem to save extracted data, run scripts, or process files.
 Skills may reference scripts in their directory — use absolute paths.
 </workspace>`
+
+  // Inject AGENTS.md workspace instructions when available
+  if (options?.workspaceAgentsMd?.length) {
+    let instructions = '\n\n<workspace_instructions>'
+    for (const doc of options.workspaceAgentsMd) {
+      instructions += `\n### ${doc.path}\n\n${doc.content}\n`
+    }
+    instructions += '</workspace_instructions>'
+    return section + instructions
+  }
+
+  return section
 }
 
 // -----------------------------------------------------------------------------
@@ -751,6 +763,8 @@ export interface BuildSystemPromptOptions {
   skillsCatalog?: string
   /** Where the chat session originates from — determines navigation behavior. */
   origin?: 'sidepanel' | 'newtab'
+  /** Loaded AGENTS.md content from workspace directories — injected as <workspace_instructions> */
+  workspaceAgentsMd?: Array<{ path: string; content: string; lastModified: number }>
 }
 
 export function buildSystemPrompt(options?: BuildSystemPromptOptions): string {

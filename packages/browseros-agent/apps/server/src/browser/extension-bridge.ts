@@ -210,12 +210,13 @@ export async function sendExtensionMessage(
       }
 
       const value = evalResult.result?.value
-      if (value === undefined) {
+      if (value === undefined || value === null) {
         return null
       }
 
       try {
-        const parsed = JSON.parse(value)
+        const valueStr = typeof value === 'string' ? value : JSON.stringify(value)
+        const parsed = JSON.parse(valueStr)
         if (parsed?.__browseros_bridge_error) {
           throw new Error(`Extension error: ${parsed.__browseros_bridge_error}`)
         }

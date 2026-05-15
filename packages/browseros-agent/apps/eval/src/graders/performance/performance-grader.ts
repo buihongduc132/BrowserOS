@@ -3,7 +3,8 @@ import { join } from 'node:path'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import { writeGraderJsonArtifact } from '../../grading/artifacts'
 import type { GraderResult } from '../../types'
-import type { Grader, GraderInput } from '../types'
+import type { Grader } from '../types'
+import type { GraderInput } from '../../grading/types'
 import {
   buildUserPrompt,
   DEFAULT_AXES,

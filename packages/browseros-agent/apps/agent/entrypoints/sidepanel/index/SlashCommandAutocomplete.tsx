@@ -55,7 +55,7 @@ export function SlashCommandAutocomplete({
 
   return (
     <Popover open={isOpen}>
-      {/* @ts-expect-error — Radix virtualRef not in the type stubs but works at runtime */}
+      {/* Radix virtualRef not in the type stubs but works at runtime */}
       <PopoverAnchor virtualRef={anchorRef as React.RefObject<HTMLElement>} />
       <PopoverContent
         className="w-72 p-0"

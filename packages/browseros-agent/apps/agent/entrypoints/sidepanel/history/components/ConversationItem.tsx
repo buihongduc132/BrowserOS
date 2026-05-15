@@ -13,6 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { WorkspaceBubbleGroup } from '@/entrypoints/components/elements/WorkspaceBubbleGroup'
 import type { HistoryConversation } from './types'
 
 dayjs.extend(relativeTime)
@@ -60,7 +61,20 @@ export const ConversationItem: FC<ConversationItemProps> = ({
           <p className="truncate font-medium text-foreground text-sm">
             {label}
           </p>
-          <p className="text-muted-foreground text-xs">{relativeTimeAgo}</p>
+          <div className="flex items-center gap-2">
+            {conversation.workspaces && conversation.workspaces.length > 0 && (
+              <WorkspaceBubbleGroup
+                workspaces={conversation.workspaces.map((ws) => ({
+                  id: ws.id,
+                  name: ws.name,
+                  path: ws.path,
+                }))}
+                size="sm"
+                maxVisible={2}
+              />
+            )}
+            <span className="text-muted-foreground text-xs">{relativeTimeAgo}</span>
+          </div>
         </div>
         {onDelete && (
           <button

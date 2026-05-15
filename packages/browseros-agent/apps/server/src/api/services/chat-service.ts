@@ -6,7 +6,6 @@
 
 import { createAgentUIStreamResponse, type UIMessage } from 'ai'
 import { AiSdkAgent } from '../../agent/ai-sdk-agent'
-import { resolveCompactionConfig } from '../../agent/compaction-config'
 import { formatUserMessage } from '../../agent/format-message'
 import {
   filterValidMessages,
@@ -15,23 +14,30 @@ import {
 import type { AgentSession, SessionStore } from '../../agent/session-store'
 import type { ResolvedAgentConfig } from '../../agent/types'
 import type { Browser } from '../../browser/browser'
-import type { KlavisClient } from '../../lib/clients/klavis/klavis-client'
 import { resolveLLMConfig } from '../../lib/clients/llm/config'
 import { logger } from '../../lib/logger'
 import type { ToolRegistry } from '../../tools/tool-registry'
+import type { KlavisProxyRef } from '../services/klavis/strata-proxy'
 import type { BrowserContext, ChatRequest } from '../types'
+import { resolveBrowserContextPageIds } from '../utils/resolve-browser-context-page-ids'
+import type { AssistantSessionStore } from '../../sessions/assistant-session-store'
+import { AgentsMdLoader } from '../../sessions/agents-md-loader'
 
 export interface ChatServiceDeps {
   sessionStore: SessionStore
-  klavisClient: KlavisClient
+  klavisRef?: KlavisProxyRef
   browser: Browser
   registry: ToolRegistry
   browserosId?: string
   aiSdkDevtoolsEnabled?: boolean
-  compaction?: import('../../config').ServerConfig['compaction']
+  /** Optional: assistant session metadata store for workspace tracking + AGENTS.md */
+  assistantSessionStore?: AssistantSessionStore
 }
 
 export class ChatService {
+  /** Reusable AGENTS.md loader — preserves mtime cache across requests */
+  private agentsMdLoader = new AgentsMdLoader([])
+
   constructor(private deps: ChatServiceDeps) {}
 
   async processMessage(
@@ -67,18 +73,62 @@ export class ChatService {
       declinedApps: request.declinedApps,
       browserosId: this.deps.browserosId,
       toolApprovalConfig: request.toolApprovalConfig,
-      compaction: this.deps.compaction
-        ? resolveCompactionConfig(this.deps.compaction)
-        : undefined,
     }
-    const llmConfigKey = this.buildLlmConfigKey(agentConfig)
+
+    // Resolve workspaces from either format (backward compat)
+    const resolvedWorkspaces = this.resolveWorkspaces(request)
+
+    // Track workspace associations on session (idempotent)
+    if (resolvedWorkspaces.length > 0 && this.deps.assistantSessionStore) {
+      try {
+        // Ensure session metadata exists
+        const existing = await this.deps.assistantSessionStore.get(request.conversationId)
+        if (!existing) {
+          await this.deps.assistantSessionStore.create({
+            id: request.conversationId,
+            mode: request.mode ?? 'chat',
+          })
+        }
+        for (const ws of resolvedWorkspaces) {
+          await this.deps.assistantSessionStore.addWorkspace(request.conversationId, {
+            workspaceId: ws.id,
+            workspacePath: ws.path,
+            workspaceName: ws.name,
+          })
+        }
+      } catch (error) {
+        logger.debug('Failed to track workspace associations', {
+          conversationId: request.conversationId,
+          error: String(error),
+        })
+      }
+    }
+
+    // Load AGENTS.md for all workspaces (with allowlist security)
+    if (resolvedWorkspaces.length > 0) {
+      try {
+        this.agentsMdLoader.updateAllowlist(resolvedWorkspaces.map((w) => w.path))
+        const agentsMd = await this.agentsMdLoader.loadMultiple(resolvedWorkspaces.map((w) => w.path))
+        if (agentsMd.length > 0) {
+          agentConfig.workspaceAgentsMd = agentsMd
+        }
+      } catch (error) {
+        logger.debug('Failed to load AGENTS.md', {
+          conversationId: request.conversationId,
+          error: String(error),
+        })
+      }
+    }
 
     let session = sessionStore.get(request.conversationId)
     let isNewSession = false
     const contextChanges: string[] = []
 
-    // Build a stable key from enabled MCP servers for change detection
+    // Build stable keys for change detection
     const mcpServerKey = this.buildMcpServerKey(request.browserContext)
+    const approvalConfigKey = this.buildApprovalConfigKey(
+      request.toolApprovalConfig,
+    )
 
     // Detect MCP config change mid-conversation → rebuild session
     if (session && session.mcpServerKey !== mcpServerKey) {
@@ -95,10 +145,16 @@ export class ChatService {
         mcpServerKey,
       )
 
+      const oldParts = (previousMcpKey ?? '').split(',').filter(Boolean)
+      const newParts = mcpServerKey.split(',').filter(Boolean)
+      const oldKlavisState = oldParts.find((s) => s.startsWith('klavis:'))
+      const newKlavisState = newParts.find((s) => s.startsWith('klavis:'))
       const oldServers = new Set(
-        (previousMcpKey ?? '').split(',').filter(Boolean),
+        oldParts.filter((s) => !s.startsWith('klavis:')),
       )
-      const newServers = new Set(mcpServerKey.split(',').filter(Boolean))
+      const newServers = new Set(
+        newParts.filter((s) => !s.startsWith('klavis:')),
+      )
       const added = [...newServers].filter((s) => !oldServers.has(s))
       const removed = [...oldServers].filter((s) => !newServers.has(s))
 
@@ -114,9 +170,19 @@ export class ChatService {
         )
       }
       if (parts.length === 0) {
-        parts.push(
-          'Connected app integrations changed during this conversation. Use only tools that are currently registered.',
-        )
+        if (
+          oldKlavisState === 'klavis:pending' &&
+          newKlavisState === 'klavis:connected' &&
+          newServers.size > 0
+        ) {
+          parts.push(
+            `Klavis app integration tools are now available for the following connected apps: ${[...newServers].join(', ')}.`,
+          )
+        } else {
+          parts.push(
+            'Connected app integrations changed during this conversation. Use only tools that are currently registered.',
+          )
+        }
       }
       contextChanges.push(parts.join(' '))
     }
@@ -151,28 +217,27 @@ export class ChatService {
       }
     }
 
-    // Detect provider/model/auth change mid-conversation -> rebuild session.
-    // The AI SDK agent captures the language model at construction time, so a
-    // reused session would keep calling the previous provider.
-    if (session && session.llmConfigKey !== llmConfigKey) {
-      logger.info('LLM config changed mid-conversation, rebuilding session', {
-        conversationId: request.conversationId,
-        provider: agentConfig.provider,
-        model: agentConfig.model,
-      })
+    // Detect approval config change mid-conversation → rebuild session
+    if (session && session.approvalConfigKey !== approvalConfigKey) {
+      logger.info(
+        'Approval config changed mid-conversation, rebuilding session',
+        { conversationId: request.conversationId },
+      )
       session = await this.rebuildSession(
         session,
         request,
         agentConfig,
         mcpServerKey,
-        llmConfigKey,
       )
     }
 
     if (!session) {
       isNewSession = true
       let hiddenPageId: number | undefined
-      let browserContext = await this.resolvePageIds(request.browserContext)
+      let browserContext = await resolveBrowserContextPageIds(
+        this.deps.browser,
+        request.browserContext,
+      )
       if (request.isScheduledTask) {
         try {
           hiddenPageId = await this.deps.browser.newPage('about:blank', {
@@ -224,9 +289,10 @@ export class ChatService {
         browser: this.deps.browser,
         registry: this.deps.registry,
         browserContext,
-        klavisClient: this.deps.klavisClient,
+        klavisRef: this.deps.klavisRef,
         browserosId: this.deps.browserosId,
         aiSdkDevtoolsEnabled: this.deps.aiSdkDevtoolsEnabled,
+        aclRules: request.aclRules,
       })
       session = {
         agent,
@@ -234,10 +300,17 @@ export class ChatService {
         browserContext,
         mcpServerKey,
         workingDir: request.userWorkingDir,
-        llmConfigKey,
+        approvalConfigKey,
       }
       sessionStore.set(request.conversationId, session)
     }
+
+    // After this point, session is always defined (either pre-existing or just created)
+    if (!session) {
+      throw new Error('Session should exist after creation')
+    }
+
+    session.agent.updateAclRules(request.aclRules)
 
     if (isNewSession && request.previousConversation?.length) {
       for (const msg of request.previousConversation) {
@@ -254,15 +327,35 @@ export class ChatService {
       })
     }
 
+    // Handle tool approval responses: patch the agent's messages and re-run
+    if (request.toolApprovalResponses?.length) {
+      this.applyToolApprovalResponses(
+        session.agent.messages,
+        request.toolApprovalResponses,
+      )
+      logger.info('Applied tool approval responses', {
+        conversationId: request.conversationId,
+        count: request.toolApprovalResponses.length,
+      })
+      return createAgentUIStreamResponse({
+        agent: session.agent.toolLoopAgent,
+        uiMessages: filterValidMessages(session.agent.messages),
+        abortSignal,
+        onFinish: async ({ messages }: { messages: UIMessage[] }) => {
+          session.agent.messages = filterValidMessages(messages)
+        },
+      })
+    }
+
     const messageContext = request.isScheduledTask
       ? (session.browserContext ?? request.browserContext)
       : request.browserContext
     // Scheduled tasks already have correct internal pageIds from browser.newPage();
-    // calling resolvePageIds would pass those to resolveTabIds (which expects Chrome
-    // tab IDs), corrupting them back to undefined.
+    // resolving them again would pass those to resolveTabIds, which expects Chrome
+    // tab IDs.
     const resolvedMessageContext = request.isScheduledTask
       ? messageContext
-      : await this.resolvePageIds(messageContext)
+      : await resolveBrowserContextPageIds(this.deps.browser, messageContext)
     const userContent = formatUserMessage(
       request.message,
       resolvedMessageContext,
@@ -275,17 +368,49 @@ export class ChatService {
       contextChanges.length > 0
         ? `${contextChanges.map((c) => `[Context: ${c}]`).join('\n')}\n\n`
         : ''
-    session.agent.appendUserMessage(contextPrefix + userContent)
+
+    // Persist the *raw* user text in session.agent.messages so it
+    // round-trips clean to the client's useChat state and to any
+    // future history reload. The wrapped form (browser context +
+    // <selected_text> + <USER_QUERY>) is built as a transient prompt
+    // copy below — the LLM sees it, the user-visible state never
+    // does.
+    session.agent.appendUserMessage(request.message)
+    const promptUserText = contextPrefix + userContent
+    const wrappedUserMessageId =
+      session.agent.messages[session.agent.messages.length - 1]?.id
+
+    const promptUiMessages = filterValidMessages(session.agent.messages).map(
+      (msg) =>
+        msg.id === wrappedUserMessageId && msg.role === 'user'
+          ? {
+              ...msg,
+              parts: [{ type: 'text' as const, text: promptUserText }],
+            }
+          : msg,
+    )
 
     return createAgentUIStreamResponse({
       agent: session.agent.toolLoopAgent,
-      uiMessages: filterValidMessages(session.agent.messages),
+      uiMessages: promptUiMessages,
       abortSignal,
       onFinish: async ({ messages }: { messages: UIMessage[] }) => {
-        session.agent.messages = filterValidMessages(messages)
+        // The agent loop returns `messages` containing the prompt-
+        // wrapped user text. Restore the raw form before persisting
+        // so subsequent turns see the clean text and the client's
+        // local UIMessage matches what was originally typed.
+        const restored = messages.map((msg) =>
+          msg.id === wrappedUserMessageId && msg.role === 'user'
+            ? {
+                ...msg,
+                parts: [{ type: 'text' as const, text: request.message }],
+              }
+            : msg,
+        )
+        session.agent.messages = filterValidMessages(restored)
         logger.info('Agent execution complete', {
           conversationId: request.conversationId,
-          totalMessages: messages.length,
+          totalMessages: restored.length,
         })
 
         if (session?.hiddenPageId) {
@@ -310,48 +435,6 @@ export class ChatService {
     return { deleted, sessionCount: this.deps.sessionStore.count() }
   }
 
-  // Browser context arrives with Chrome tab IDs, but tools expect internal page IDs.
-  // Resolve the mapping upfront so the agent's first navigation doesn't fail.
-  private async resolvePageIds(
-    browserContext?: BrowserContext,
-  ): Promise<BrowserContext | undefined> {
-    if (!browserContext) return undefined
-
-    const tabIdSet = new Set<number>()
-    if (browserContext.activeTab) tabIdSet.add(browserContext.activeTab.id)
-    if (browserContext.selectedTabs) {
-      for (const tab of browserContext.selectedTabs) tabIdSet.add(tab.id)
-    }
-    if (browserContext.tabs) {
-      for (const tab of browserContext.tabs) tabIdSet.add(tab.id)
-    }
-
-    if (tabIdSet.size === 0) return browserContext
-
-    const tabToPage = await this.deps.browser.resolveTabIds([...tabIdSet])
-
-    const addPageId = (tab: { id: number; url?: string; title?: string }) => {
-      const pageId = tabToPage.get(tab.id)
-      if (pageId === undefined) {
-        logger.warn('Could not resolve page ID for tab', { tabId: tab.id })
-      }
-      return { ...tab, pageId }
-    }
-
-    logger.debug('Resolved tab IDs to page IDs', {
-      mapping: Object.fromEntries(tabToPage),
-    })
-
-    return {
-      ...browserContext,
-      activeTab: browserContext.activeTab
-        ? addPageId(browserContext.activeTab)
-        : undefined,
-      selectedTabs: browserContext.selectedTabs?.map(addPageId),
-      tabs: browserContext.tabs?.map(addPageId),
-    }
-  }
-
   private closeHiddenPage(pageId: number, conversationId: string): void {
     this.deps.browser.closePage(pageId).catch((error) => {
       logger.warn('Failed to close hidden page', {
@@ -367,7 +450,6 @@ export class ChatService {
     request: ChatRequest,
     agentConfig: ResolvedAgentConfig,
     mcpServerKey: string,
-    llmConfigKey = this.buildLlmConfigKey(agentConfig),
   ): Promise<AgentSession> {
     const previousMessages = session.agent.messages
     await session.agent.dispose()
@@ -375,16 +457,23 @@ export class ChatService {
 
     const browserContext = agentConfig.isScheduledTask
       ? (session.browserContext ??
-        (await this.resolvePageIds(request.browserContext)))
-      : await this.resolvePageIds(request.browserContext)
+        (await resolveBrowserContextPageIds(
+          this.deps.browser,
+          request.browserContext,
+        )))
+      : await resolveBrowserContextPageIds(
+          this.deps.browser,
+          request.browserContext,
+        )
     const agent = await AiSdkAgent.create({
       resolvedConfig: agentConfig,
       browser: this.deps.browser,
       registry: this.deps.registry,
       browserContext,
-      klavisClient: this.deps.klavisClient,
+      klavisRef: this.deps.klavisRef,
       browserosId: this.deps.browserosId,
       aiSdkDevtoolsEnabled: this.deps.aiSdkDevtoolsEnabled,
+      aclRules: request.aclRules,
     })
     const newSession: AgentSession = {
       agent,
@@ -392,7 +481,9 @@ export class ChatService {
       browserContext,
       mcpServerKey,
       workingDir: request.userWorkingDir,
-      llmConfigKey,
+      approvalConfigKey: this.buildApprovalConfigKey(
+        request.toolApprovalConfig,
+      ),
     }
     newSession.agent.messages = sanitizeMessagesForToolset(
       previousMessages,
@@ -402,30 +493,90 @@ export class ChatService {
     return newSession
   }
 
-  private buildLlmConfigKey(config: ResolvedAgentConfig): string {
-    return JSON.stringify({
-      provider: config.provider,
-      model: config.model,
-      apiKey: config.apiKey,
-      baseUrl: config.baseUrl,
-      upstreamProvider: config.upstreamProvider,
-      resourceName: config.resourceName,
-      region: config.region,
-      accessKeyId: config.accessKeyId,
-      secretAccessKey: config.secretAccessKey,
-      sessionToken: config.sessionToken,
-      accountId: config.accountId,
-      reasoningEffort: config.reasoningEffort,
-      reasoningSummary: config.reasoningSummary,
-      contextWindowSize: config.contextWindowSize,
-      supportsImages: config.supportsImages,
-    })
+  private applyToolApprovalResponses(
+    messages: UIMessage[],
+    responses: Array<{
+      approvalId: string
+      approved: boolean
+      reason?: string
+    }>,
+  ): void {
+    const responseMap = new Map(responses.map((r) => [r.approvalId, r]))
+    for (const msg of messages) {
+      if (msg.role !== 'assistant') continue
+      for (const part of msg.parts) {
+        const toolPart = part as {
+          state?: string
+          approval?: { id: string; approved?: boolean; reason?: string }
+        }
+        if (
+          toolPart.state === 'approval-requested' &&
+          toolPart.approval?.id &&
+          responseMap.has(toolPart.approval.id)
+        ) {
+          const resp = responseMap.get(toolPart.approval.id)
+          if (!resp) continue
+          toolPart.state = 'approval-responded'
+          toolPart.approval = {
+            ...toolPart.approval,
+            approved: resp.approved,
+            reason: resp.reason,
+          }
+        }
+      }
+    }
+  }
+
+  private buildApprovalConfigKey(config?: {
+    categories: Record<string, boolean>
+  }): string {
+    if (!config) return ''
+    return Object.entries(config.categories)
+      .filter(([, v]) => v)
+      .map(([k]) => k)
+      .sort()
+      .join(',')
   }
 
   private buildMcpServerKey(browserContext?: BrowserContext): string {
     const managed = browserContext?.enabledMcpServers?.slice().sort() ?? []
     const custom =
       browserContext?.customMcpServers?.map((s) => s.url).sort() ?? []
-    return [...managed, ...custom].join(',')
+    const klavisState =
+      managed.length > 0
+        ? this.deps.klavisRef?.handle
+          ? 'klavis:connected'
+          : 'klavis:pending'
+        : null
+    return [klavisState, ...managed, ...custom].filter(Boolean).join(',')
+  }
+
+  /**
+   * Resolve workspaces from the request.
+   * Prefers userWorkspaces (new format) over userWorkingDir (legacy).
+   */
+  private resolveWorkspaces(request: ChatRequest): Array<{
+    id: string
+    path: string
+    name: string
+  }> {
+    if (request.userWorkspaces && request.userWorkspaces.length > 0) {
+      return request.userWorkspaces
+    }
+    if (request.userWorkingDir) {
+      const basename =
+        request.userWorkingDir.split('/').pop() ?? request.userWorkingDir
+      const hash = request.userWorkingDir
+        .split('')
+        .reduce((a, b) => ((a = ((a << 5) - a + b.charCodeAt(0)) | 0), a), 0)
+      return [
+        {
+          id: `ws-${Math.abs(hash).toString(16)}`,
+          path: request.userWorkingDir,
+          name: basename,
+        },
+      ]
+    }
+    return []
   }
 }

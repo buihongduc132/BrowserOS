@@ -265,7 +265,7 @@ export const ChatHeader: FC<ChatHeaderProps> = ({
                         onClick={(e) => handleDeleteSession(e, s.sessionId)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter')
-                            handleDeleteSession(e, s.sessionId)
+                            handleDeleteSession(e as unknown as React.MouseEvent, s.sessionId)
                         }}
                         className="shrink-0 cursor-pointer p-0.5 opacity-0 transition-opacity group-hover/session:opacity-100 hover:text-destructive"
                       >

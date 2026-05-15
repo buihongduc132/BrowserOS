@@ -1,12 +1,9 @@
 # Normal Assistant — Workspace-Tagged Session Management Spec
 
 Date: 2026-05-12
-Status: DRAFT v3 (frontend-only refocus)
+Status: DRAFT v2 (post-verifier fixes)
 Mode: **Assistant Mode** (sidepanel, built-in BrowserOS AI)
-Scope: **Frontend-only** workspace-tagged session UX
-
-**Scope lock**: Backend/server/persistence changes are deferred.
-See: `docs/superpowers/specs/2026-05-12-session-management-backend-deferred.md`
+Scope: Workspace-tagged sessions, grouping, AGENTS.md auto-loading
 
 ---
 
@@ -50,40 +47,15 @@ When user changes workspace mid-conversation, the server:
 | **Multi-workspace AGENTS.md** | Merge multiple AGENTS.md files | P0 |
 | **Session search** | Search conversations by title/content | P1 |
 | **Explicit new chat** | Button to start fresh session | P1 |
-| **Resume previous session** | Restore/open an earlier conversation without refresh hacks | P1 |
-| **Pagination / load more** | Browse older sessions beyond first page | P1 |
 | **Manual compaction** | User-triggered "Summarize & compact" | P2 |
 | **Session title edit** | Inline rename conversation | P2 |
 | **Session tags** | User-defined tags for grouping | P2 |
-| **Collapsible workspace groups** | Expand/collapse group sections in history | P2 |
 
 ---
 
-## 2. Frontend Scope Lock
+## 2. Data Model
 
-This document now covers only frontend/app work.
-
-### In Scope
-- workspace bubbles and grouped history in sidepanel
-- local/session UI state and request-shape usage against existing APIs
-- explicit new chat / resume / pagination UX in frontend
-- graceful degradation when server/GraphQL/session APIs do not expose workspace metadata
-
-### Deferred
-- new persistence/schema work
-- migration jobs
-- GraphQL/server response changes
-- AGENTS.md persistence/config changes
-- server-side search/compact behavior beyond already-existing endpoints
-
-All deferred backend items moved to:
-`docs/superpowers/specs/2026-05-12-session-management-backend-deferred.md`
-
-## 3. Frontend Data Shape
-
-This section defines the **frontend data contract** the UI wants to consume. Any server/schema work implied below is deferred to `2026-05-12-session-management-backend-deferred.md`.
-
-### 3.1 Deferred Backend Reference — Drizzle Schema
+### 2.1 Drizzle Schema (follows existing `lib/db/schema/agents.ts` pattern)
 
 ```typescript
 // server/src/lib/db/schema/assistant-sessions.ts
@@ -137,7 +109,7 @@ export const sessionTags = sqliteTable(
 )
 ```
 
-### 3.2 Frontend TypeScript Types
+### 2.2 TypeScript Types
 
 ```typescript
 interface AssistantSession {
@@ -163,7 +135,7 @@ interface SessionWorkspace {
 }
 ```
 
-### 3.3 Deferred Backend Reference — Backward Compatibility Migration
+### 2.3 Backward Compatibility Migration
 
 Existing `local:conversations` data migrates on first load:
 
@@ -174,11 +146,10 @@ Existing `local:conversations` data migrates on first load:
 5. The migration only moves **metadata** (title, dates, workspace), not message content
 6. Keep `local:conversations` as-is for 30 days as backup
 7. If server isn't reachable (offline), continue using local storage — migration defers
-8. Migration status must be explicit and idempotent so existing users are not silently dropped from the new session metadata UI
 
 ---
 
-## 4. Existing Request Contract Usage
+## 3. ChatRequestSchema Evolution
 
 ### Current Schema (api/types.ts)
 
@@ -212,7 +183,8 @@ Client sends `userWorkspaces` when available, falls back to `userWorkingDir` for
 
 ---
 
-## 5. Workspace-Tagged Sessions
+## 4. Workspace-Tagged Sessions
+
 ### 4.1 Session ↔ Workspace Association
 
 **Current**: `selectedWorkspaceStorage` is global — changes affect ALL conversations.
@@ -277,7 +249,7 @@ None:       🌐
 
 ---
 
-## 6. Session Grouping
+## 5. Session Grouping
 
 ### 5.1 Grouping Modes
 
@@ -338,26 +310,9 @@ entrypoints/sidepanel/history/
 └── useSessionGrouping.test.ts
 ```
 
-**Non-negotiable UX behaviors**:
-- `SearchBar` must exist in the rendered history UI, not only in the file plan
-- pagination/load-more must be rendered in the conversation list if the backend reports `nextCursor`
-- workspace groups must be collapsible (`WorkspaceGroup.tsx` or equivalent), not flat-only
-
 ---
 
-## 7. Existing Backend Dependency Notes
-
-AGENTS.md loading and persistence behavior depend on backend support and are therefore deferred as implementation work. Frontend must treat them as existing-platform capabilities, not modify the server.
-
-Frontend rules:
-- render workspace UX without assuming AGENTS.md metadata is returned from the server
-- if backend does not expose per-session config, do not fake persistence
-- if compact endpoint is stubbed, hide or disable compact action
-- if remote conversations lack workspace metadata, fall back to local/date grouping
-
-## 8. AGENTS.md / Backend Dependency Notes
-
-Everything in this section is dependency/fallback planning for the frontend. Server changes remain deferred.
+## 6. AGENTS.md Auto-Loading
 
 ### 6.1 Concept
 
@@ -444,7 +399,7 @@ The existing workspace switch system message (chat-service.ts L138-163) continue
 |---------|--------|
 | Session created with workspace | Load AGENTS.md → inject into system prompt |
 | Workspace added to session | Load new AGENTS.md → rebuild prompt |
-| Workspace removed from session | Remove that AGENTS.md → rebuild prompt and remove session↔workspace association |
+| Workspace removed from session | Remove that AGENTS.md → rebuild prompt |
 | File changed on disk | Detect on next prompt cycle (stat mtime check) |
 
 ### 6.6 Multi-Workspace Merging
@@ -472,28 +427,24 @@ interface SessionConfig {
 }
 ```
 
-This override must be persisted per session and exposed in both the session API and UI; otherwise AGENTS.md loading is effectively hardcoded-on.
-
 ---
 
-## 9. Existing Endpoint Assumptions
+## 7. Server Endpoints
 
-### 9.1 Existing/Expected Routes
+### 7.1 Routes
 
-Frontend may use these routes only if they already exist in the platform build it is shipped against:
+**File**: `server/src/api/routes/assistant-sessions.ts` (new, following existing route convention)
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `GET` | `/assistant/sessions` | List (cursor, filter by workspace/tag/search) |
+| `GET` | `/assistant/sessions` | List (cursor, filter by workspace/tag) |
 | `POST` | `/assistant/sessions` | Create |
 | `GET` | `/assistant/sessions/:id` | Get info |
 | `PATCH` | `/assistant/sessions/:id` | Update (title, workspaces, tags, config) |
 | `DELETE` | `/assistant/sessions/:id` | Delete |
 | `POST` | `/assistant/sessions/:id/compact` | Trigger compaction |
 
-If these are absent or partial, frontend must degrade gracefully instead of requiring backend changes in this phase.
-
-### 9.2 Deferred Backend Reference — Workspace Update in ChatService
+### 7.2 Workspace Update in ChatService
 
 ```typescript
 // In ChatService.processMessage():
@@ -519,7 +470,7 @@ const systemPrompt = buildSystemPrompt({
 
 ---
 
-## 10. Effort
+## 8. Effort
 
 | Layer | Files | Hours |
 |-------|-------|-------|
@@ -536,7 +487,7 @@ const systemPrompt = buildSystemPrompt({
 ### Priority
 
 ```
-P0: Workspace per session + bubbles + grouping + explicit frontend new-chat/resume UX
-P1: Session search + rendered pagination/load-more + graceful remote/local fallback when workspace metadata is missing
-P2: Manual compact/title/tags/group collapse/config UX only when backed by existing platform support
+P0: Workspace per session + bubbles + grouping + AGENTS.md auto-load
+P1: Session search + explicit new chat + resume
+P2: Manual compact + title edit + tags + custom grouping modes
 ```

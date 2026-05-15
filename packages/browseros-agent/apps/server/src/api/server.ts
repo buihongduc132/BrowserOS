@@ -10,48 +10,49 @@
  * - MCP HTTP routes (using @hono/mcp transport)
  */
 
-import type { ModelMessage } from 'ai'
+import { configStore } from '@browseros/shared/constants/config-store'
+import { OPENCLAW_GATEWAY_CONTAINER_NAME } from '@browseros/shared/constants/openclaw'
 import { Hono } from 'hono'
+import { websocket } from 'hono/bun'
 import { cors } from 'hono/cors'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
-import { AgentSessionStore } from '../agent/agent-session-store'
-import { resolveCompactionConfig } from '../agent/compaction-config'
 import { HttpAgentError } from '../agent/errors'
-import { SessionStore } from '../agent/session-store'
 import { INLINED_ENV } from '../env'
+import { getAdvancedConfigPath } from '../lib/browseros-dir'
 import { KlavisClient } from '../lib/clients/klavis/klavis-client'
-import { initializeOAuth } from '../lib/clients/oauth'
+import { initializeOAuth, shutdownOAuth } from '../lib/clients/oauth'
 import { getDb } from '../lib/db'
 import { logger } from '../lib/logger'
 import { Sentry } from '../lib/sentry'
-import { requireTrustedOrigin } from './middleware/require-trusted-origin'
-import { createAgentSessionRoutes } from './routes/agent-sessions'
+import { getLimaHomeDir, resolveBundledLimactl, VM_NAME } from '../lib/vm'
+import { createAclRoutes } from './routes/acl'
 import { createAgentRoutes } from './routes/agents'
-import { createAssistantSessionRoutes } from './routes/assistant-sessions'
 import { createChatRoutes } from './routes/chat'
-import { createCommandsRoutes } from './routes/commands'
-import {
-  type CompactionRouteDeps,
-  createCompactionRoutes,
-} from './routes/compaction'
 import { createConfigRoutes } from './routes/config'
 import { createCreditsRoutes } from './routes/credits'
 import { createHealthRoute } from './routes/health'
 import { createKlavisRoutes } from './routes/klavis'
 import { createMcpRoutes } from './routes/mcp'
 import { createMemoryRoutes } from './routes/memory'
+import { createMonitoringRoutes } from './routes/monitoring'
 import { createOAuthRoutes } from './routes/oauth'
+import { createOpenClawRoutes } from './routes/openclaw'
 import { createProviderRoutes } from './routes/provider'
 import { createRefinePromptRoutes } from './routes/refine-prompt'
 import { createShutdownRoute } from './routes/shutdown'
-import { createSkillSourcesRoutes } from './routes/skill-sources'
 import { createSkillsRoutes } from './routes/skills'
 import { createSoulRoutes } from './routes/soul'
 import { createStatusRoute } from './routes/status'
+import { createTerminalRoutes } from './routes/terminal'
+import { createAssistantSessionRoutes } from './routes/assistant-sessions'
+import { AssistantSessionStore } from '../sessions/assistant-session-store'
+import { GlobalAclPolicyService } from './services/acl/global-acl-policy'
 import {
-  connectKlavisProxy,
-  type KlavisProxyHandle,
+  connectKlavisInBackground,
+  type KlavisProxyRef,
 } from './services/klavis/strata-proxy'
+import { convertOpenClawHistoryToAgentHistory } from './services/openclaw/history-mapper'
+import { getOpenClawService } from './services/openclaw/openclaw-service'
 import type { Env, HttpServerConfig } from './types'
 import { defaultCorsConfig } from './utils/cors'
 import { requireTrustedAppOrigin } from './utils/request-auth'
@@ -92,40 +93,104 @@ export async function createHttpServer(config: HttpServerConfig) {
   } = config
 
   const { onShutdown } = config
-
-  // Initialize OAuth token manager (callback server binds lazily on first PKCE login)
+  configStore.init(getAdvancedConfigPath())
   const tokenManager = browserosId
     ? initializeOAuth(getDb(), browserosId)
     : null
+  if (!browserosId) shutdownOAuth()
 
-  // Connect Klavis proxy (non-blocking: browser tools still work if this fails)
-  let klavisProxy: KlavisProxyHandle | null = null
-  if (browserosId) {
-    try {
-      klavisProxy = await connectKlavisProxy({
+  const aclPolicyService = new GlobalAclPolicyService()
+  await aclPolicyService.load()
+
+  // Connect Klavis proxy in background with retry — browser tools available immediately
+  const klavisRef: KlavisProxyRef = { handle: null }
+  const stopKlavisBackground = browserosId
+    ? connectKlavisInBackground(klavisRef, {
         klavisClient: new KlavisClient(),
         browserosId,
       })
-    } catch (error) {
-      logger.warn(
-        'Failed to connect Klavis proxy, MCP will serve browser tools only',
-        {
-          error: error instanceof Error ? error.message : String(error),
+    : () => {}
+
+  const clawRoutes = new Hono<Env>()
+    .use('/*', requireTrustedAppOrigin())
+    .route('/', createOpenClawRoutes())
+
+  const terminalRoutes = new Hono<Env>()
+    .use('/*', requireTrustedAppOrigin())
+    .route(
+      '/',
+      createTerminalRoutes({
+        containerName: OPENCLAW_GATEWAY_CONTAINER_NAME,
+        limaHome: getLimaHomeDir(),
+        limactlPath: () => resolveBundledLimactl(resourcesDir),
+        vmName: VM_NAME,
+      }),
+    )
+
+  const aclRoutes = new Hono<Env>()
+    .use('/*', requireTrustedAppOrigin())
+    .route('/', createAclRoutes({ policyService: aclPolicyService }))
+
+  const monitoringRoutes = new Hono<Env>()
+    .use('/*', requireTrustedAppOrigin())
+    .route('/', createMonitoringRoutes())
+
+  const agentRoutes = new Hono<Env>()
+    .use('/*', requireTrustedAppOrigin())
+    .route(
+      '/',
+      createAgentRoutes({
+        browserosServerPort: port,
+        browser,
+        openclawGateway: {
+          getContainerName: () => OPENCLAW_GATEWAY_CONTAINER_NAME,
+          getLimaHomeDir: () => getLimaHomeDir(),
+          getLimactlPath: () => resolveBundledLimactl(resourcesDir),
+          getVmName: () => VM_NAME,
         },
-      )
-    }
-  }
+        openclawProvisioner: {
+          createAgent: (input) => getOpenClawService().createAgent(input),
+          removeAgent: (agentId) => getOpenClawService().removeAgent(agentId),
+          listAgents: async () => {
+            const agents = await getOpenClawService().listAgents()
+            return agents.map((agent) => ({
+              agentId: agent.agentId,
+              name: agent.name,
+              model: agent.model,
+            }))
+          },
+          getStatus: () => getOpenClawService().getStatus(),
+          getAgentHistory: async (agentId) => {
+            // Aggregated across the agent's main + every sub-session
+            // (cron / hook / channel) so autonomous turns surface in
+            // the chat panel alongside user-initiated ones.
+            const raw = await getOpenClawService().getSessionHistory(
+              `agent:${agentId}:main`,
+            )
+            return convertOpenClawHistoryToAgentHistory(agentId, raw)
+          },
+        },
+        onTurnLifecycle: (agent, event) => {
+          if (agent.adapter !== 'openclaw') return
+          getOpenClawService().recordAgentTurnEvent(
+            agent.id,
+            agent.sessionKey,
+            event,
+          )
+        },
+      }),
+    )
 
   const app = new Hono<Env>()
     .use('/*', cors(defaultCorsConfig))
-    .use('/*', requireTrustedOrigin())
     .route('/health', createHealthRoute({ browser }))
     .route(
       '/shutdown',
       createShutdownRoute({
         onShutdown: () => {
-          tokenManager?.stopCallbackServer()
-          klavisProxy?.close().catch((err) =>
+          shutdownOAuth()
+          stopKlavisBackground()
+          klavisRef.handle?.close().catch((err) =>
             logger.warn('Failed to close Klavis proxy transport', {
               error: err instanceof Error ? err.message : String(err),
             }),
@@ -135,70 +200,17 @@ export async function createHttpServer(config: HttpServerConfig) {
       }),
     )
     .route('/status', createStatusRoute({ browser }))
-    .route('/config', createConfigRoutes())
-  // Single shared AgentSessionStore — harness and routes see the same instance
-  const sharedSessionStore = new AgentSessionStore()
-  // Shared chat SessionStore — lifts from createChatRoutes so compaction can access messages
-  const sharedChatSessionStore = new SessionStore()
-
-  app
     .route(
-      '/agents',
-      createAgentRoutes({
-        browser,
-        browserosServerPort: port,
-        sessionMetaStore: sharedSessionStore,
-      }),
-    )
-    .route(
-      '/agents',
-      createAgentSessionRoutes({ sessionStore: sharedSessionStore }),
-    )
-    // ------------------------------------------------------------------
-    // Compaction routes — config CRUD + on-demand trigger
-    // ------------------------------------------------------------------
-    // getConversationMessages reads from the shared chat SessionStore.
-    // createModel is NOT wired yet — the POST /compact endpoint returns 503
-    // until a proper model factory is extracted from ChatService.
-    // The config CRUD (GET/PUT/DELETE) works fully.
-    .route(
-      '/compaction',
-      new Hono<Env>().use('/*', requireTrustedAppOrigin()).route(
-        '/',
-        createCompactionRoutes({
-          getConversationMessages: async (conversationId: string) => {
-            const session = sharedChatSessionStore.get(conversationId)
-            if (!session) return null
-            return session.agent.messages.map((m): ModelMessage => {
-              const text =
-                typeof m.content === 'string'
-                  ? m.content
-                  : (m.parts
-                      ?.filter((p: any) => p.type === 'text')
-                      ?.map((p: any) => p.text)
-                      ?.join('\n') ?? '')
-              return { role: m.role, content: text } as ModelMessage
-            })
-          },
-          // createModel intentionally omitted — POST /compact returns 503
-          // until model factory is extracted from AiSdkAgent.
-          getCompactionConfig: () => {
-            const raw = config.compaction
-            if (!raw) return undefined
-            try {
-              return resolveCompactionConfig(raw)
-            } catch {
-              return undefined
-            }
-          },
-        } as unknown as CompactionRouteDeps),
-      ),
+      '/config',
+      new Hono<Env>()
+        .use('/*', requireTrustedAppOrigin())
+        .route('/', createConfigRoutes()),
     )
     .route('/soul', createSoulRoutes())
     .route('/memory', createMemoryRoutes())
-    .route('/skills/sources', createSkillSourcesRoutes())
     .route('/skills', createSkillsRoutes())
-    .route('/commands', createCommandsRoutes())
+    .route('/monitoring', monitoringRoutes)
+    .route('/acl-rules', aclRoutes)
     .route('/test-provider', createProviderRoutes({ browserosId }))
     .route('/refine-prompt', createRefinePromptRoutes({ browserosId }))
     .route(
@@ -227,7 +239,8 @@ export async function createHttpServer(config: HttpServerConfig) {
         browser,
         executionDir,
         resourcesDir,
-        klavisProxy,
+        policyService: aclPolicyService,
+        klavisRef,
       }),
     )
     .route(
@@ -236,11 +249,24 @@ export async function createHttpServer(config: HttpServerConfig) {
         browser,
         registry,
         browserosId,
+        klavisRef,
         aiSdkDevtoolsEnabled: config.aiSdkDevtoolsEnabled,
-        compaction: config.compaction,
-        sessionStore: sharedChatSessionStore,
       }),
     )
+    .route('/agents', agentRoutes)
+    .route(
+      '/assistant/sessions',
+      new Hono<Env>()
+        .use('/*', requireTrustedAppOrigin())
+        .route(
+          '/',
+          createAssistantSessionRoutes({
+            store: new AssistantSessionStore(getDb()),
+          }),
+        ),
+    )
+    .route('/claw', clawRoutes)
+
   // Error handler
   app.onError((err, c) => {
     const error = err as Error
@@ -281,11 +307,14 @@ export async function createHttpServer(config: HttpServerConfig) {
 
   await assertPortAvailable(port)
 
+  app.route('/terminal', terminalRoutes)
+
   const server = Bun.serve({
     fetch: (request, server) => app.fetch(request, { server }),
     port,
     hostname: host,
     idleTimeout: 0,
+    websocket,
   })
 
   logger.info('Consolidated HTTP Server started', { port, host })
