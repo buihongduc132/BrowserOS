@@ -74,7 +74,7 @@ describe('agent-sessions schema', () => {
     expect(indexes).toBeDefined()
     expect(indexes.length).toBeGreaterThanOrEqual(1)
     const idx = indexes.find(
-      (i) => i.config.name === 'agent_sessions_agent_updated_idx',
+      (i) => i.config.name === 'agent_sessions_agent_id_idx',
     )
     expect(idx).toBeDefined()
   })

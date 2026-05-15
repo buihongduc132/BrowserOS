@@ -76,7 +76,7 @@ describe('assistant-sessions schema', () => {
       expect(builder).toBeDefined()
       const indexes = builder({}) as Array<{ config: { name: string } }>
       const idx = indexes.find(
-        (i) => i.config.name === 'assistant_sessions_updated_at_idx',
+        (i) => i.config.name === 'assistant_sessions_updated_idx',
       )
       expect(idx).toBeDefined()
     })
@@ -130,8 +130,8 @@ describe('assistant-sessions schema', () => {
       const indexNames = result
         .filter((r) => r.constructor.name === 'IndexBuilder' && r.config?.name)
         .map((r) => r.config!.name)
-      expect(indexNames).toContain('session_workspaces_session_id_idx')
-      expect(indexNames).toContain('session_workspaces_workspace_path_idx')
+      expect(indexNames).toContain('session_workspaces_session_idx')
+      expect(indexNames).toContain('session_workspaces_path_idx')
     })
 
     it('exports TypeScript types', () => {
