@@ -38,9 +38,11 @@ import { consumePendingInitialMessage } from './pending-initial-message'
 import { QueuePanel } from './QueuePanel'
 import { useAgentConversation } from './useAgentConversation'
 import { useHarnessChatHistory } from './useHarnessChatHistory'
+import { useAgentSessionId } from './useAgentSessionId.hook'
 
 function AgentConversationController({
   agentId,
+  sessionId,
   initialMessage,
   onInitialMessageConsumed,
   agents,
@@ -49,6 +51,7 @@ function AgentConversationController({
   onOpenOutputsRail,
 }: {
   agentId: string
+  sessionId: string
   initialMessage: string | null
   onInitialMessageConsumed: () => void
   agents: AgentEntry[]
@@ -65,7 +68,7 @@ function AgentConversationController({
   // record post the gateway → harness backfill, so the chat panel
   // always talks to /agents/<id>/chat. The legacy ClawChat surface
   // was deleted with the /claw/agents/:id/chat server route.
-  const harnessHistoryQuery = useHarnessChatHistory(agentId, Boolean(agent))
+  const harnessHistoryQuery = useHarnessChatHistory(agentId, Boolean(agent), sessionId)
 
   const historyMessages = useMemo(
     () =>
@@ -98,6 +101,7 @@ function AgentConversationController({
 
   const { turns, streaming, send } = useAgentConversation(agentId, {
     runtime: 'agent-harness',
+    sessionId,
     sessionKey: null,
     history: chatHistory,
     activeTurnId,
@@ -113,6 +117,7 @@ function AgentConversationController({
     void cancelHarnessTurn(agentId, {
       turnId: activeTurnId ?? undefined,
       reason: 'user pressed stop',
+      sessionId,
     })
   }
   const visibleTurns = useMemo(
@@ -219,6 +224,8 @@ function AgentConversationController({
   }, [agentId, disabled, historyReady, initialMessage, initialMessageKey])
 
   const handleSelectAgent = (entry: AgentEntry) => {
+    // Session IDs are scoped per-agent — never carry a sessionId
+    // across agent boundaries. Navigate to the base agent path.
     navigate(`${agentPathPrefix}/${entry.agentId}`)
   }
 
@@ -329,6 +336,7 @@ export const AgentCommandConversation: FC<AgentCommandConversationProps> = ({
   createAgentPath = '/agents',
 }) => {
   const { agentId } = useParams<{ agentId: string }>()
+  const sessionId = useAgentSessionId()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const { agents } = useAgentCommandData()
@@ -403,6 +411,8 @@ export const AgentCommandConversation: FC<AgentCommandConversationProps> = ({
   }
 
   const handleSelectHarnessAgent = (target: HarnessAgent) => {
+    // Session IDs are scoped per-agent — never carry a sessionId
+    // across agent boundaries. Navigate to the base agent path.
     navigate(`${agentPathPrefix}/${target.id}`)
   }
 
@@ -446,6 +456,8 @@ export const AgentCommandConversation: FC<AgentCommandConversationProps> = ({
               onPinToggle={(next) =>
                 handlePinToggle(harnessAgent ?? null, next)
               }
+              agentId={agentId}
+              sessionId={sessionId}
               headerExtra={
                 isOpenClawAgent ? (
                   <Button
@@ -478,14 +490,16 @@ export const AgentCommandConversation: FC<AgentCommandConversationProps> = ({
             agents={harnessAgents}
             adapters={adapters}
             activeAgentId={resolvedAgentId}
+            activeSessionId={sessionId}
             onSelectAgent={handleSelectHarnessAgent}
             onPinToggle={(target, next) => handlePinToggle(target, next)}
           />
 
           <div className="flex h-full min-h-0 flex-col overflow-hidden">
             <AgentConversationController
-              key={resolvedAgentId}
+              key={`${resolvedAgentId}:${sessionId}`}
               agentId={resolvedAgentId}
+              sessionId={sessionId}
               agents={agents}
               initialMessage={initialMessage}
               onInitialMessageConsumed={() => {

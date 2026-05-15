@@ -35,6 +35,7 @@ interface UseAgentConversationOptions {
   // option remains for forward-compatibility.
   runtime?: 'agent-harness'
   sessionKey?: string | null
+  sessionId?: string
   history?: OpenClawChatHistoryMessage[]
   onComplete?: () => void
   onSessionKeyChange?: (sessionKey: string) => void
@@ -61,7 +62,9 @@ export function useAgentConversation(
   // time, but the underlying queryClient is stable).
   const invalidateAgentOutputsRef = useRef(invalidateAgentOutputs)
   invalidateAgentOutputsRef.current = invalidateAgentOutputs
+  const resolvedSessionId = options.sessionId || 'main'
   const sessionKeyRef = useRef(options.sessionKey ?? '')
+  const sessionIdRef = useRef(resolvedSessionId)
   const historyRef = useRef<OpenClawChatHistoryMessage[]>(options.history ?? [])
   const textAccRef = useRef('')
   const thinkAccRef = useRef('')
@@ -73,6 +76,10 @@ export function useAgentConversation(
   // resume via Last-Event-ID.
   const turnIdRef = useRef<string | null>(null)
   const lastSeqRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    sessionIdRef.current = resolvedSessionId
+  }, [resolvedSessionId])
 
   useEffect(() => {
     sessionKeyRef.current = options.sessionKey ?? ''
@@ -268,7 +275,7 @@ export function useAgentConversation(
       // Stop button drops out mid-turn while events keep arriving.
       let weStartedStream = false
       try {
-        const active = await fetchActiveHarnessTurn(agentId)
+        const active = await fetchActiveHarnessTurn(agentId, sessionIdRef.current)
         if (cancelled || !active || active.status !== 'running') return
         if (streamAbortRef.current) return // someone else already owns the stream
 
@@ -299,6 +306,7 @@ export function useAgentConversation(
         const response = await attachToHarnessTurn(agentId, {
           turnId: active.turnId,
           signal: abortController.signal,
+          sessionId: sessionIdRef.current,
         })
         if (!response.ok) return
         await consumeSSEStream<AgentHarnessStreamEvent>(
@@ -362,6 +370,7 @@ export function useAgentConversation(
       text,
       signal,
       attachments,
+      sessionIdRef.current,
     )
     if (initial.status !== 409) return initial
     // 409 means the server already has an active turn for this agent
@@ -372,6 +381,7 @@ export function useAgentConversation(
     return attachToHarnessTurn(targetAgentId, {
       turnId: body.turnId,
       signal,
+      sessionId: sessionIdRef.current,
     })
   }
 
@@ -488,6 +498,7 @@ export function useAgentConversation(
       await cancelHarnessTurn(agentId, {
         turnId,
         reason: 'user pressed stop',
+        sessionId: sessionIdRef.current,
       })
     } catch {
       // Best-effort — UI already aborted.

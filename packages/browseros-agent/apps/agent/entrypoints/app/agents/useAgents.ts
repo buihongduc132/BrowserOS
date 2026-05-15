@@ -227,11 +227,16 @@ export async function chatWithHarnessAgent(
   message: string,
   signal?: AbortSignal,
   attachments?: ReadonlyArray<unknown>,
+  sessionId?: string,
 ): Promise<Response> {
   const baseUrl = await getAgentServerUrl()
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-Session-Id': sessionId || 'main',
+  }
   return fetch(`${baseUrl}/agents/${encodeURIComponent(agentId)}/chat`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({
       message,
       ...(attachments && attachments.length > 0 ? { attachments } : {}),
@@ -248,14 +253,16 @@ export async function chatWithHarnessAgent(
  */
 export async function attachToHarnessTurn(
   agentId: string,
-  options: { turnId?: string; lastSeq?: number; signal?: AbortSignal } = {},
+  options: { turnId?: string; lastSeq?: number; signal?: AbortSignal; sessionId?: string } = {},
 ): Promise<Response> {
   const baseUrl = await getAgentServerUrl()
   const url = new URL(
     `${baseUrl}/agents/${encodeURIComponent(agentId)}/chat/stream`,
   )
   if (options.turnId) url.searchParams.set('turnId', options.turnId)
-  const headers: Record<string, string> = {}
+  const headers: Record<string, string> = {
+    'X-Session-Id': options.sessionId || 'main',
+  }
   if (typeof options.lastSeq === 'number') {
     headers['Last-Event-ID'] = String(options.lastSeq)
   }
@@ -280,10 +287,14 @@ export interface HarnessActiveTurnInfo {
  */
 export async function fetchActiveHarnessTurn(
   agentId: string,
+  sessionId?: string,
 ): Promise<HarnessActiveTurnInfo | null> {
   const baseUrl = await getAgentServerUrl()
   const response = await fetch(
     `${baseUrl}/agents/${encodeURIComponent(agentId)}/chat/active`,
+    {
+      headers: { 'X-Session-Id': sessionId || 'main' },
+    },
   )
   if (!response.ok) return null
   const body = (await response.json()) as {
@@ -299,14 +310,17 @@ export async function fetchActiveHarnessTurn(
  */
 export async function cancelHarnessTurn(
   agentId: string,
-  options: { turnId?: string; reason?: string } = {},
+  options: { turnId?: string; reason?: string; sessionId?: string } = {},
 ): Promise<{ cancelled: boolean }> {
   const baseUrl = await getAgentServerUrl()
   const response = await fetch(
     `${baseUrl}/agents/${encodeURIComponent(agentId)}/chat/cancel`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Session-Id': options.sessionId || 'main',
+      },
       body: JSON.stringify({
         ...(options.turnId ? { turnId: options.turnId } : {}),
         ...(options.reason ? { reason: options.reason } : {}),
@@ -319,11 +333,13 @@ export async function cancelHarnessTurn(
 
 export async function fetchHarnessAgentHistory(
   agentId: string,
+  sessionId?: string,
 ): Promise<HarnessAgentHistoryPage> {
   const baseUrl = await getAgentServerUrl()
+  const effectiveSessionId = sessionId || 'main'
   return agentsFetch<HarnessAgentHistoryPage>(
     baseUrl,
-    `/${encodeURIComponent(agentId)}/sessions/main/history`,
+    `/${encodeURIComponent(agentId)}/sessions/${encodeURIComponent(effectiveSessionId)}/history`,
   )
 }
 
