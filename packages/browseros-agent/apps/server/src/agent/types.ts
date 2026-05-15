@@ -78,4 +78,6 @@ export interface ResolvedAgentConfig {
   toolApprovalConfig?: ToolApprovalConfig
   /** Compaction strategy configuration. Undefined = default LLM summarization. */
   compaction?: CompactionStrategyConfig
+  /** Loaded AGENTS.md content from workspace directories. */
+  workspaceAgentsMd?: Array<{ path: string; content: string; lastModified: number }>
 }

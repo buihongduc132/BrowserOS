@@ -33,7 +33,9 @@ export function createAgentSessionRoutes(deps: {
       const cursor = url.searchParams.get('cursor') ?? undefined
       const limitRaw = url.searchParams.get('limit')
       const limit = limitRaw ? Number.parseInt(limitRaw, 10) : undefined
-      const cappedLimit = Number.isFinite(limit) ? Math.min(limit, 200) : undefined
+      const cappedLimit = limit != null && Number.isFinite(limit)
+        ? Math.min(limit, 200)
+        : undefined
 
       const sessions = await sessionStore.listSessions(agentId, {
         search,

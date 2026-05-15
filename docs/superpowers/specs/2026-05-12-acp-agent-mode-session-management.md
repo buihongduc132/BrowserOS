@@ -1,12 +1,9 @@
 # ACP Agent Mode — Session Management Spec
 
 Date: 2026-05-12
-Status: DRAFT v3 (frontend-only refocus)
+Status: DRAFT v2 (post-verifier fixes)
 Mode: **Agent Mode** (agent-command, harness, external agents)
-Scope: **Frontend-only** ACP session UX for agent-command
-
-**Scope lock**: Backend/server/protocol changes are deferred.
-See: `docs/superpowers/specs/2026-05-12-session-management-backend-deferred.md`
+Scope: Multi-session lifecycle for ACP-connected agents
 
 ---
 
@@ -57,33 +54,10 @@ acpx-runtime.ts                   → getHistory/getRowSnapshot take sessionId
 | Set session title | `AgentSessionSetTitle` (trait object) | P2 |
 | Manual compaction trigger | (User requested) | P2 |
 | Protocol debug log | `AcpDebugLog` | P3 |
-| Real-time session list updates | Zed watch channel / push refresh | P1 |
-| ACP session workDir/project association | Zed `new_session(project, workDirs)` | P1 |
 
 ---
 
-## 2. Frontend Scope Lock
-
-This document now covers only frontend/app work.
-
-### In Scope
-- session list/search/new-chat UX in agent-command
-- route/session state in the app
-- sending `X-Session-Id` when existing backend paths already support it
-- capability-gated UI that hides unsupported actions
-- graceful fallback to current single-session behavior when backend support is absent
-
-### Deferred
-- all new server routes
-- runtime/session persistence changes
-- capability negotiation protocol changes
-- replay/resume backend behavior
-- ACP model/mode/config backend contracts
-
-All deferred backend items moved to:
-`docs/superpowers/specs/2026-05-12-session-management-backend-deferred.md`
-
-## 3. Zed ACP Reference
+## 2. Zed ACP Reference
 
 ### Capabilities Structure (from `acp.rs`)
 
@@ -121,7 +95,6 @@ interface AgentConnection {
   supports_load_session(): boolean
   supports_resume_session(): boolean
   supports_close_session(): boolean
-  supports_session_search(): boolean
   session_list(): AgentSessionList | null
 
   // Trait object accessors (return null if unsupported)
@@ -136,7 +109,7 @@ interface AgentConnection {
 
 ---
 
-## 4. Frontend Plan — Generalizing `sessionId: 'main'`
+## 3. Implementation — Generalizing `sessionId: 'main'`
 
 ### 3.1 Scope of Change
 
@@ -149,44 +122,48 @@ Files that hardcode `'main'` and need parameterization:
 | `lib/agents/active-turn-registry.ts` | — | Already keyed by `(agentId, sessionId)` — just needs callers to pass real IDs |
 | `lib/agents/acpx-runtime.ts` | — | `getHistory()`/`getRowSnapshot()` already accept `sessionId` param |
 
-### 4.2 Existing Backend Dependency
-
-The ideal ACP flow still depends on backend endpoints/protocol support, but that work is **deferred**.
-
-Frontend must therefore support two modes:
+### 3.2 Route Changes
 
 ```typescript
-// Preferred UX target
-/agents/:agentId/chat/:sessionId
+// Current: all sessions use 'main'
+// Target: sessionId from URL param or header
 
-// Fallback when backend does not expose full multi-session lifecycle
-/agents/:agentId/chat
+// NEW routes (extend existing createAgentRoutes):
+router.get('/:agentId/sessions', listSessions)              // list
+router.post('/:agentId/sessions', createSession)            // new
+router.get('/:agentId/sessions/:sessionId', getSession)     // get
+router.post('/:agentId/sessions/:sessionId/load', load)     // load+replay
+router.post('/:agentId/sessions/:sessionId/resume', resume) // resume
+router.delete('/:agentId/sessions/:sessionId', close)       // close
+
+// Existing routes gain sessionId param:
+// POST /:agentId/chat → now reads X-Session-Id header (defaults to 'main' for compat)
 ```
 
-Rules:
-- send `X-Session-Id` only on paths that already honor it
-- do not block the app on missing session CRUD endpoints
-- hide/disable load/resume/close/title actions until capability/backend support exists
-- use local UI state for session selection when persistence is unavailable
-
-### 4.3 Frontend File Locations
+### 3.3 File Locations (aligned with existing convention)
 
 ```
-entrypoints/app/agent-command/
-├── AgentSessionList.tsx
-├── AgentSessionItem.tsx
-├── AgentSessionSearch.tsx
-├── NewAgentSessionButton.tsx
-├── useAgentSessionList.ts
-├── AgentSessionListEmpty.tsx
-├── AgentModeSwitch.tsx           # capability-gated, hidden if unsupported
-└── useAgentSessionModes.ts       # frontend adapter only; backend support deferred
+server/src/
+├── api/
+│   ├── routes/
+│   │   └── agents.ts                    # EXTEND: add session routes
+│   └── services/agents/
+│       ├── agent-harness-service.ts      # MODIFY: parameterize sessionId
+│       └── agent-session-service.ts      # NEW: session CRUD logic
+├── lib/
+│   ├── agents/
+│   │   ├── active-turn-registry.ts       # MODIFY: callers pass sessionId
+│   │   ├── agent-session-types.ts        # NEW: session types + capabilities
+│   │   └── agent-session-store.ts        # NEW: ref-counted store (matches existing session-store.ts in agent/)
+│   └── db/
+│       ├── schema/
+│       │   ├── agent-sessions.ts         # NEW: Drizzle schema
+│       │   └── index.ts                  # MODIFY: export new schema
+│       └── migrations/
+│           └── 0003_agent_sessions.sql   # NEW: migration
 ```
 
-Backend files from earlier planning remain deferred in:
-`2026-05-12-session-management-backend-deferred.md`
-
-### 3.4 Deferred Backend Reference — Drizzle Schema
+### 3.4 Drizzle Schema
 
 ```typescript
 // server/src/lib/db/schema/agent-sessions.ts
@@ -214,7 +191,7 @@ export const agentSessions = sqliteTable(
 )
 ```
 
-### 3.5 Deferred Backend Reference — Ref-Counted Session Store (In-Memory)
+### 3.5 Ref-Counted Session Store (In-Memory)
 
 This complements the existing `SessionStore` — it tracks **active session handles**, not agent state:
 
@@ -227,16 +204,15 @@ interface ActiveSession {
   agentId: string
   refCount: number
   createdAt: number
-  cwd?: string | null
 }
 
 class AgentSessionStore {
   private sessions = new Map<string, ActiveSession>()
   private pendingLoads = new Map<string, Promise<ActiveSession>>()
 
-  async openSession(agentId: string, sessionId: string, cwd?: string): Promise<ActiveSession>
+  async openSession(agentId: string, sessionId: string): Promise<ActiveSession>
   async closeSession(sessionId: string): Promise<void>  // ref-counted
-  async listSessions(agentId: string, cursor?: string, limit?: number, search?: string): Promise<SessionListResponse>
+  async listSessions(agentId: string, cursor?: string, limit?: number): Promise<SessionListResponse>
 }
 ```
 
@@ -245,7 +221,7 @@ Relationship with existing `SessionStore` (from `src/agent/session-store.ts`):
 - `AgentSessionStore` = session metadata + ref-counting + listing
 - `AgentSessionStore` wraps `SessionStore` — when ref count hits 0, calls `SessionStore.delete(sessionId)`
 
-### 3.6 Deferred Backend Reference — Session Capabilities (Mirrors Zed Nesting)
+### 3.6 Session Capabilities (Mirrors Zed Nesting)
 
 ```typescript
 interface AgentCapabilities {
@@ -260,7 +236,7 @@ interface SessionCapabilities {
 }
 ```
 
-### 3.7 Deferred Backend Reference — Trait Objects for Lifecycle Ops
+### 3.7 Trait Objects for Lifecycle Ops
 
 ```typescript
 // Separate from session store — these are operation handles
@@ -277,7 +253,7 @@ interface AgentSessionSetTitle {
 }
 ```
 
-### 3.8 Deferred Backend Reference — Session Modes (Dynamic Discovery)
+### 3.8 Session Modes (Dynamic Discovery)
 
 Modes are NOT hardcoded. They're discovered from the agent adapter:
 
@@ -299,7 +275,7 @@ Available modes come from the agent's capabilities response. If the adapter does
 
 ---
 
-## 5. Frontend UX
+## 4. Frontend
 
 ### 4.1 Files
 
@@ -325,12 +301,10 @@ entrypoints/app/agent-command/
 3. `AgentCommandConversation` loads session via `load_session` or `resume_session`
 4. "New Chat" → `POST /agents/:agentId/sessions` → navigate to new session
 5. Existing `/:agentId/chat` route gains optional `sessionId` param (defaults to `'main'`)
-6. Every ACP chat/history/cancel request must send `X-Session-Id` from the current route/session state
-7. Session list view updates via push/watch if available, otherwise explicit polling fallback
 
 ---
 
-## 6. Effort
+## 5. Effort
 
 | Layer | Files | Hours |
 |-------|-------|-------|
@@ -345,8 +319,8 @@ entrypoints/app/agent-command/
 ### Priority
 
 ```
-P0: Frontend session list/search/new-chat + route/session state + send `X-Session-Id` where supported
-P1: Mode switcher (dynamic/capability-gated) + polling refresh + degraded multi-session UX
-P2: Truncation/retry/title/manual-compact UI only when backend support exists
-P3: Debug/log surfaces only if backend later exposes them
+P0: Generalize 'main' → multi-session + session list/search + new/load/resume/close
+P1: Mode switcher (dynamic) + model selector + config
+P2: Truncation + retry + title + manual compact
+P3: Debug log
 ```

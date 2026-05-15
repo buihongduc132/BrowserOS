@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils'
 interface ConversationHeaderProps {
   agent: HarnessAgent | null
   fallbackName: string
-  fallbackAdapter: 'claude' | 'codex' | 'hermes' | 'unknown'
+  fallbackAdapter: 'claude' | 'codex' | 'openclaw' | 'hermes' | 'custom' | 'unknown'
   adapterHealth: AgentAdapterHealth | null
   backLabel: string
   backTarget: 'home' | 'page'

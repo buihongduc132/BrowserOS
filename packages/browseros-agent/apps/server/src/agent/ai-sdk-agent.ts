@@ -210,6 +210,7 @@ export class AiSdkAgent {
       connectedApps: config.browserContext?.enabledMcpServers,
       declinedApps: config.resolvedConfig.declinedApps,
       origin: config.resolvedConfig.origin,
+      workspaceAgentsMd: config.resolvedConfig.workspaceAgentsMd,
     })
 
     // Configure compaction for context window management

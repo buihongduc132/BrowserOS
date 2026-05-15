@@ -36,20 +36,18 @@ import {
 
 // ── Helpers ──
 
-function createMockResponse(): ToolResponse & {
-  textParts: string[]
-  dataParts: unknown[]
-} {
-  return {
-    textParts: [],
-    dataParts: [],
+function createMockResponse() {
+  const resp = {
+    textParts: [] as string[],
+    dataParts: [] as unknown[],
     text(msg: string) {
-      this.textParts.push(msg)
+      resp.textParts.push(msg)
     },
     data(d: unknown) {
-      this.dataParts.push(d)
+      resp.dataParts.push(d)
     },
-  } as unknown as ToolResponse
+  } as ToolResponse & { textParts: string[]; dataParts: unknown[] }
+  return resp
 }
 
 function createMockBrowser(overrides?: Partial<Browser>): Browser {
@@ -332,7 +330,7 @@ describe('extension tools — F11: list_messageable_extensions', () => {
         {
           id: 'ext-1',
           name: 'Test Extension',
-          type: 'service_worker',
+          type: 'service_worker' as const,
           hasActiveBackground: true,
           targetId: 't1',
           url: 'chrome-extension://ext-1/sw.js',
@@ -552,7 +550,7 @@ describe('extension tools — L2: list_extensions', () => {
           version: '1.0.0',
           description: 'A test',
           path: '/path',
-          state: 'enabled',
+          state: 'enabled' as const,
           isBrowserOS: false,
           canModify: true,
         },
@@ -593,7 +591,7 @@ describe('extension tools — L2: get_extension_info', () => {
       version: '1.0.0',
       description: 'A test',
       path: '/path',
-      state: 'enabled',
+      state: 'enabled' as const,
       isBrowserOS: false,
       canModify: true,
     }

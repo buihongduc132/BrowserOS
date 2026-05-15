@@ -42,6 +42,16 @@ export const ChatRequestSchema = AgentLLMConfigSchema.extend({
   userSystemPrompt: z.string().optional(),
   isScheduledTask: z.boolean().optional().default(false),
   userWorkingDir: z.string().min(1).optional(),
+  /** Multi-workspace support — array of workspace objects. Takes precedence over userWorkingDir when present. */
+  userWorkspaces: z
+    .array(
+      z.object({
+        id: z.string(),
+        path: z.string(),
+        name: z.string(),
+      }),
+    )
+    .optional(),
   supportsImages: z.boolean().optional().default(true),
   mode: z.enum(['chat', 'agent']).optional().default('agent'),
   origin: z.enum(['sidepanel', 'newtab']).optional().default('sidepanel'),

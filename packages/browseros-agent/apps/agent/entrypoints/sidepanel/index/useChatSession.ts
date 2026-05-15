@@ -9,7 +9,9 @@ import { Capabilities, Feature } from '@/lib/browseros/capabilities'
 import { useAgentServerUrl } from '@/lib/browseros/useBrowserOSProviders'
 import type { ChatAction } from '@/lib/chat-actions/types'
 import {
+  CONVERSATION_FORK_EVENT,
   CONVERSATION_RESET_EVENT,
+  CONVERSATION_UNDO_EVENT,
   GLOW_STOP_CLICKED_EVENT,
   MESSAGE_DISLIKE_EVENT,
   MESSAGE_LIKE_EVENT,
@@ -38,6 +40,7 @@ import { selectedTextStorage } from '@/lib/selected-text/selectedTextStorage'
 import { sentry } from '@/lib/sentry/sentry'
 import { stopAgentStorage } from '@/lib/stop-agent/stop-agent-storage'
 import { selectedWorkspaceStorage } from '@/lib/workspace/workspace-storage'
+import type { WorkspaceFolder } from '@/lib/workspace/workspace-storage'
 import type { ChatMode } from './chatTypes'
 import { GetConversationWithMessagesDocument } from './graphql/chatSessionDocument'
 import { toLlmProviderConfig } from './sidepanel-chat-targets'
@@ -248,6 +251,7 @@ export const useChatSession = (options?: ChatSessionOptions) => {
   const modeRef = useRef<ChatMode>(mode)
   const textToActionRef = useRef<Map<string, ChatAction>>(textToAction)
   const workingDirRef = useRef<string | undefined>(undefined)
+  const workspaceFolderRef = useRef<WorkspaceFolder | null>(null)
   const selectionMapRef = useRef<
     Record<string, { text: string; url: string; title: string }>
   >({})
@@ -279,10 +283,12 @@ export const useChatSession = (options?: ChatSessionOptions) => {
   useEffect(() => {
     selectedWorkspaceStorage.getValue().then((folder) => {
       workingDirRef.current = folder?.path
+      workspaceFolderRef.current = folder
     })
 
     const unwatch = selectedWorkspaceStorage.watch((folder) => {
       workingDirRef.current = folder?.path
+      workspaceFolderRef.current = folder
     })
     return () => unwatch()
   }, [])
@@ -356,6 +362,13 @@ export const useChatSession = (options?: ChatSessionOptions) => {
           browserContext: requestBrowserContext,
           userSystemPrompt,
           userWorkingDir: workingDirRef.current,
+          userWorkspaces: workspaceFolderRef.current
+            ? [{
+                id: workspaceFolderRef.current.id,
+                path: workspaceFolderRef.current.path,
+                name: workspaceFolderRef.current.name,
+              }]
+            : undefined,
           previousConversation,
           declinedApps,
         }
@@ -779,5 +792,6 @@ export const useChatSession = (options?: ChatSessionOptions) => {
     undoTurn,
     forkTurn,
     editTurn,
+    setMessages,
   }
 }

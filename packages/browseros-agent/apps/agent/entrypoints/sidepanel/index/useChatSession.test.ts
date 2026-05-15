@@ -52,6 +52,7 @@ describe('buildSidepanelPreparedSendMessagesRequest', () => {
     expect(request.api).toBe(
       'http://127.0.0.1:5151/agents/agent-codex/sidepanel/chat',
     )
+    // @ts-expect-error — body type mismatch in deep equality check
     expect(request.body).toEqual({
       conversationId,
       message: 'Inspect the current tab',
@@ -105,6 +106,8 @@ function commonRequestInput() {
       url: 'https://example.com',
       title: 'Example',
     },
+    toolApprovalConfig: { categories: { navigation: true } },
+    userWorkspaces: [],
   }
 }
 

@@ -34,14 +34,14 @@ function getFs() {
   if (!fsImpl) {
     fsImpl = require('node:fs')
   }
-  return fsImpl
+  return fsImpl!
 }
 
 function getPath() {
   if (!pathImpl) {
     pathImpl = require('node:path')
   }
-  return pathImpl
+  return pathImpl!
 }
 
 export class ConfigStore {

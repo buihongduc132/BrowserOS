@@ -5,15 +5,29 @@
  */
 
 import type { InferInsertModel, InferSelectModel } from 'drizzle-orm'
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import {
+  index,
+  integer,
+  sqliteTable,
+  text,
+} from 'drizzle-orm/sqlite-core'
 
+/**
+ * Persistent session records for ACP agent mode.
+ * Each row represents a conversation session with an external agent.
+ * The in-memory AgentSessionStore tracks active handles; this table
+ * provides durable metadata for listing/search/resume across restarts.
+ */
 export const agentSessions = sqliteTable(
   'agent_sessions',
   {
     id: text('id').primaryKey(),
     agentId: text('agent_id').notNull(),
     title: text('title'),
-    mode: text('mode', { enum: ['code', 'ask', 'agent'] })
+    cwd: text('cwd'),
+    mode: text('mode', {
+      enum: ['code', 'ask', 'agent'],
+    })
       .notNull()
       .default('agent'),
     model: text('model'),
@@ -22,10 +36,10 @@ export const agentSessions = sqliteTable(
     lastMessageAt: integer('last_message_at'),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
-    meta: text('meta'),
+    meta: text('meta'), // JSON blob for extensible data
   },
   (table) => [
-    index('agent_sessions_agent_updated_idx').on(table.agentId, table.updatedAt),
+    index('agent_sessions_agent_id_idx').on(table.agentId, table.updatedAt),
   ],
 )
 

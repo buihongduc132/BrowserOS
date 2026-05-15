@@ -120,8 +120,6 @@ type AgentRouteDeps = {
   /** Optional override; defaults to a fresh in-memory checker. */
   adapterHealth?: AdapterHealthChecker
   onTurnLifecycle?: import('../services/agents/agent-harness-service').TurnLifecycleListener
-  /** Shared session metadata store. Forwarded to AgentHarnessService. */
-  sessionMetaStore?: import('../../agent/agent-session-store').AgentSessionStore
 }
 
 type SidepanelAgentChatRequest = {
@@ -134,10 +132,15 @@ type SidepanelAgentChatRequest = {
   userWorkingDir?: string
 }
 
-import {
-  createConversationMutationRoutes,
-  createConversationMutationsService,
-} from './conversation-mutations'
+/**
+ * Resolve session ID from the X-Session-Id header.
+ * Falls back to 'main' for backward compatibility.
+ * Exported for testability.
+ */
+export function resolveSessionId(headerValue: string | undefined): string {
+  const trimmed = (headerValue ?? '').trim()
+  return trimmed || 'main'
+}
 
 export function createAgentRoutes(deps: AgentRouteDeps = {}) {
   const service =
@@ -146,7 +149,6 @@ export function createAgentRoutes(deps: AgentRouteDeps = {}) {
       browserosServerPort: deps.browserosServerPort,
       openclawGateway: deps.openclawGateway,
       openclawProvisioner: deps.openclawProvisioner,
-      sessionMetaStore: deps.sessionMetaStore,
     })
   if (deps.onTurnLifecycle && service instanceof AgentHarnessService) {
     service.onTurnLifecycle(deps.onTurnLifecycle)
@@ -242,38 +244,6 @@ export function createAgentRoutes(deps: AgentRouteDeps = {}) {
           )
         }
 
-          // ── ACP Slash Command Dispatch ─────────────────────────────
-          // Check if the message is a slash command BEFORE startTurn().
-          // Handled commands return a synthetic response; errors return
-          // an error message; passthrough falls through to normal LLM.
-          if (parsed.message.startsWith('/')) {
-            const cmdResult = await dispatchCommand(parsed.message, {
-              agentId: agent.id,
-              conversationId: parsed.conversationId,
-              sessionId: 'main',
-              args: '',
-            })
-
-            if (cmdResult.type === 'handled') {
-              const syntheticEvents = createSyntheticCommandStream(
-                cmdResult.response ?? 'Command executed.',
-              )
-              return createAcpUIMessageStreamResponse(syntheticEvents, {
-                headers: { 'X-Session-Id': 'main' },
-              })
-            }
-
-            if (cmdResult.type === 'error') {
-              const errorEvents = createSyntheticCommandStream(
-                `⚠️ ${cmdResult.error}`,
-              )
-              return createAcpUIMessageStreamResponse(errorEvents, {
-                headers: { 'X-Session-Id': 'main' },
-              })
-            }
-            // 'passthrough' → fall through to normal LLM call
-          }
-
           let started: { turnId: string; frames: ReadableStream<TurnFrame> }
           try {
             started = await service.startTurn({
@@ -319,7 +289,7 @@ export function createAgentRoutes(deps: AgentRouteDeps = {}) {
 
           return createAcpUIMessageStreamResponse(events, {
             headers: {
-              'X-Session-Id': 'main',
+              'X-Session-Id': resolveSessionId(c.req.header('X-Session-Id')),
               'X-Turn-Id': started.turnId,
             },
           })
@@ -361,59 +331,30 @@ export function createAgentRoutes(deps: AgentRouteDeps = {}) {
       })
       .get('/:agentId/sessions/:sessionId/history', async (c) => {
         try {
-          const sessionId = c.req.param('sessionId') || 'main'
-          return c.json(await service.getHistory(c.req.param('agentId')))
-          void sessionId // TODO: forward to service once multi-session history is supported
+          const sessionId =
+            c.req.param('sessionId') ||
+            resolveSessionId(c.req.header('X-Session-Id'))
+          return c.json(
+            await service.getHistory(c.req.param('agentId'), sessionId),
+          )
         } catch (err) {
           return handleAgentRouteError(c, err)
         }
       })
-      // ── Conversation mutations (undo / fork) ────────────────────
-      .post('/:agentId/conversation/undo', async (c) => {
-        const agentId = c.req.param('agentId')
-        const acpxRuntime =
-          service instanceof AgentHarnessService
-            ? service.getAcpxRuntime()
-            : null
-        if (!acpxRuntime) {
-          return c.json({ error: 'Undo not available' }, 501)
-        }
-        const mutationService = createConversationMutationsService({
-          runtime: acpxRuntime,
-        })
-        const routes = createConversationMutationRoutes({
-          service: mutationService,
-        })
-        return routes.handleUndo(c, agentId)
-      })
-      .post('/:agentId/conversation/fork', async (c) => {
-        const agentId = c.req.param('agentId')
-        const acpxRuntime =
-          service instanceof AgentHarnessService
-            ? service.getAcpxRuntime()
-            : null
-        if (!acpxRuntime) {
-          return c.json({ error: 'Fork not available' }, 501)
-        }
-        const mutationService = createConversationMutationsService({
-          runtime: acpxRuntime,
-        })
-        const routes = createConversationMutationRoutes({
-          service: mutationService,
-        })
-        return routes.handleFork(c, agentId)
-      })
       .post('/:agentId/chat', async (c) => {
         const agentId = c.req.param('agentId')
+        const sessionId = resolveSessionId(c.req.header('X-Session-Id'))
         const parsed = await parseChatBody(c)
         if ('error' in parsed) return c.json({ error: parsed.error }, 400)
 
         let started: { turnId: string; frames: ReadableStream<TurnFrame> }
         try {
           started = await service.startTurn({
-            agentId: agent.id,
-            message,
-            cwd: parsed.userWorkingDir,
+            agentId,
+            message: parsed.message,
+            attachments: parsed.attachments,
+            cwd: parsed.cwd,
+            sessionId,
           })
         } catch (err) {
           if (err instanceof TurnAlreadyActiveError) {
@@ -450,6 +391,83 @@ export function createAgentRoutes(deps: AgentRouteDeps = {}) {
         const events = turnFramesToAgentEvents(started.frames, {
           onCancel: cancelStartedTurn,
         })
+      })
+      .get('/:agentId/chat/active', (c) => {
+        const agentId = c.req.param('agentId')
+        const sessionId = resolveSessionId(c.req.header('X-Session-Id'))
+        const info = service.getActiveTurn(agentId, sessionId)
+        return c.json({ active: info })
+      })
+      .get('/:agentId/chat/stream', (c) => {
+        const agentId = c.req.param('agentId')
+        const sessionId = resolveSessionId(c.req.header('X-Session-Id'))
+        const url = new URL(c.req.url)
+        const queryTurnId = url.searchParams.get('turnId')?.trim() || undefined
+        const turnId =
+          queryTurnId ?? service.getActiveTurn(agentId, sessionId)?.turnId
+        if (!turnId) {
+          return c.json({ error: 'No active turn for this agent' }, 404)
+        }
+        const lastEventId =
+          c.req.header('Last-Event-ID') ??
+          url.searchParams.get('lastSeq') ??
+          undefined
+        const lastSeq = parseLastSeq(lastEventId)
+        const frames = service.attachTurn({ turnId, lastSeq })
+        if (!frames) {
+          return c.json({ error: 'Unknown turn' }, 404)
+        }
+        return streamTurnFrames(c, frames, { turnId })
+      })
+      .post('/:agentId/chat/cancel', async (c) => {
+        const agentId = c.req.param('agentId')
+        const body = await readJsonBody(c)
+        const turnId =
+          'value' in body && typeof body.value.turnId === 'string'
+            ? body.value.turnId.trim() || undefined
+            : undefined
+        const reason =
+          'value' in body && typeof body.value.reason === 'string'
+            ? body.value.reason
+            : undefined
+        const cancelled = service.cancelTurn({ agentId, turnId, reason })
+        return c.json({ cancelled })
+      })
+      .get('/:agentId/queue', async (c) => {
+        try {
+          const queue = await service.listQueuedMessages(c.req.param('agentId'))
+          return c.json({ queue })
+        } catch (err) {
+          return handleAgentRouteError(c, err)
+        }
+      })
+      .post('/:agentId/queue', async (c) => {
+        const parsed = await parseEnqueueBody(c)
+        if ('error' in parsed) return c.json({ error: parsed.error }, 400)
+        try {
+          const queued = await service.enqueueMessage({
+            agentId: c.req.param('agentId'),
+            message: parsed.message,
+            attachments: parsed.attachments,
+          })
+          return c.json({ queued })
+        } catch (err) {
+          return handleAgentRouteError(c, err)
+        }
+      })
+      .delete('/:agentId/queue/:messageId', async (c) => {
+        try {
+          const removed = await service.removeQueuedMessage({
+            agentId: c.req.param('agentId'),
+            messageId: c.req.param('messageId'),
+          })
+          if (!removed)
+            return c.json({ error: 'Queued message not found' }, 404)
+          return c.json({ removed })
+        } catch (err) {
+          return handleAgentRouteError(c, err)
+        }
+      })
 
         return createAcpUIMessageStreamResponse(events, {
           headers: {
@@ -633,7 +651,7 @@ function streamTurnFrames(
 ) {
   c.header('Content-Type', 'text/event-stream')
   c.header('Cache-Control', 'no-cache')
-  c.header('X-Session-Id', 'main')
+  c.header('X-Session-Id', resolveSessionId(c.req.header('X-Session-Id')))
   c.header('X-Turn-Id', options.turnId)
 
   return stream(c, async (s) => {
@@ -965,8 +983,6 @@ async function readJsonBody(
   }
   return { value: body as Record<string, unknown> }
 }
-
-// ── Conversation undo/fork helpers are in ./conversation-mutations.ts ──
 
 function handleAgentRouteError(c: Context<Env>, err: unknown) {
   if (err instanceof UnknownAgentError) {

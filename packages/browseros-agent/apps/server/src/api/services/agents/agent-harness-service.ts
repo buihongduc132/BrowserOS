@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import { AcpxRuntime } from '../../../lib/agents/acpx-runtime'
+import {
+  AcpxRuntime,
+  type OpenclawGatewayAccessor,
+} from '../../../lib/agents/acpx-runtime'
 import {
   type ActiveTurnInfo,
   type TurnFrame,
@@ -120,7 +123,6 @@ export type EnsureVmRuntimeReady = (
 ) => Promise<void>
 
 export class AgentHarnessService {
-  readonly sessionMetaStore: AgentSessionStore
   private readonly agentStore: AgentStore
   private readonly runtime: AgentRuntime
   private readonly browserosDir: string
@@ -148,7 +150,6 @@ export class AgentHarnessService {
       turnRegistry?: TurnRegistry
       messageQueue?: FileMessageQueue
       producedFilesStore?: ProducedFilesStore
-      sessionMetaStore?: AgentSessionStore
     } = {},
   ) {
     this.browserosDir = deps.browserosDir ?? getBrowserosDir()
@@ -164,7 +165,6 @@ export class AgentHarnessService {
     this.turnRegistry = deps.turnRegistry ?? new TurnRegistry()
     this.messageQueue = deps.messageQueue ?? new FileMessageQueue()
     this.browserosDir = deps.browserosDir
-    this.sessionMetaStore = deps.sessionMetaStore ?? new AgentSessionStore()
     if (deps.producedFilesStore) {
       this.explicitProducedFilesStore = deps.producedFilesStore
     }
@@ -211,6 +211,9 @@ export class AgentHarnessService {
       const snapshot = snapshots.get(agent.id) ?? null
       const lastUsedAt = snapshot?.lastUsedAt ?? null
       const activeTurn = this.turnRegistry.getActiveFor(agent.id, 'main')
+      // NOTE: listAgentsWithActivity intentionally always queries 'main'
+      // for the listing view. Per-session active turns are available via
+      // getActiveTurn(agentId, sessionId).
       return {
         ...agent,
         pinned: agent.pinned ?? false,
@@ -260,6 +263,7 @@ export class AgentHarnessService {
       return this.runtime.getRowSnapshot({ agent, sessionId: 'main' })
     }
     // Legacy fallback: derive only `lastUsedAt` from the history page.
+    // NOTE: fetchRowSnapshot is used for agent listing (always 'main').
     const page = await this.runtime.getHistory({ agent, sessionId: 'main' })
     const last = page.items.at(-1)?.createdAt
     if (typeof last !== 'number' || !Number.isFinite(last)) return null
@@ -351,6 +355,8 @@ export class AgentHarnessService {
       return
     }
     try {
+      // Queue drain always uses 'main' session — queue messages are
+      // not session-aware.
       await this.startTurn({
         agentId,
         message: next.message,
@@ -396,6 +402,8 @@ export class AgentHarnessService {
     // time (e.g. the user enqueued during the brief window between
     // turns), pop it back off and start it directly. Avoids the
     // queue sitting idle while the agent is also idle.
+    // Defensive drain: check 'main' session only (queue is not
+    // session-aware).
     if (!this.turnRegistry.getActiveFor(agent.id, 'main')) {
       void this.maybeStartNextFromQueue(agent.id)
     }
@@ -588,17 +596,22 @@ export class AgentHarnessService {
     return this.agentStore.get(agentId)
   }
 
-  /**
-   * Expose the AcpxRuntime for conversation mutation routes (undo/fork).
-   * Returns `null` if the runtime is not an AcpxRuntime instance.
-   */
-  getAcpxRuntime(): AcpxRuntime | null {
-    return this.runtime instanceof AcpxRuntime ? this.runtime : null
-  }
-
-  async getHistory(agentId: string): Promise<AgentHistoryPage> {
+  async getHistory(
+    agentId: string,
+    sessionId: string = 'main',
+  ): Promise<AgentHistoryPage> {
     const agent = await this.requireAgent(agentId)
-    return this.runtime.getHistory({ agent, sessionId: 'main' })
+    // OpenClaw agents persist conversation in the gateway, not in the
+    // AcpxRuntime's local session record. Reading the local record
+    // would miss autonomous (cron / hook / channel) turns. Route
+    // through the provisioner so the panel sees the full history.
+    if (
+      agent.adapter === 'openclaw' &&
+      this.openclawProvisioner?.getAgentHistory
+    ) {
+      return this.openclawProvisioner.getAgentHistory(agentId)
+    }
+    return this.runtime.getHistory({ agent, sessionId })
   }
 
   /**
@@ -614,15 +627,17 @@ export class AgentHarnessService {
     message: string
     attachments?: ReadonlyArray<{ mediaType: string; data: string }>
     cwd?: string
+    sessionId?: string
   }): Promise<{ turnId: string; frames: ReadableStream<TurnFrame> }> {
     const agent = await this.requireAgent(input.agentId)
+    const sessionId = input.sessionId ?? 'main'
 
-    const existing = this.turnRegistry.getActiveFor(agent.id, 'main')
+    const existing = this.turnRegistry.getActiveFor(agent.id, sessionId)
     if (existing) {
       throw new TurnAlreadyActiveError(agent.id, existing.turnId)
     }
 
-    const turn = this.turnRegistry.register(agent.id, 'main', {
+    const turn = this.turnRegistry.register(agent.id, sessionId, {
       prompt: input.message,
     })
     this.notifyTurnStarted(agent.id)
@@ -682,7 +697,10 @@ export class AgentHarnessService {
   }): boolean {
     const turnId =
       input.turnId ??
-      this.turnRegistry.getActiveFor(input.agentId, 'main')?.turnId
+      this.turnRegistry.getActiveFor(
+        input.agentId,
+        (input as { sessionId?: string }).sessionId ?? 'main',
+      )?.turnId
     if (!turnId) return false
     return this.turnRegistry.cancel(turnId, input.reason)
   }
@@ -748,15 +766,14 @@ export class AgentHarnessService {
           )
         : null
 
-    // Ensure session exists in the metadata store (idempotent — skips if already tracked)
-    if (!(await this.sessionMetaStore.getSessionMeta(agent.id, 'main'))) {
-      await this.sessionMetaStore.openSession(agent.id, 'main', input.cwd)
-    }
-
     try {
+      // Derive sessionId from the turn's registry entry so the runtime
+      // call uses the correct session.
+      const turnEntry = this.turnRegistry.get(turnId)
+      const runtimeSessionId = turnEntry?.sessionId ?? 'main'
       const upstream = await this.runtime.send({
         agent,
-        sessionId: 'main',
+        sessionId: runtimeSessionId,
         sessionKey: agent.sessionKey,
         message: input.message,
         attachments: input.attachments,
@@ -828,21 +845,6 @@ export class AgentHarnessService {
           turnId,
           turnPrompt: input.message,
         })
-      }
-      // Update session metadata after the turn completes. Skip on
-      // explicit cancel — the user didn't want the side effects.
-      if (!turn.abortController.signal.aborted) {
-        const meta = await this.sessionMetaStore.getSessionMeta(agent.id, 'main')
-        if (meta) {
-          const preview = input.message
-            .split('\n')
-            .find((l) => l.trim())
-            ?.slice(0, 200) ?? null
-          await this.sessionMetaStore.updateSessionMeta(agent.id, 'main', {
-            turnCount: meta.turnCount + 1,
-            lastMessagePreview: preview,
-          })
-        }
       }
       this.notifyTurnEnded(agent.id, {
         ok: lastErrorMessage === undefined,

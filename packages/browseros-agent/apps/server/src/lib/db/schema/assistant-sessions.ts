@@ -5,8 +5,19 @@
  */
 
 import type { InferInsertModel, InferSelectModel } from 'drizzle-orm'
-import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import {
+  index,
+  integer,
+  primaryKey,
+  sqliteTable,
+  text,
+} from 'drizzle-orm/sqlite-core'
 
+/**
+ * Persistent session records for the built-in Assistant (sidepanel).
+ * Stores metadata (title, mode, workspace associations, tags) for
+ * workspace-grouped session history.
+ */
 export const assistantSessions = sqliteTable(
   'assistant_sessions',
   {
@@ -21,13 +32,17 @@ export const assistantSessions = sqliteTable(
     lastMessageAt: integer('last_message_at'),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
-    meta: text('meta'),
+    meta: text('meta'), // JSON blob for extensible data
   },
   (table) => [
-    index('assistant_sessions_updated_at_idx').on(table.updatedAt),
+    index('assistant_sessions_updated_idx').on(table.updatedAt),
   ],
 )
 
+/**
+ * Junction table: sessions ↔ workspaces (N:N).
+ * Composite PK on (sessionId, workspaceId) makes upserts idempotent.
+ */
 export const sessionWorkspaces = sqliteTable(
   'session_workspaces',
   {
@@ -38,11 +53,15 @@ export const sessionWorkspaces = sqliteTable(
   },
   (table) => [
     primaryKey({ columns: [table.sessionId, table.workspaceId] }),
-    index('session_workspaces_session_id_idx').on(table.sessionId),
-    index('session_workspaces_workspace_path_idx').on(table.workspacePath),
+    index('session_workspaces_session_idx').on(table.sessionId),
+    index('session_workspaces_path_idx').on(table.workspacePath),
   ],
 )
 
+/**
+ * Junction table: sessions ↔ tags (N:N).
+ * Tags are user-defined labels for grouping sessions.
+ */
 export const sessionTags = sqliteTable(
   'session_tags',
   {

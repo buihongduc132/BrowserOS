@@ -181,8 +181,7 @@ export const ChatMessages: FC<ChatMessagesProps> = ({
           {showJtbdPopup && (
             <JtbdPopup
               onTakeSurvey={onTakeSurvey}
-              onDismiss={onDismissJtbdPopup}
-              showDontShowAgain={showDontShowAgain}
+              onDismiss={() => onDismissJtbdPopup(false)}
             />
           )}
         </ConversationContent>

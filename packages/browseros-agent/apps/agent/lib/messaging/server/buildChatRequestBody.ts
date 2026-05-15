@@ -33,6 +33,7 @@ interface ChatRequestBodyParams {
   browserContext?: ChatRequestBrowserContext
   userSystemPrompt?: string
   userWorkingDir?: string
+  userWorkspaces?: Array<{ id: string; path: string; name: string }>
   supportsImages?: boolean
   previousConversation?: ChatHistoryEntry[] | string
   declinedApps?: string[]
@@ -52,6 +53,7 @@ export const buildChatRequestBody = ({
   browserContext,
   userSystemPrompt,
   userWorkingDir,
+  userWorkspaces,
   supportsImages,
   previousConversation,
   declinedApps,
@@ -80,6 +82,7 @@ export const buildChatRequestBody = ({
   browserContext,
   userSystemPrompt,
   userWorkingDir,
+  userWorkspaces,
   supportsImages: supportsImages ?? provider.supportsImages,
   previousConversation,
   declinedApps: declinedApps?.length ? declinedApps : undefined,

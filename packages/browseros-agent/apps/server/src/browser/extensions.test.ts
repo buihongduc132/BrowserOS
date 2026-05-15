@@ -16,7 +16,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 import type { ProtocolApi } from '@browseros/cdp-protocol/protocol-api'
 import type { CdpBackend, CdpTarget } from './backends/types'
-import type { ExtensionInfo } from '@browseros/cdp-protocol/generated/domains/extensions'
+import type { ExtensionInfo } from '@browseros/cdp-protocol/domains/extensions'
 import { Browser } from './browser'
 import * as extensions from './extensions'
 

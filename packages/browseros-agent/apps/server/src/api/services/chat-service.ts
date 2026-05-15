@@ -6,7 +6,6 @@
 
 import { createAgentUIStreamResponse, type UIMessage } from 'ai'
 import { AiSdkAgent } from '../../agent/ai-sdk-agent'
-import { resolveCompactionConfig } from '../../agent/compaction-config'
 import { formatUserMessage } from '../../agent/format-message'
 import {
   filterValidMessages,
@@ -21,6 +20,8 @@ import type { ToolRegistry } from '../../tools/tool-registry'
 import type { KlavisProxyRef } from '../services/klavis/strata-proxy'
 import type { BrowserContext, ChatRequest } from '../types'
 import { resolveBrowserContextPageIds } from '../utils/resolve-browser-context-page-ids'
+import type { AssistantSessionStore } from '../../sessions/assistant-session-store'
+import { AgentsMdLoader } from '../../sessions/agents-md-loader'
 
 export interface ChatServiceDeps {
   sessionStore: SessionStore
@@ -29,10 +30,14 @@ export interface ChatServiceDeps {
   registry: ToolRegistry
   browserosId?: string
   aiSdkDevtoolsEnabled?: boolean
-  compaction?: import('../../config').ServerConfig['compaction']
+  /** Optional: assistant session metadata store for workspace tracking + AGENTS.md */
+  assistantSessionStore?: AssistantSessionStore
 }
 
 export class ChatService {
+  /** Reusable AGENTS.md loader — preserves mtime cache across requests */
+  private agentsMdLoader = new AgentsMdLoader([])
+
   constructor(private deps: ChatServiceDeps) {}
 
   async processMessage(
@@ -68,11 +73,52 @@ export class ChatService {
       declinedApps: request.declinedApps,
       browserosId: this.deps.browserosId,
       toolApprovalConfig: request.toolApprovalConfig,
-      compaction: this.deps.compaction
-        ? resolveCompactionConfig(this.deps.compaction)
-        : undefined,
     }
-    const llmConfigKey = this.buildLlmConfigKey(agentConfig)
+
+    // Resolve workspaces from either format (backward compat)
+    const resolvedWorkspaces = this.resolveWorkspaces(request)
+
+    // Track workspace associations on session (idempotent)
+    if (resolvedWorkspaces.length > 0 && this.deps.assistantSessionStore) {
+      try {
+        // Ensure session metadata exists
+        const existing = await this.deps.assistantSessionStore.get(request.conversationId)
+        if (!existing) {
+          await this.deps.assistantSessionStore.create({
+            id: request.conversationId,
+            mode: request.mode ?? 'chat',
+          })
+        }
+        for (const ws of resolvedWorkspaces) {
+          await this.deps.assistantSessionStore.addWorkspace(request.conversationId, {
+            workspaceId: ws.id,
+            workspacePath: ws.path,
+            workspaceName: ws.name,
+          })
+        }
+      } catch (error) {
+        logger.debug('Failed to track workspace associations', {
+          conversationId: request.conversationId,
+          error: String(error),
+        })
+      }
+    }
+
+    // Load AGENTS.md for all workspaces (with allowlist security)
+    if (resolvedWorkspaces.length > 0) {
+      try {
+        this.agentsMdLoader.updateAllowlist(resolvedWorkspaces.map((w) => w.path))
+        const agentsMd = await this.agentsMdLoader.loadMultiple(resolvedWorkspaces.map((w) => w.path))
+        if (agentsMd.length > 0) {
+          agentConfig.workspaceAgentsMd = agentsMd
+        }
+      } catch (error) {
+        logger.debug('Failed to load AGENTS.md', {
+          conversationId: request.conversationId,
+          error: String(error),
+        })
+      }
+    }
 
     let session = sessionStore.get(request.conversationId)
     let isNewSession = false
@@ -80,6 +126,9 @@ export class ChatService {
 
     // Build stable keys for change detection
     const mcpServerKey = this.buildMcpServerKey(request.browserContext)
+    const approvalConfigKey = this.buildApprovalConfigKey(
+      request.toolApprovalConfig,
+    )
 
     // Detect MCP config change mid-conversation → rebuild session
     if (session && session.mcpServerKey !== mcpServerKey) {
@@ -168,21 +217,17 @@ export class ChatService {
       }
     }
 
-    // Detect provider/model/auth change mid-conversation -> rebuild session.
-    // The AI SDK agent captures the language model at construction time, so a
-    // reused session would keep calling the previous provider.
-    if (session && session.llmConfigKey !== llmConfigKey) {
-      logger.info('LLM config changed mid-conversation, rebuilding session', {
-        conversationId: request.conversationId,
-        provider: agentConfig.provider,
-        model: agentConfig.model,
-      })
+    // Detect approval config change mid-conversation → rebuild session
+    if (session && session.approvalConfigKey !== approvalConfigKey) {
+      logger.info(
+        'Approval config changed mid-conversation, rebuilding session',
+        { conversationId: request.conversationId },
+      )
       session = await this.rebuildSession(
         session,
         request,
         agentConfig,
         mcpServerKey,
-        llmConfigKey,
       )
     }
 
@@ -247,6 +292,7 @@ export class ChatService {
         klavisRef: this.deps.klavisRef,
         browserosId: this.deps.browserosId,
         aiSdkDevtoolsEnabled: this.deps.aiSdkDevtoolsEnabled,
+        aclRules: request.aclRules,
       })
       session = {
         agent,
@@ -254,10 +300,17 @@ export class ChatService {
         browserContext,
         mcpServerKey,
         workingDir: request.userWorkingDir,
-        llmConfigKey,
+        approvalConfigKey,
       }
       sessionStore.set(request.conversationId, session)
     }
+
+    // After this point, session is always defined (either pre-existing or just created)
+    if (!session) {
+      throw new Error('Session should exist after creation')
+    }
+
+    session.agent.updateAclRules(request.aclRules)
 
     if (isNewSession && request.previousConversation?.length) {
       for (const msg of request.previousConversation) {
@@ -271,6 +324,26 @@ export class ChatService {
       logger.info('Injected previous conversation history', {
         conversationId: request.conversationId,
         messageCount: request.previousConversation.length,
+      })
+    }
+
+    // Handle tool approval responses: patch the agent's messages and re-run
+    if (request.toolApprovalResponses?.length) {
+      this.applyToolApprovalResponses(
+        session.agent.messages,
+        request.toolApprovalResponses,
+      )
+      logger.info('Applied tool approval responses', {
+        conversationId: request.conversationId,
+        count: request.toolApprovalResponses.length,
+      })
+      return createAgentUIStreamResponse({
+        agent: session.agent.toolLoopAgent,
+        uiMessages: filterValidMessages(session.agent.messages),
+        abortSignal,
+        onFinish: async ({ messages }: { messages: UIMessage[] }) => {
+          session.agent.messages = filterValidMessages(messages)
+        },
       })
     }
 
@@ -377,7 +450,6 @@ export class ChatService {
     request: ChatRequest,
     agentConfig: ResolvedAgentConfig,
     mcpServerKey: string,
-    llmConfigKey = this.buildLlmConfigKey(agentConfig),
   ): Promise<AgentSession> {
     const previousMessages = session.agent.messages
     await session.agent.dispose()
@@ -401,6 +473,7 @@ export class ChatService {
       klavisRef: this.deps.klavisRef,
       browserosId: this.deps.browserosId,
       aiSdkDevtoolsEnabled: this.deps.aiSdkDevtoolsEnabled,
+      aclRules: request.aclRules,
     })
     const newSession: AgentSession = {
       agent,
@@ -408,7 +481,9 @@ export class ChatService {
       browserContext,
       mcpServerKey,
       workingDir: request.userWorkingDir,
-      llmConfigKey,
+      approvalConfigKey: this.buildApprovalConfigKey(
+        request.toolApprovalConfig,
+      ),
     }
     newSession.agent.messages = sanitizeMessagesForToolset(
       previousMessages,
@@ -418,24 +493,49 @@ export class ChatService {
     return newSession
   }
 
-  private buildLlmConfigKey(config: ResolvedAgentConfig): string {
-    return JSON.stringify({
-      provider: config.provider,
-      model: config.model,
-      apiKey: config.apiKey,
-      baseUrl: config.baseUrl,
-      upstreamProvider: config.upstreamProvider,
-      resourceName: config.resourceName,
-      region: config.region,
-      accessKeyId: config.accessKeyId,
-      secretAccessKey: config.secretAccessKey,
-      sessionToken: config.sessionToken,
-      accountId: config.accountId,
-      reasoningEffort: config.reasoningEffort,
-      reasoningSummary: config.reasoningSummary,
-      contextWindowSize: config.contextWindowSize,
-      supportsImages: config.supportsImages,
-    })
+  private applyToolApprovalResponses(
+    messages: UIMessage[],
+    responses: Array<{
+      approvalId: string
+      approved: boolean
+      reason?: string
+    }>,
+  ): void {
+    const responseMap = new Map(responses.map((r) => [r.approvalId, r]))
+    for (const msg of messages) {
+      if (msg.role !== 'assistant') continue
+      for (const part of msg.parts) {
+        const toolPart = part as {
+          state?: string
+          approval?: { id: string; approved?: boolean; reason?: string }
+        }
+        if (
+          toolPart.state === 'approval-requested' &&
+          toolPart.approval?.id &&
+          responseMap.has(toolPart.approval.id)
+        ) {
+          const resp = responseMap.get(toolPart.approval.id)
+          if (!resp) continue
+          toolPart.state = 'approval-responded'
+          toolPart.approval = {
+            ...toolPart.approval,
+            approved: resp.approved,
+            reason: resp.reason,
+          }
+        }
+      }
+    }
+  }
+
+  private buildApprovalConfigKey(config?: {
+    categories: Record<string, boolean>
+  }): string {
+    if (!config) return ''
+    return Object.entries(config.categories)
+      .filter(([, v]) => v)
+      .map(([k]) => k)
+      .sort()
+      .join(',')
   }
 
   private buildMcpServerKey(browserContext?: BrowserContext): string {
@@ -449,5 +549,34 @@ export class ChatService {
           : 'klavis:pending'
         : null
     return [klavisState, ...managed, ...custom].filter(Boolean).join(',')
+  }
+
+  /**
+   * Resolve workspaces from the request.
+   * Prefers userWorkspaces (new format) over userWorkingDir (legacy).
+   */
+  private resolveWorkspaces(request: ChatRequest): Array<{
+    id: string
+    path: string
+    name: string
+  }> {
+    if (request.userWorkspaces && request.userWorkspaces.length > 0) {
+      return request.userWorkspaces
+    }
+    if (request.userWorkingDir) {
+      const basename =
+        request.userWorkingDir.split('/').pop() ?? request.userWorkingDir
+      const hash = request.userWorkingDir
+        .split('')
+        .reduce((a, b) => ((a = ((a << 5) - a + b.charCodeAt(0)) | 0), a), 0)
+      return [
+        {
+          id: `ws-${Math.abs(hash).toString(16)}`,
+          path: request.userWorkingDir,
+          name: basename,
+        },
+      ]
+    }
+    return []
   }
 }

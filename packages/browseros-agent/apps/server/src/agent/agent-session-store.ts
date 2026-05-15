@@ -1,137 +1,204 @@
+/**
+ * @license
+ * Copyright 2025 BrowserOS
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+/**
+ * Ref-counted in-memory session store for ACP agent mode.
+ *
+ * Tracks active session handles (open connections). When multiple UI components
+ * reference the same session, refCount increases. Session is only removed when
+ * refCount drops to zero via close().
+ *
+ * This is distinct from SessionStore (which holds agent runtime state like
+ * AiSdkAgent, browser context, MCP servers). AgentSessionStore wraps it —
+ * when ref count hits 0, consumers should call SessionStore.delete(sessionId).
+ */
+
+export interface SessionMeta {
+  sessionId: string
+  agentId: string
+  title?: string
+  turnCount?: number
+  lastMessagePreview?: string
+  lastMessageAt?: number
+  mode?: string
+  model?: string
+  meta?: Record<string, unknown>
+  cwd?: string
+  createdAt: number
+  updatedAt?: number
+}
+
 export interface ActiveSession {
   sessionId: string
   agentId: string
   refCount: number
   createdAt: number
-  updatedAt: number
-  cwd?: string | null
-  title?: string | null
-  mode: string
-  model?: string | null
-  turnCount: number
-  lastMessagePreview?: string | null
-  lastMessageAt?: number | null
-  meta?: Record<string, unknown> | null
+}
+
+export interface ListSessionsOptions {
+  search?: string
+  cursor?: string
+  limit?: number
 }
 
 export class AgentSessionStore {
-  private sessions = new Map<string, ActiveSession>()
-
-  private compositeKey(agentId: string, sessionId: string): string {
+  /** Composite key: `${agentId}::${sessionId}` — prevents cross-agent session collision. */
+  private static key(agentId: string, sessionId: string): string {
     return `${agentId}::${sessionId}`
   }
+
+  private sessions = new Map<string, ActiveSession>()
+
+  /**
+   * Open a session handle. If session already exists, increments refCount.
+   * Otherwise creates a new entry with refCount = 1.
+   */
+  open(agentId: string, sessionId: string): ActiveSession {
+    const key = AgentSessionStore.key(agentId, sessionId)
+    const existing = this.sessions.get(key)
+    if (existing) {
+      existing.refCount++
+      return existing
+    }
+
+    const session: ActiveSession = {
+      sessionId,
+      agentId,
+      refCount: 1,
+      createdAt: Date.now(),
+    }
+    this.sessions.set(key, session)
+    return session
+  }
+
+  /**
+   * Close a session handle. Decrements refCount.
+   * Returns true only when the session was fully removed (refCount reached 0).
+   * Returns false if session still has refs or doesn't exist.
+   */
+  close(agentId: string, sessionId: string): boolean {
+    const key = AgentSessionStore.key(agentId, sessionId)
+    const session = this.sessions.get(key)
+    if (!session) return false
+
+    session.refCount--
+    if (session.refCount <= 0) {
+      this.sessions.delete(key)
+      return true
+    }
+    return false
+  }
+
+  /**
+   * Get all active sessions for a given agent.
+   */
+  listByAgent(agentId: string): ActiveSession[] {
+    const result: ActiveSession[] = []
+    for (const session of this.sessions.values()) {
+      if (session.agentId === agentId) {
+        result.push(session)
+      }
+    }
+    return result
+  }
+
+  /**
+   * Check if a session exists in the store.
+   */
+  has(agentId: string, sessionId: string): boolean {
+    return this.sessions.has(AgentSessionStore.key(agentId, sessionId))
+  }
+
+  /**
+   * Get a session by agentId + sessionId.
+   */
+  get(agentId: string, sessionId: string): ActiveSession | undefined {
+    return this.sessions.get(AgentSessionStore.key(agentId, sessionId))
+  }
+
+  /**
+   * Total number of active sessions (unique composite keys).
+   */
+  get size(): number {
+    return this.sessions.size
+  }
+
+  // ── Extended methods for ACP session routes ──
+
+  private sessionMeta = new Map<string, SessionMeta>()
 
   async openSession(
     agentId: string,
     sessionId: string,
     cwd?: string,
-  ): Promise<ActiveSession> {
-    const key = this.compositeKey(agentId, sessionId)
-    const existing = this.sessions.get(key)
-    if (existing) {
-      existing.refCount++
-      existing.updatedAt = Date.now()
-      return existing
-    }
-
-    const now = Date.now()
-    const session: ActiveSession = {
+  ): Promise<SessionMeta> {
+    this.open(agentId, sessionId)
+    const key = AgentSessionStore.key(agentId, sessionId)
+    const meta: SessionMeta = {
       sessionId,
       agentId,
-      refCount: 1,
-      createdAt: now,
-      updatedAt: now,
-      cwd: cwd ?? null,
-      title: null,
-      mode: 'default',
-      model: null,
-      turnCount: 0,
-      lastMessagePreview: null,
-      lastMessageAt: null,
-      meta: null,
+      cwd,
+      createdAt: Date.now(),
     }
-
-    this.sessions.set(key, session)
-    return session
-  }
-
-  async closeSession(agentId: string, sessionId: string): Promise<number> {
-    const key = this.compositeKey(agentId, sessionId)
-    const session = this.sessions.get(key)
-    if (!session) {
-      return -1
-    }
-
-    session.refCount--
-    session.updatedAt = Date.now()
-
-    if (session.refCount <= 0) {
-      this.sessions.delete(key)
-      return 0
-    }
-
-    return session.refCount
+    this.sessionMeta.set(key, meta)
+    return meta
   }
 
   async listSessions(
     agentId: string,
-    options?: { cursor?: string; limit?: number; search?: string },
-  ): Promise<ActiveSession[]> {
-    let sessions = Array.from(this.sessions.values())
-      .filter((s) => s.agentId === agentId)
-      .sort((a, b) => b.updatedAt - a.updatedAt)
-
+    options?: ListSessionsOptions,
+  ): Promise<SessionMeta[]> {
+    let results: SessionMeta[] = []
+    for (const meta of this.sessionMeta.values()) {
+      if (meta.agentId === agentId) results.push(meta)
+    }
     if (options?.search) {
-      const query = options.search.toLowerCase()
-      sessions = sessions.filter((s) => s.title?.toLowerCase().includes(query))
+      const q = options.search.toLowerCase()
+      results = results.filter(
+        (m) =>
+          m.title?.toLowerCase().includes(q) ||
+          m.lastMessagePreview?.toLowerCase().includes(q),
+      )
     }
-
+    results.sort(
+      (a, b) => (b.updatedAt ?? b.createdAt) - (a.updatedAt ?? a.createdAt),
+    )
     if (options?.cursor) {
-      const idx = sessions.findIndex((s) => s.sessionId === options.cursor)
-      if (idx !== -1) {
-        sessions = sessions.slice(idx + 1)
-      }
+      const idx = results.findIndex((m) => m.sessionId === options.cursor)
+      if (idx >= 0) results = results.slice(idx + 1)
     }
-
-    if (options?.limit) {
-      sessions = sessions.slice(0, options.limit)
-    }
-
-    return sessions
+    if (options?.limit) results = results.slice(0, options.limit)
+    return results
   }
 
-  async getSessionMeta(agentId: string, sessionId: string): Promise<ActiveSession | null> {
-    return this.sessions.get(this.compositeKey(agentId, sessionId)) ?? null
+  async getSessionMeta(
+    agentId: string,
+    sessionId: string,
+  ): Promise<SessionMeta | undefined> {
+    return this.sessionMeta.get(AgentSessionStore.key(agentId, sessionId))
   }
 
   async updateSessionMeta(
     agentId: string,
     sessionId: string,
-    updates: Partial<
-      Pick<
-        ActiveSession,
-        | 'title'
-        | 'turnCount'
-        | 'lastMessagePreview'
-        | 'lastMessageAt'
-        | 'mode'
-        | 'model'
-        | 'meta'
-      >
-    >,
-  ): Promise<ActiveSession | null> {
-    const key = this.compositeKey(agentId, sessionId)
-    const session = this.sessions.get(key)
-    if (!session) return null
+    updates: Partial<Omit<SessionMeta, 'sessionId' | 'agentId' | 'createdAt'>>,
+  ): Promise<SessionMeta | undefined> {
+    const key = AgentSessionStore.key(agentId, sessionId)
+    const existing = this.sessionMeta.get(key)
+    if (!existing) return undefined
+    Object.assign(existing, updates, { updatedAt: Date.now() })
+    return existing
+  }
 
-    Object.assign(session, updates)
-
-    // Auto-set lastMessageAt when preview is provided without explicit timestamp
-    if (updates.lastMessagePreview && updates.lastMessageAt === undefined) {
-      session.lastMessageAt = Date.now()
+  async closeSession(agentId: string, sessionId: string): Promise<number> {
+    const removed = this.close(agentId, sessionId)
+    if (removed) {
+      this.sessionMeta.delete(AgentSessionStore.key(agentId, sessionId))
     }
-
-    session.updatedAt = Date.now()
-    return session
+    const remaining = this.get(agentId, sessionId)
+    return remaining?.refCount ?? 0
   }
 }

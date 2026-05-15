@@ -10,6 +10,8 @@ import { ChatService } from '../services/chat-service'
 import type { KlavisProxyRef } from '../services/klavis/strata-proxy'
 import { ChatRequestSchema } from '../types'
 import { ConversationIdParamSchema } from '../utils/validation'
+import { getDb } from '../../lib/db'
+import { AssistantSessionStore } from '../../sessions/assistant-session-store'
 
 interface ChatRouteDeps {
   browser: Browser
@@ -17,15 +19,18 @@ interface ChatRouteDeps {
   browserosId?: string
   klavisRef?: KlavisProxyRef
   aiSdkDevtoolsEnabled?: boolean
-  compaction?: import('../../config').ServerConfig['compaction']
-  /** External session store — when provided, used instead of creating a new one */
-  sessionStore?: SessionStore
 }
 
 export function createChatRoutes(deps: ChatRouteDeps) {
   const { browserosId } = deps
 
-  const sessionStore = deps.sessionStore ?? new SessionStore()
+  const sessionStore = new SessionStore()
+  let assistantSessionStore: AssistantSessionStore | undefined
+  try {
+    assistantSessionStore = new AssistantSessionStore(getDb())
+  } catch {
+    // DB not initialized (e.g. during tests) — workspace tracking disabled
+  }
   const service = new ChatService({
     sessionStore,
     klavisRef: deps.klavisRef,
@@ -33,7 +38,7 @@ export function createChatRoutes(deps: ChatRouteDeps) {
     registry: deps.registry,
     browserosId,
     aiSdkDevtoolsEnabled: deps.aiSdkDevtoolsEnabled,
-    compaction: deps.compaction,
+    assistantSessionStore,
   })
 
   return new Hono()

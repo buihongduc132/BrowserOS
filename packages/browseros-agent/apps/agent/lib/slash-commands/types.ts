@@ -48,3 +48,16 @@ export type SlashCommandResult =
   | { type: 'prompt'; expandedText: string }
   | { type: 'action'; handled: true }
   | { type: 'passthrough'; text: string }
+
+/**
+ * Dependencies required by processSlashCommand.
+ * @public
+ */
+export interface ProcessSlashCommandDeps {
+  messages: UIMessage[]
+  conversationId: string
+  setMessages: (messages: UIMessage[]) => void
+  resetConversation: () => void
+  mode: 'chat' | 'agent'
+  setMode: (mode: 'chat' | 'agent') => void
+}
