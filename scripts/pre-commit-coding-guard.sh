@@ -5,7 +5,7 @@
 # Called by lefthook with staged TS/TSX files as arguments.
 # Also works standalone (reads git diff --cached if no args).
 #
-# Gates (7):
+# Gates (9):
 #   Gate 1: ast-grep scan — blocks on error severity
 #   Gate 2: No stub implementations (blocking)
 #   Gate 3: No explicit any (warning)
@@ -13,6 +13,8 @@
 #   Gate 5: Silent .catch(() => {}) (warning)
 #   Gate 6: Math.random() for IDs (warning)
 #   Gate 7: Lossy JSON clone (warning)
+#   Gate 8: Duplicate test files in tests/ and src/ (blocking)
+#   Gate 9: Hardcoded 'main' in session history route (blocking)
 #====================================================================
 set -e
 
@@ -185,6 +187,49 @@ for f in $staged_files; do
   fi
 done
 
+# ── Gate 8: Duplicate test files in tests/ and src/ (blocking) ──
+# Codified from verifier loop Round 1-3: stale tests in tests/ that duplicate
+# or conflict with colocated tests in src/ caused 18 test failures per round.
+for f in $staged_files; do
+  case "$f" in
+    packages/browseros-agent/apps/server/tests/*)
+      # Extract the test filename
+      basename=$(basename "$f")
+      # Check if a src/ colocated version exists
+      # Map: tests/agent/X.test.ts → src/agent/X.test.ts
+      #       tests/api/routes/X.test.ts → src/api/routes/X.test.ts
+      src_path=$(echo "$f" | sed 's|packages/browseros-agent/apps/server/tests/|packages/browseros-agent/apps/server/src/|')
+      if [ -f "$ROOT_DIR/$src_path" ]; then
+        echo "[coding-guard] ❌ Duplicate test: $f"
+        echo "   Colocated version exists: $src_path"
+        echo "   Delete the tests/ version — it will conflict with the src/ version."
+        echo "   (Codified from PR #18/#19 verifier loop: 3 rounds of 18+ failures from stale tests)"
+        errors=$((errors + 1))
+      fi
+      ;;
+  esac
+done
+
+# ── Gate 9: Hardcoded route path for session history (blocking) ──
+# Codified from verifier loop Round 1-3: hardcoded 'main' in route path
+# breaks multi-session history fetch (404 for all non-main sessions).
+for f in $staged_files; do
+  target="$ROOT_DIR/$f"
+  [ -f "$target" ] || continue
+  case "$f" in
+    *server/src/api/routes/agents.ts)
+      hardcoded=$(grep -nE "sessions/main/history" "$target" 2>/dev/null || true)
+      if [ -n "$hardcoded" ]; then
+        echo "[coding-guard] ❌ Hardcoded 'main' in session history route in $f:"
+        echo "$hardcoded"
+        echo "   Use '/:agentId/sessions/:sessionId/history' instead."
+        echo "   (Codified from PR #18/#19 verifier loop: multi-session 404 bug)"
+        errors=$((errors + 1))
+      fi
+      ;;
+  esac
+done
+
 # ── Result ────────────────────────────────────────────────────────
 if [ "$errors" -gt 0 ]; then
   echo ""
@@ -194,4 +239,4 @@ elif [ "$warnings" -gt 0 ]; then
   echo "[coding-guard] ⚠️  $warnings warning(s) — review recommended"
 fi
 
-echo "[coding-guard] ✅ All 7 gates passed"
+echo "[coding-guard] ✅ All 9 gates passed"
