@@ -1,3 +1,4 @@
+<!-- status: DONE — merged via PR #11, then enhanced by PR #18 (composite key, workspace schema, agents-md-loader) -->
 # Session Management Backend — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `subagent-driven-development` or `executing-plans`. Steps use checkbox (`- [ ]`) syntax for tracking.

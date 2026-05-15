@@ -1,3 +1,4 @@
+<!-- status: DONE — implementation verification report for PR #15 (slash commands) -->
 # Implementation Verification Report: Slash Commands
 
 **Verifier:** @V

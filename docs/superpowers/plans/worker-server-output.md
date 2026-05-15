@@ -1,3 +1,4 @@
+<!-- status: DONE — worker output from team run for slash commands -->
 # Server Worker Output — Slash Commands
 
 **Date:** 2026-05-14

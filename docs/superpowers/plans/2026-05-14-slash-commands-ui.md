@@ -1,3 +1,4 @@
+<!-- status: DONE — merged via PR #15 (feat(slash-commands): /command autocomplete + settings page + custom commands) -->
 # Plan: Slash Commands in BrowserOS Chat UI
 
 **Date:** 2026-05-14

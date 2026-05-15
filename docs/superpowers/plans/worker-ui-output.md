@@ -1,3 +1,4 @@
+<!-- status: DONE — worker output from team run for slash commands -->
 # @ui-worker Output
 
 **Date:** 2026-05-14
