@@ -224,13 +224,9 @@ function AgentConversationController({
   }, [agentId, disabled, historyReady, initialMessage, initialMessageKey])
 
   const handleSelectAgent = (entry: AgentEntry) => {
-    // Navigate to agent with session context; default session ('main')
-    // uses the base path without explicit session ID.
-    if (sessionId && sessionId !== 'main') {
-      navigate(`${agentPathPrefix}/${entry.agentId}/s/${sessionId}`)
-    } else {
-      navigate(`${agentPathPrefix}/${entry.agentId}`)
-    }
+    // Session IDs are scoped per-agent — never carry a sessionId
+    // across agent boundaries. Navigate to the base agent path.
+    navigate(`${agentPathPrefix}/${entry.agentId}`)
   }
 
   return (
@@ -415,11 +411,9 @@ export const AgentCommandConversation: FC<AgentCommandConversationProps> = ({
   }
 
   const handleSelectHarnessAgent = (target: HarnessAgent) => {
-    if (sessionId && sessionId !== 'main') {
-      navigate(`${agentPathPrefix}/${target.id}/s/${sessionId}`)
-    } else {
-      navigate(`${agentPathPrefix}/${target.id}`)
-    }
+    // Session IDs are scoped per-agent — never carry a sessionId
+    // across agent boundaries. Navigate to the base agent path.
+    navigate(`${agentPathPrefix}/${target.id}`)
   }
 
   const handlePinToggle = (target: HarnessAgent | null, next: boolean) => {

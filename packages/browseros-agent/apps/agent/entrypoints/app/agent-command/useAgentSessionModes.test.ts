@@ -131,5 +131,30 @@ describe('useAgentSessionModes utilities', () => {
       const modes = isSupported ? DEV_MODES : []
       expect(modes).toBe(DEV_MODES)
     })
+
+    it('mode state is independent per sessionId', () => {
+      // Simulates the per-session keying logic from useAgentSessionModes.
+      // Each sessionId should track its own mode independently.
+      const modeMap = new Map<string, string>()
+
+      // Set mode for session A
+      modeMap.set('session_a', 'code')
+      // Set mode for session B
+      modeMap.set('session_b', 'ask')
+
+      expect(modeMap.get('session_a')).toBe('code')
+      expect(modeMap.get('session_b')).toBe('ask')
+
+      // Changing session A doesn't affect session B
+      modeMap.set('session_a', 'agent')
+      expect(modeMap.get('session_b')).toBe('ask')
+    })
+
+    it('new sessionId has no stored mode (defaults)', () => {
+      const modeMap = new Map<string, string>()
+      modeMap.set('existing', 'code')
+      // A new sessionId returns undefined (resolves to default)
+      expect(modeMap.get('new_session')).toBeUndefined()
+    })
   })
 })

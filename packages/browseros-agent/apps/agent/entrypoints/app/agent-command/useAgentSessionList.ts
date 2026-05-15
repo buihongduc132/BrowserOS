@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { AgentSessionListStore } from './agent-session-list-store'
 import type { AgentSession } from './agent-session-list-types'
 
@@ -20,20 +20,20 @@ export interface UseAgentSessionListReturn {
  * purely in local state with localStorage persistence.
  */
 export function useAgentSessionList(agentId: string): UseAgentSessionListReturn {
-  // Ref holds the store instance; state triggers re-renders.
-  const storeRef = useRef<AgentSessionListStore | null>(null)
-  if (!storeRef.current) {
-    storeRef.current = new AgentSessionListStore(agentId)
-  }
-  const store = storeRef.current
-
-  // Replace store if agentId changes (rare — user switching agents)
-  if (storeRef.current && store['agentId'] !== agentId) {
-    storeRef.current = new AgentSessionListStore(agentId)
-  }
+  // Store is recreated when agentId changes — no stale cross-agent state.
+  const store = useMemo(() => new AgentSessionListStore(agentId), [agentId])
 
   const [sessions, setSessions] = useState<AgentSession[]>(() => store.getAll())
   const [search, setSearch] = useState('')
+
+  // Re-sync sessions when the store instance changes (agentId changed).
+  // This avoids reading from the old agent's localStorage.
+  const [prevAgentId, setPrevAgentId] = useState(agentId)
+  if (prevAgentId !== agentId) {
+    setPrevAgentId(agentId)
+    setSessions(store.getAll())
+    setSearch('')
+  }
 
   const filteredSessions = useMemo(
     () => store.getFiltered(search),

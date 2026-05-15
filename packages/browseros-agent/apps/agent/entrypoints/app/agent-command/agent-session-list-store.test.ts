@@ -212,4 +212,20 @@ describe('AgentSessionListStore', () => {
       expect(storeB.count).toBe(1)
     })
   })
+
+  describe('agentId getter', () => {
+    it('exposes the agentId the store is scoped to', () => {
+      mockLocalStorage()
+      const store = new AgentSessionListStore('my_agent')
+      expect(store.agentId).toBe('my_agent')
+    })
+
+    it('returns correct agentId after operations', () => {
+      mockLocalStorage()
+      const store = new AgentSessionListStore('agent_x')
+      store.createSession()
+      store.createSession()
+      expect(store.agentId).toBe('agent_x')
+    })
+  })
 })

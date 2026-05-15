@@ -12,10 +12,10 @@ import {
  */
 export class AgentSessionListStore {
   private sessions: AgentSession[]
-  private agentId: string
+  #agentId: string
 
   constructor(agentId: string, initial?: AgentSession[]) {
-    this.agentId = agentId
+    this.#agentId = agentId
     this.sessions = initial ?? this.loadFromStorage()
   }
 
@@ -37,7 +37,7 @@ export class AgentSessionListStore {
     const now = Date.now()
     const session: AgentSession = {
       sessionId,
-      agentId: this.agentId,
+      agentId: this.#agentId,
       title: null,
       lastMessagePreview: null,
       lastMessageAt: null,
@@ -76,6 +76,11 @@ export class AgentSessionListStore {
     this.saveToStorage()
   }
 
+  /** The agentId this store is scoped to. */
+  get agentId(): string {
+    return this.#agentId
+  }
+
   /** Count of sessions for this agent. */
   get count(): number {
     return this.sessions.length
@@ -84,7 +89,7 @@ export class AgentSessionListStore {
   // -- persistence (localStorage, keyed per agent) --
 
   private storageKey(): string {
-    return `${SESSION_LIST_STORAGE_KEY}:${this.agentId}`
+    return `${SESSION_LIST_STORAGE_KEY}:${this.#agentId}`
   }
 
   private loadFromStorage(): AgentSession[] {

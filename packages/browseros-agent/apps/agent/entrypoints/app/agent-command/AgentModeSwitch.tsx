@@ -38,6 +38,7 @@ export const AgentModeSwitch: FC<AgentModeSwitchProps> = ({
             variant="ghost"
             size="sm"
             onClick={() => setMode(mode.id)}
+            aria-pressed={active}
             className={cn(
               'h-6 rounded-md px-2.5 text-[11px] font-medium',
               active && 'bg-background shadow-sm text-foreground',
