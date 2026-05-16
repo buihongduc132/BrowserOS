@@ -967,7 +967,7 @@ describe('createAgentRoutes – ACP slash commands', () => {
     expect(response.status).toBe(200)
     const body = await response.text()
     expect(body).toContain('slash-test-agent')
-    expect(body).toContain('main')
+    expect(body).toContain('00000000-0000-4000-8000-000000000002')
   })
 
   it('returns error for unknown command', async () => {

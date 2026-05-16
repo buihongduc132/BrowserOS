@@ -17,6 +17,8 @@ import { createAcpUIMessageStreamResponse } from '../../lib/agents/acp-ui-messag
 import { createSyntheticCommandStream } from './acp-command-response'
 import { dispatchCommand } from './acp-slash-commands-builtins'
 import type { OpenclawGatewayAccessor } from '../../lib/agents/acpx-runtime'
+import { dispatchCommand } from './acp-slash-commands-builtins'
+import { createSyntheticCommandStream } from './acp-command-response'
 import type {
   ActiveTurnInfo,
   TurnFrame,
@@ -243,6 +245,23 @@ export function createAgentRoutes(deps: AgentRouteDeps = {}) {
             browserContext,
           )
         }
+
+          // Dispatch ACP slash commands before startTurn
+          const cmdResult = await dispatchCommand(parsed.message, {
+            agentId: agent.id,
+            conversationId: parsed.conversationId,
+            sessionId: parsed.conversationId,
+          })
+          if (cmdResult.type === 'handled') {
+            return createAcpUIMessageStreamResponse(
+              createSyntheticCommandStream(cmdResult.response ?? ''),
+            )
+          }
+          if (cmdResult.type === 'error') {
+            return createAcpUIMessageStreamResponse(
+              createSyntheticCommandStream(cmdResult.error ?? 'Unknown error'),
+            )
+          }
 
           let started: { turnId: string; frames: ReadableStream<TurnFrame> }
           try {

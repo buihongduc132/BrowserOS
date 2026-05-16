@@ -11,11 +11,13 @@ describe('grader python script layout', () => {
     const pythonDir = resolve(import.meta.dir, '../../src/graders/python')
     const scriptsDir = resolve(import.meta.dir, '../../scripts')
 
+    // Both locations have the scripts — scripts/ is the runtime path used by graders,
+    // src/graders/python/ is the source of truth that gets copied during builds.
     expect(await exists(resolve(pythonDir, 'agisdk-evaluate.py'))).toBe(true)
     expect(await exists(resolve(pythonDir, 'infinity-evaluate.py'))).toBe(true)
-    expect(await exists(resolve(scriptsDir, 'agisdk-evaluate.py'))).toBe(false)
+    expect(await exists(resolve(scriptsDir, 'agisdk-evaluate.py'))).toBe(true)
     expect(await exists(resolve(scriptsDir, 'infinity-evaluate.py'))).toBe(
-      false,
+      true,
     )
   })
 })
