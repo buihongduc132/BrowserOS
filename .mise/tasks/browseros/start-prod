@@ -1,26 +1,127 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # start-prod — Launch BrowserOS prod instance (AppImage with embedded server)
-# Prod uses ports 9000/9100/9300. Dev uses 9010/9110/9310. No conflict.
-REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+# GUARD: Refuses to restart if prod is already running and healthy.
+# Override: BROWSEROS_FORCE_RESTART_PROD=1 mise run browseros:start-prod
+#           BROWSEROS_FORCE_KILL_PROD=1  (passed through to kill-prod)
+#
+# Detection: PROD is identified by its fixed ports (9105/9200/9300), NOT by
+# --user-data-dir flag (AppImage doesn't pass it as a CLI arg).
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "${SCRIPT_DIR}/../../../scripts/ports.sh"
+
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 APPIMAGE="${BROWSEROS_APP_PATH:-$HOME/Downloads/alta/BrowserOS.AppImage}"
+
 if [[ ! -f "$APPIMAGE" ]]; then
   echo "[ERROR] BrowserOS AppImage not found: $APPIMAGE" >&2
   echo "        Set BROWSEROS_APP_PATH or install to ~/Downloads/alta/" >&2
   exit 1
 fi
 
-# Only kill existing PROD instance (match by user-data-dir, NOT all BrowserOS)
 PROD_PROFILE="$HOME/.config/browser-os"
-if ps aux | grep -v grep | grep -q "user-data-dir=$PROD_PROFILE"; then
-  echo "[start-prod] Stopping existing prod instance..."
-  ps aux | grep -v grep | grep "user-data-dir=$PROD_PROFILE" | awk '{print $2}' | xargs kill 2>/dev/null || true
-  sleep 2
+force_restart="${BROWSEROS_FORCE_RESTART_PROD:-}"
+
+# ── Guard: check if prod is already running and healthy ────────────────
+prod_running=false
+for port in "$PROD_SERVER_PORT" "$PROD_CDP_PORT"; do
+  if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
+    prod_running=true
+    break
+  fi
+done
+
+if $prod_running; then
+  health_response=""
+  health_response=$(curl -sf --max-time 3 "http://localhost:${PROD_SERVER_PORT}/health" 2>/dev/null) || true
+
+  if [[ -n "$health_response" ]] && echo "$health_response" | grep -q '"status":"ok"'; then
+    if [[ "$force_restart" != "1" ]]; then
+      echo "" >&2
+      echo "╔══════════════════════════════════════════════════════════╗" >&2
+      echo "║  ⛔ PROD is already running and healthy.                ║" >&2
+      echo "║  No action taken.                                       ║" >&2
+      echo "║                                                          ║" >&2
+      echo "║  If you REALLY need to restart:                          ║" >&2
+      echo "║  BROWSEROS_FORCE_RESTART_PROD=1 \\                       ║" >&2
+      echo "║    mise run browseros:start-prod                         ║" >&2
+      echo "╚══════════════════════════════════════════════════════════╝" >&2
+      echo "" >&2
+      exit 0
+    else
+      echo "[start-prod] ⚠️  FORCE RESTART requested — stopping existing prod..." >&2
+      export BROWSEROS_FORCE_KILL_PROD="${BROWSEROS_FORCE_KILL_PROD:-1}"
+      "${SCRIPT_DIR}/kill-prod"
+      sleep 2
+    fi
+  else
+    # Running but unhealthy — ok to restart without guard
+    echo "[start-prod] Prod is running but unhealthy — restarting..."
+    export BROWSEROS_FORCE_KILL_PROD=1
+    "${SCRIPT_DIR}/kill-prod"
+    sleep 2
+  fi
 fi
 
-# Clean stale singleton locks for prod profile only
+# ── Pre-seed server_config.json with fixed PROD ports ─────────────────
+SERVER_CONFIG_DIR="${PROD_PROFILE}/.browseros"
+SERVER_CONFIG="${SERVER_CONFIG_DIR}/server_config.json"
+FIXED_PORTS="{\"cdp\":${PROD_CDP_PORT},\"server\":${PROD_SERVER_PORT},\"extension\":${PROD_EXTENSION_PORT}}"
+
+mkdir -p "$SERVER_CONFIG_DIR" 2>/dev/null || true
+
+if [[ -f "$SERVER_CONFIG" ]]; then
+  EXISTING_PORTS=$(python3 -c "
+import json, sys
+with open('$SERVER_CONFIG') as f:
+    cfg = json.load(f)
+p = cfg.get('ports', {})
+print(json.dumps(p))
+" 2>/dev/null || echo "{}")
+
+  if [[ "$EXISTING_PORTS" != "$FIXED_PORTS" ]]; then
+    echo "[start-prod] Fixing drifted ports: ${EXISTING_PORTS} → ${FIXED_PORTS}"
+    python3 -c "
+import json
+with open('$SERVER_CONFIG') as f:
+    cfg = json.load(f)
+cfg['ports'] = json.loads('${FIXED_PORTS}')
+with open('$SERVER_CONFIG', 'w') as f:
+    json.dump(cfg, f, indent=4)
+" 2>/dev/null
+  fi
+else
+  echo "[start-prod] Creating server_config.json with fixed ports"
+  RESOURCE_PATH="/opt/browseros/BrowserOSServer/default/resources"
+  MOUNTED_RESOURCE=$(find /tmp/.mount_Browse*/opt/browseros/BrowserOSServer/default/resources -maxdepth 0 -type d 2>/dev/null | head -1)
+  if [[ -n "$MOUNTED_RESOURCE" ]]; then
+    RESOURCE_PATH="$MOUNTED_RESOURCE"
+  fi
+
+  python3 -c "
+import json
+cfg = {
+    'directories': {
+        'execution': '${SERVER_CONFIG_DIR}',
+        'resources': '${RESOURCE_PATH}'
+    },
+    'flags': {'allow_remote_in_mcp': False},
+    'instance': {
+        'browseros_version': '0.0.0',
+        'chromium_version': '0.0.0',
+        'install_id': ''
+    },
+    'ports': json.loads('${FIXED_PORTS}')
+}
+with open('${SERVER_CONFIG}', 'w') as f:
+    json.dump(cfg, f, indent=4)
+" 2>/dev/null
+fi
+
+# ── Clean stale singleton locks ────────────────────────────────────────
 rm -f "$PROD_PROFILE/SingletonLock" "$PROD_PROFILE/SingletonCookie" "$PROD_PROFILE/SingletonSocket" 2>/dev/null
 
-echo "[start-prod] Launching on ports 9000/9100/9300..."
+# ── Launch ─────────────────────────────────────────────────────────────
+echo "[start-prod] Launching BrowserOS (ports: CDP=$PROD_CDP_PORT Server=$PROD_SERVER_PORT Ext=$PROD_EXTENSION_PORT)"
 exec "$APPIMAGE" --class=browseros

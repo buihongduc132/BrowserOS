@@ -28,6 +28,7 @@ const (
 	randomPortMax = 9999
 )
 
+// These MUST match scripts/ports.sh DEV_*_PORT values. Single source of truth.
 var defaultLocalPorts = Ports{CDP: 9010, Server: 9011, Extension: 9012}
 
 func DefaultLocalPorts() Ports {
