@@ -45,6 +45,20 @@ wait_cdp 30
 # ── Trigger extension loading (CDP tab creation bypasses profile picker gate) ──
 trigger_extensions
 
+# ── Validate dev extension loaded ──
+python3 - "$INSTANCE_CDP_PORT" <<'PY'
+import json, urllib.request, sys
+port = sys.argv[1]
+try:
+    req = urllib.request.Request(f"http://localhost:{port}/json/list")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        tabs = json.loads(resp.read())
+    dev_ext = [t for t in tabs if t.get("url","").startswith("chrome-extension://") and "background" in t.get("url","")]
+    print(f"[validate] {len(dev_ext)} extension service workers active")
+except Exception as e:
+    print(f"[WARN] Could not validate extensions: {e}", file=sys.stderr)
+PY
+
 # ── Start dev server ──
 start_dev_server
 
