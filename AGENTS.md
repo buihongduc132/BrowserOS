@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **BrowserOS** (24264 symbols, 48503 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **BrowserOS** (24270 symbols, 48509 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -73,9 +73,29 @@ BrowserOS uses a Go-based CLI (`browseros-dev`) for local dev lifecycle, invoked
 | Variable | Default | Description |
 |----------|---------|------------|
 | `BROWSEROS_APP_PATH` | `~/Downloads/alta/BrowserOS.AppImage` | Path to BrowserOS AppImage |
-| `BROWSEROS_CDP_PORT` | `9104` (prod) / `9010` (dev) | Chrome DevTools Protocol port |
-| `BROWSEROS_SERVER_PORT` | `9110` (prod) / `9115` (dev) | Unified server HTTP port |
-| `BROWSEROS_EXTENSION_PORT` | `9300` (prod) / `9305` (dev) | Extension port |
+| `BROWSEROS_FORCE_KILL_PROD` | unset | Set to `1` to bypass prod kill guard |
+
+### Port Allocation (FIXED — scripts/ports.sh)
+
+**Single source of truth:** `scripts/ports.sh` — edit ONLY there.
+
+| Instance | CDP | Server | Extension | Profile |
+|----------|-----|--------|-----------|----------|
+| **PROD** | 9105 | 9200 | 9300 | `~/.config/browser-os` |
+| **DEV** | 9010 | 9011 | 9012 | `~/.browseros-dev-chrome` |
+
+PROD ports are pre-seeded into `~/.config/browser-os/.browseros/server_config.json`.
+If drift is detected on start-prod, it auto-corrects.
+
+### PROD Kill Guard
+
+`mise run browseros:kill-prod` REFUSES to kill prod if the health endpoint
+returns `{"status":"ok"}` or `"cdpConnected":true`. This protects active user sessions.
+
+Override (only if you REALLY need to):
+```
+BROWSEROS_FORCE_KILL_PROD=1 mise run browseros:kill-prod
+```
 
 ### Desktop Entries
 

@@ -1,32 +1,56 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 # status — Show BrowserOS instance status
-echo "=== Prod Ports (from server_config.json) ==="
-if [ -f "$HOME/.config/browser-os/.browseros/server_config.json" ]; then
-  python3 -c "
-import json, sys
-with open('$HOME/.config/browser-os/.browseros/server_config.json') as f:
-    cfg = json.load(f)
-ports = cfg.get('ports', {})
-for k, v in ports.items():
-    import subprocess
-    r = subprocess.run(['ss', '-tlnp'], capture_output=True, text=True)
-    used = f'IN USE (pid=' + str(v) + ')' if f':{v} ' in r.stdout else 'free'
-    print(f'  {k}: {v} — {used}')
-" 2>/dev/null || echo "  Could not read prod config"
+# Uses ports from scripts/ports.sh — single source of truth.
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/../../../scripts/ports.sh"
+
+echo "=== Port Manifest (scripts/ports.sh) ==="
+echo "  PROD:  CDP=$PROD_CDP_PORT  Server=$PROD_SERVER_PORT  Extension=$PROD_EXTENSION_PORT"
+echo "  DEV:   CDP=$DEV_CDP_PORT  Server=$DEV_SERVER_PORT  Extension=$DEV_EXTENSION_PORT"
+
+echo ""
+echo "=== PROD Ports ==="
+for port_name in "CDP:$PROD_CDP_PORT" "Server:$PROD_SERVER_PORT" "Extension:$PROD_EXTENSION_PORT"; do
+  label="${port_name%%:*}"
+  port="${port_name##*:}"
+  if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
+    echo "  $label :$port — IN USE"
+  else
+    echo "  $label :$port — free"
+  fi
+done
+
+echo ""
+echo "=== DEV Ports ==="
+for port_name in "CDP:$DEV_CDP_PORT" "Server:$DEV_SERVER_PORT" "Extension:$DEV_EXTENSION_PORT"; do
+  label="${port_name%%:*}"
+  port="${port_name##*:}"
+  if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
+    echo "  $label :$port — IN USE"
+  else
+    echo "  $label :$port — free"
+  fi
+done
+
+echo ""
+echo "=== PROD Health ==="
+prod_health=$(curl -sf "http://localhost:$PROD_SERVER_PORT/health" 2>/dev/null || echo "")
+if [ -n "$prod_health" ]; then
+  echo "  $prod_health"
 else
-  echo "  No prod server_config.json found"
+  echo "  Not running"
 fi
 
 echo ""
-echo "=== Dev Ports (9010/9011/9012) ==="
-for port in 9010 9011 9012; do
-  if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
-    echo "  :${port} — IN USE (dev)"
-  else
-    echo "  :${port} — free"
-  fi
-done
+echo "=== DEV Health ==="
+dev_health=$(curl -sf "http://localhost:$DEV_SERVER_PORT/health" 2>/dev/null || echo "")
+if [ -n "$dev_health" ]; then
+  echo "  $dev_health"
+else
+  echo "  Not running"
+fi
 
 echo ""
 echo "=== Running BrowserOS processes ==="

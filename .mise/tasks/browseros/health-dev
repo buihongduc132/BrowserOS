@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# health-dev — Check BrowserOS dev instance health (port 9011)
-curl -sf "http://localhost:9011/health" | python3 -m json.tool 2>/dev/null || echo "Dev instance not running"
+# health-dev — Check BrowserOS dev instance health
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "${SCRIPT_DIR}/../../../scripts/ports.sh"
+
+curl -sf "http://localhost:${DEV_SERVER_PORT}/health" | python3 -m json.tool 2>/dev/null || echo "Dev instance not running (port ${DEV_SERVER_PORT})"
