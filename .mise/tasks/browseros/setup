@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# browseros:setup — First-time bootstrap / prerequisite verification
-# Run once after cloning or when env changes. Safe to re-run idempotently.
+# browseros:setup — Idempotent bootstrap. Zero prior state required.
+# Safe to run on fresh clone, after machine restart, or at any time.
+# Creates everything needed for both dev and prod to work.
+#
+# After this succeeds, these commands will work:
+#   mise run browseros:start-dev
+#   mise run browseros:start-prod
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 [[ -d "${REPO_ROOT}/packages/browseros-agent" ]] || REPO_ROOT="$(pwd)"
 
 PASS=0
 FAIL=0
+FIXED=0
 # Note: use VAR=$((VAR+1)) not ((VAR++)) — the latter fails under set -e when VAR was 0
 
 check() {
@@ -15,15 +21,16 @@ check() {
   if "$@" &>/dev/null; then
     printf "  ✓ %s\n" "$label"
     PASS=$((PASS+1))
+    return 0
   else
     printf "  ✗ %s\n" "$label"
     FAIL=$((FAIL+1))
+    return 1
   fi
 }
 
 check_version() {
   local label="$1" min_ver="$2" current_ver="$3"
-  # Compare semver: split by '.', compare numerically
   local IFS='.'
   read -ra MIN <<< "$min_ver"
   read -ra CUR <<< "$current_ver"
@@ -43,31 +50,34 @@ check_version() {
   fi
 }
 
-echo "╔═══════════════════════════════════════════════════╗"
-echo "║  BrowserOS Dev Setup — Prerequisite Check        ║"
-echo "╚═══════════════════════════════════════════════════╝"
+echo "╔═══════════════════════════════════════════════════════════╗"
+echo "║  BrowserOS Setup — Idempotent Bootstrap                  ║"
+echo "║  Safe to re-run at any time. Creates all needed state.   ║"
+echo "╚═══════════════════════════════════════════════════════════╝"
 echo ""
 
-# ── 1. Go ≥ 1.21 ──
+# ═══════════════════════════════════════════════════════════════
+#  PHASE 1: Prerequisites (cannot auto-fix — must be installed)
+# ═══════════════════════════════════════════════════════════════
+echo "── Phase 1: Prerequisites ──"
+
 if command -v go &>/dev/null; then
   GO_VER=$(go version 2>/dev/null | grep -oP 'go\K[0-9]+\.[0-9]+' | head -1)
-  check_version "Go" "1.21" "${GO_VER}.0"
+  check_version "Go ≥ 1.21" "1.21" "${GO_VER}.0"
 else
-  echo "  ✗ Go (not found — install via brew install go)"
+  echo "  ✗ Go (not found — install: brew install go)"
   FAIL=$((FAIL+1))
 fi
 
-# ── 2. Bun ──
 if command -v bun &>/dev/null; then
   BUN_VER=$(bun --version 2>/dev/null)
   printf "  ✓ Bun (v%s)\n" "$BUN_VER"
   PASS=$((PASS+1))
 else
-  echo "  ✗ Bun (not found — install via curl -fsSL https://bun.sh/install | bash)"
+  echo "  ✗ Bun (not found — install: curl -fsSL https://bun.sh/install | bash)"
   FAIL=$((FAIL+1))
 fi
 
-# ── 3. Python3 ──
 if command -v python3 &>/dev/null; then
   PY_VER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
   printf "  ✓ Python3 (v%s)\n" "$PY_VER"
@@ -77,72 +87,166 @@ else
   FAIL=$((FAIL+1))
 fi
 
-# ── 4. mise ──
 check "mise" command -v mise
 
-# ── 5. AppImage ──
 APP="${BROWSEROS_APP_PATH:-$HOME/Downloads/alta/BrowserOS.AppImage}"
 if [ -x "$APP" ]; then
   printf "  ✓ AppImage (%s)\n" "$APP"
   PASS=$((PASS+1))
 else
   printf "  ✗ AppImage (missing or not executable: %s)\n" "$APP"
+  printf "    Set BROWSEROS_APP_PATH or place at default location.\n"
   FAIL=$((FAIL+1))
 fi
 
-# ── 6. Desktop entries ──
-if [ -f "${HOME}/.local/share/applications/browseros.desktop" ] && \
-   [ -f "${HOME}/.local/share/applications/browseros-dev.desktop" ]; then
-  echo "  ✓ Desktop entries (.desktop files exist)"
+if [ "$FAIL" -gt 0 ]; then
+  echo ""
+  echo "  ⚠  Fix prerequisite failures above first, then re-run."
+  exit 1
+fi
+
+# ═══════════════════════════════════════════════════════════════
+#  PHASE 2: Auto-fix (creates missing state, cleans stale state)
+# ═══════════════════════════════════════════════════════════════
+echo ""
+echo "── Phase 2: Idempotent State Setup ──"
+
+# ── State directories ──
+for d in "${HOME}/.browseros-dev" "${HOME}/.browseros" "${HOME}/.browseros/logs"; do
+  mkdir -p "$d" 2>/dev/null || true
+done
+echo "  ✓ State directories created"
+PASS=$((PASS+1))
+
+# ── Stale state cleanup (crash locks, singleton locks, stale PIDs) ──
+for profile in "${HOME}/.config/browser-os" "${HOME}/.browseros-dev-chrome"; do
+  if [[ -d "$profile" ]]; then
+    rm -f "$profile/SingletonLock" "$profile/SingletonCookie" "$profile/SingletonSocket" 2>/dev/null || true
+    rm -f "${profile}/Crash Reports/pending/"*.lock 2>/dev/null || true
+  fi
+done
+rm -f "${HOME}/.browseros/start.lock" "${HOME}/.browseros-dev/start.lock" 2>/dev/null || true
+echo "  ✓ Stale crash locks + singleton locks cleaned"
+PASS=$((PASS+1))
+
+# ── Stale PID files (PIDs from previous boot are dead) ──
+for pidfile in "${HOME}/.browseros/browser.pid" "${HOME}/.browseros/server.pid" \
+               "${HOME}/.browseros-dev/browser.pid" "${HOME}/.browseros-dev/server.pid"; do
+  if [[ -f "$pidfile" ]]; then
+    pid=$(cat "$pidfile" 2>/dev/null) || continue
+    if ! kill -0 "$pid" 2>/dev/null; then
+      rm -f "$pidfile"
+    fi
+  fi
+done
+echo "  ✓ Stale PID files cleaned"
+PASS=$((PASS+1))
+
+# ── .env.development (create from example if missing) ──
+AGENT_ENV="${REPO_ROOT}/packages/browseros-agent/apps/agent/.env.development"
+SERVER_ENV="${REPO_ROOT}/packages/browseros-agent/apps/server/.env.development"
+
+if [[ ! -f "$AGENT_ENV" ]]; then
+  if [[ -f "${AGENT_ENV%.development}.example" ]]; then
+    cp "${AGENT_ENV%.development}.example" "$AGENT_ENV"
+    echo "  ✓ Created .env.development (from example) for agent"
+    FIXED=$((FIXED+1))
+  else
+    touch "$AGENT_ENV"
+    echo "  ✓ Created empty .env.development for agent (all defaults)"
+    FIXED=$((FIXED+1))
+  fi
+else
+  echo "  ✓ .env.development exists for agent"
+fi
+PASS=$((PASS+1))
+
+if [[ ! -f "$SERVER_ENV" ]]; then
+  if [[ -f "${SERVER_ENV%.development}.example" ]]; then
+    cp "${SERVER_ENV%.development}.example" "$SERVER_ENV"
+    echo "  ✓ Created .env.development (from example) for server"
+    FIXED=$((FIXED+1))
+  else
+    touch "$SERVER_ENV"
+    echo "  ✓ Created empty .env.development for server (all defaults)"
+    FIXED=$((FIXED+1))
+  fi
+else
+  echo "  ✓ .env.development exists for server"
+fi
+PASS=$((PASS+1))
+
+# ── Desktop entries (reinstall idempotently) ──
+if bash "${REPO_ROOT}/scripts/setup-desktop-entries.sh" &>/dev/null; then
+  echo "  ✓ Desktop entries installed"
   PASS=$((PASS+1))
 else
-  echo "  → Installing desktop entries..."
-  if bash "${REPO_ROOT}/scripts/setup-desktop-entries.sh" &>/dev/null; then
-    echo "  ✓ Desktop entries (installed)"
+  echo "  ✗ Desktop entries (setup failed — non-fatal)"
+  FAIL=$((FAIL+1))
+fi
+
+# ── Go CLI binary (rebuild if stale) ──
+TOOLS_DIR="${REPO_ROOT}/packages/browseros-agent/tools/dev"
+if (cd "$TOOLS_DIR" && make -q browseros-dev 2>/dev/null); then
+  echo "  ✓ Go CLI (browseros-dev) up to date"
+  PASS=$((PASS+1))
+else
+  if (cd "$TOOLS_DIR" && make 2>/dev/null); then
+    echo "  ✓ Go CLI (browseros-dev) built"
     PASS=$((PASS+1))
+    FIXED=$((FIXED+1))
   else
-    echo "  ✗ Desktop entries (setup failed)"
+    echo "  ✗ Go CLI build failed"
     FAIL=$((FAIL+1))
   fi
 fi
 
-# ── 7. .env.development ──
-ENV_FILE="${REPO_ROOT}/packages/browseros-agent/apps/server/.env.development"
-if [ -f "$ENV_FILE" ]; then
-  printf "  ✓ .env.development\n"
-  PASS=$((PASS+1))
-else
-  printf "  ✗ .env.development (missing: %s)\n" "$ENV_FILE"
-  FAIL=$((FAIL+1))
-fi
-
-# ── 8. Extension build ──
-EXT_DIR="${REPO_ROOT}/packages/browseros-agent/apps/agent/dist/chrome-mv3-dev"
-if [ -d "$EXT_DIR" ]; then
-  printf "  ✓ Extension build (%s)\n" "$EXT_DIR"
-  PASS=$((PASS+1))
-else
-  echo "  ✗ Extension build (not built — run: mise run browseros:build-dev)"
-  FAIL=$((FAIL+1))
-fi
-
-# ── 9. State dirs ──
-mkdir -p "${HOME}/.browseros-dev" "${HOME}/.browseros"
-echo "  ✓ State dirs (~/.browseros-dev, ~/.browseros)"
+# ── Bun install ──
+echo "  → Running bun install..."
+(cd "${REPO_ROOT}/packages/browseros-agent" && bun install --frozen-lockfile &>/dev/null)
+echo "  ✓ Dependencies installed"
 PASS=$((PASS+1))
 
-# ── Summary ──
+# ═══════════════════════════════════════════════════════════════
+#  PHASE 3: Verify (check artifacts that require build steps)
+# ═══════════════════════════════════════════════════════════════
+echo ""
+echo "── Phase 3: Build Artifacts ──"
+
+EXT_DIR="${REPO_ROOT}/packages/browseros-agent/apps/agent/dist/chrome-mv3-dev"
+if [[ -d "$EXT_DIR" ]]; then
+  printf "  ✓ Extension build exists\n"
+  PASS=$((PASS+1))
+else
+  echo "  → Extension not built — building now..."
+  if bash "${REPO_ROOT}/.mise/tasks/browseros/build-dev" &>/dev/null; then
+    echo "  ✓ Extension build created"
+    PASS=$((PASS+1))
+    FIXED=$((FIXED+1))
+  else
+    echo "  ✗ Extension build failed (run manually: mise run browseros:build-dev)"
+    FAIL=$((FAIL+1))
+  fi
+fi
+
+# ═══════════════════════════════════════════════════════════════
+#  Summary
+# ═══════════════════════════════════════════════════════════════
 echo ""
 echo "───────────────────────────────────────────────────"
 TOTAL=$((PASS + FAIL))
 if [ "$FAIL" -eq 0 ]; then
-  printf "  All %d checks passed. Ready to develop.\n" "$TOTAL"
+  printf "  All %d checks passed." "$TOTAL"
+  [ "$FIXED" -gt 0 ] && printf " (%d auto-fixed)" "$FIXED"
+  printf "\n"
   echo ""
-  echo "  Quick start:"
-  echo "    mise run browseros:restart-dev"
+  echo "  Ready. Launch with:"
+  echo "    mise run browseros:start-dev      # dev (browser + bun server)"
+  echo "    mise run browseros:start-prod     # prod (AppImage + embedded server)"
+  echo "    mise run browseros:restart-dev    # kill + rebuild + start dev"
   exit 0
 else
-  printf "  %d/%d checks passed, %d failed.\n" "$PASS" "$TOTAL" "$FAIL"
+  printf "  %d/%d passed, %d failed.\n" "$PASS" "$TOTAL" "$FAIL"
   echo "  Fix the ✗ items above, then re-run: mise run browseros:setup"
   exit 1
 fi

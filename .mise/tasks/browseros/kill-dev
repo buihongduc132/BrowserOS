@@ -1,57 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# kill-dev — Stop BrowserOS dev instance
+# Delegates to instance.sh kill_instance for unified kill logic.
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 [[ -d "${REPO_ROOT}/packages/browseros-agent" ]] || REPO_ROOT="$(pwd)"
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "${REPO_ROOT}/scripts/launch/common.sh"
+source "${REPO_ROOT}/scripts/launch/instance.sh"
+declare_instance dev
 
 echo "=== browseros:kill-dev ==="
-
-# ── Stop systemd services first (they use same ports) ──
-systemctl --user stop browser-os-dev-server 2>/dev/null || true
-systemctl --user stop browser-os-dev-app 2>/dev/null || true
-
-# ── Kill dev browser (entire process tree to catch GPU/renderer/zygote) ──
-if is_browser_running "$DEV_BROWSER_PID"; then
-  PID=$(cat "$DEV_BROWSER_PID")
-  echo "[kill] Stopping dev browser (PID $PID) and process tree..."
-  # Verify it's actually a BrowserOS dev process before tree kill
-  if verify_pid "$PID" "browseros-dev-chrome" || verify_pid "$PID" "BrowserOS"; then
-    kill_tree "$PID"
-  else
-    echo "[WARN] PID $PID cmdline mismatch — falling back to single-process kill" >&2
-    kill_by_pidfile "$DEV_BROWSER_PID" "browseros-dev-chrome"
-  fi
-  rm -f "$DEV_BROWSER_PID"
-else
-  echo "[kill] Browser not running."
-fi
-
-# ── Kill dev server (entire process tree to catch bun children) ──
-if [[ -f "$DEV_SERVER_PID" ]]; then
-  PID=$(cat "$DEV_SERVER_PID")
-  if kill -0 "$PID" 2>/dev/null; then
-    echo "[kill] Stopping dev server (PID $PID) and process tree..."
-    kill_tree "$PID"
-  else
-    echo "[kill] Server already dead (PID $PID)."
-  fi
-  rm -f "$DEV_SERVER_PID"
-else
-  echo "[kill] Server not running."
-fi
-
-# ── Fallback: kill orphans by port (PID file may be missing/wrong) ──
-kill_port_orphan "$DEV_SERVER_PORT" "bun"
-kill_port_orphan "$DEV_CDP_PORT" "browseros"
-
-# ── Clean singleton locks if no browser process exists ──
-if ! is_browser_running "$DEV_BROWSER_PID"; then
-  clean_singleton_locks "$DEV_PROFILE"
-fi
-
-# ── Clean stale start lock (flock releases on process death, but file lingers) ──
-rm -f "${DEV_BOS_DIR}/start.lock" 2>/dev/null || true
-
+kill_instance
 echo "=== kill-dev done ==="

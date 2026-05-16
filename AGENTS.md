@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **BrowserOS** (24146 symbols, 48373 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **BrowserOS** (24239 symbols, 48476 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -85,6 +85,22 @@ BrowserOS uses a Go-based CLI (`browseros-dev`) for local dev lifecycle, invoked
 | `browseros-dev.desktop` | BrowserOS (Dev) | `browseros-dev` (β badge overlay) | Dev instance w/ custom profile + ports |
 
 Installed via `scripts/setup-desktop-entries.sh`. Dev icon gets green **β** badge via PIL overlay.
+
+---
+
+## Dev Launch — Known Pitfalls
+
+> Full details: `flow/findings/dev-launch-stability.md`
+
+| # | Pitfall | Fix | Finding |
+|---|---------|-----|---------|
+| F1 | `--disable-browseros-extensions` blocks ALL extension loading | Don't use it; let bundled extensions load + overlay with `--load-extension` | F1 |
+| F2 | Profile picker gates `--load-extension` until tab created | `trigger_extensions()` creates 2 CDP tabs to bypass | F2 |
+| F3 | Dev `.desktop` had `Terminal=true` | Changed to `Terminal=false` | F3 |
+| F4 | `StartupWMClass=chromium-browser` didn't match `--class` | Use `StartupWMClass=browseros` / `browseros-dev` | F4 |
+| F5 | WXT `--mode development` injects HMR into extension | Use plain `wxt build`, copy to `chrome-mv3-dev/` | F5 |
+| F6 | AppArmor userns blocks Chromium sandbox on Ubuntu 24.04+ | Sysctl `apparmor_restrict_unprivileged_userns=0` | F6 |
+| F7 | Copying prod profile to dev causes picker drift | Fresh profile per instance, no cross-pollination | F7 |
 
 ---
 

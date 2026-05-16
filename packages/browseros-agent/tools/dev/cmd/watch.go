@@ -40,10 +40,8 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := ensureLimactlPresent(); err != nil {
-		return err
-	}
-
+	// Lima is only needed for containerized builds (cleanup --target dogfish),
+	// not for local dev watch. Removed hard gate — Lima is checked only where needed.
 	defaultPorts, err := resolveTargetPorts(root, "")
 	if err != nil {
 		return err
@@ -219,6 +217,8 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// ensureLimactlPresent checks that Lima is installed.
+// Only called by commands that actually need Lima (e.g. dogfish cleanup).
 func ensureLimactlPresent() error {
 	if _, err := exec.LookPath("limactl"); err != nil {
 		return fmt.Errorf("%s %s",
