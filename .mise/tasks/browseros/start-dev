@@ -1,166 +1,57 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# mise executes this from the project root (where .mise.toml lives)
+# start-dev — Launch BrowserOS dev instance (browser + server)
+# Delegates to instance.sh for all shared logic.
+# mise dependency: browseros:build-dev (defined in .mise.toml)
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 [[ -d "${REPO_ROOT}/packages/browseros-agent" ]] || REPO_ROOT="$(pwd)"
-cd "${REPO_ROOT}/packages/browseros-agent"
 
 source "${REPO_ROOT}/scripts/launch/common.sh"
+source "${REPO_ROOT}/scripts/launch/instance.sh"
+declare_instance dev
 
-APP="${BROWSEROS_APP_PATH:-$HOME/Downloads/alta/BrowserOS.AppImage}"
-EXT_DIR="apps/agent/dist/chrome-mv3-dev"
-BROWSER_LOG="/tmp/browseros-dev-browser.log"
-SERVER_LOG="/tmp/browseros-dev-server.log"
-
-# ── Fallback cleanup on ANY failure (fixes H2) ──
+# ── Fallback cleanup on failure ──
 cleanup_on_failure() {
   echo "[cleanup] start-dev failed — cleaning up orphaned processes..." >&2
-  bash "${REPO_ROOT}/.mise/tasks/browseros/kill-dev" 2>/dev/null || true
-  # Show last error lines from server log for diagnostics
-  if [ -f "$SERVER_LOG" ]; then
+  kill_instance
+  if [ -f "$INSTANCE_SERVER_LOG" ]; then
     echo "" >&2
     echo "=== Server log (last 20 lines) ===" >&2
-    tail -20 "$SERVER_LOG" >&2
+    tail -20 "$INSTANCE_SERVER_LOG" >&2
   fi
 }
 trap cleanup_on_failure ERR
 
-# ── Ensure state dirs exist (mkdir only, NEVER rm) ──
-mkdir -p "$DEV_PROFILE" "$DEV_BOS_DIR"
+# ── Pre-flight checks (dirs, singleton, ports) ──
+preflight_checks
 
-# ── Singleton guard with flock (fixes H3) ──
-LOCK_FD=200
-eval "exec $LOCK_FD>\"${DEV_BOS_DIR}/start.lock\""
-flock -n $LOCK_FD || {
-  echo "[ERROR] Another start-dev is already running (lock held)." >&2
-  echo "        If stale, remove ${DEV_BOS_DIR}/start.lock" >&2
-  exit 1
-}
+# ── Ensure desktop entries exist ──
+ensure_desktop_entries
 
-# ── Check if browser already running via PID file (fixes M1) ──
-if is_browser_running "$DEV_BROWSER_PID"; then
-  OLD_PID=$(cat "$DEV_BROWSER_PID")
-  echo "[ERROR] Dev browser already running (PID $OLD_PID)." >&2
-  echo "        Run 'mise run browseros:kill-dev' first." >&2
+# ── Check extension build ──
+ext_dir="${REPO_ROOT}/packages/browseros-agent/${INSTANCE_EXT_DIR}"
+if [ ! -d "$ext_dir" ]; then
+  echo "[ERROR] Dev extension build missing: $ext_dir" >&2
+  echo "        Run: mise run browseros:build-dev" >&2
   exit 1
 fi
 
-# ── Pre-flight: auto-cleanup orphans on BOTH ports ──
-# Instead of just erroring, kill any orphan that's squatting on our ports.
-# This prevents the recurring 'port collision' from untracked processes.
-if port_in_use "$DEV_CDP_PORT"; then
-  echo "[preflight] CDP port $DEV_CDP_PORT occupied — attempting orphan cleanup..."
-  kill_port_orphan "$DEV_CDP_PORT" "browseros"
-  sleep 1
-  if port_in_use "$DEV_CDP_PORT"; then
-    echo "[ERROR] CDP port $DEV_CDP_PORT still in use after cleanup." >&2
-    echo "        Run 'mise run browseros:kill-dev' first." >&2
-    exit 1
-  fi
-fi
-if port_in_use "$DEV_SERVER_PORT"; then
-  echo "[preflight] Server port $DEV_SERVER_PORT occupied — attempting orphan cleanup..."
-  kill_port_orphan "$DEV_SERVER_PORT" "bun"
-  sleep 1
-  if port_in_use "$DEV_SERVER_PORT"; then
-    echo "[ERROR] Server port $DEV_SERVER_PORT still in use after cleanup." >&2
-    echo "        Run 'mise run browseros:kill-dev' first." >&2
-    exit 1
-  fi
-fi
+# ── Launch browser ──
+launch_browser
 
-# ── Pre-flight: check binary and extension ──
-if [ ! -x "$APP" ]; then
-  echo "[ERROR] BrowserOS AppImage missing: $APP" >&2
-  echo "        Set BROWSEROS_APP_PATH env var to override." >&2
-  exit 1
-fi
-if [ ! -d "$EXT_DIR" ]; then
-  echo "[ERROR] Dev extension build missing: $EXT_DIR" >&2
-  exit 1
-fi
+# ── Wait for CDP port ──
+wait_cdp 30
 
-# ── Desktop entries: skip if already installed (prevents GNOME losing track of running window) ──
-# Only regenerate during dev:setup, NOT on every start. See: setup-desktop-entries.sh
-if [ ! -f "${HOME}/.local/share/applications/browseros-dev.desktop" ]; then
-  "$REPO_ROOT/scripts/setup-desktop-entries.sh" 2>/dev/null || true
-fi
-
-# ── Clean stale singleton locks ──
-clean_singleton_locks "$DEV_PROFILE"
-
-# ── Start dev browser ──
-echo "[start] Launching BrowserOS Dev (CDP=$DEV_CDP_PORT, Server=$DEV_SERVER_PORT)..."
-nohup "$APP" \
-  --no-sandbox \
-  --no-first-run \
-  --no-default-browser-check \
-  --use-mock-keychain \
-  --show-component-extension-options \
-  --disable-browseros-server \
-  --disable-browseros-extensions \
-  --name=BrowserOS-Dev \
-  --class=browseros-dev \
-  --remote-debugging-port="$DEV_CDP_PORT" \
-  --browseros-mcp-port="$DEV_SERVER_PORT" \
-  --browseros-server-port="$DEV_SERVER_PORT" \
-  --user-data-dir="$DEV_PROFILE" \
-  --load-extension="$EXT_DIR" \
-  chrome://newtab \
-  > "$BROWSER_LOG" 2>&1 &
-BROWSER_PID=$!
-echo "$BROWSER_PID" > "$DEV_BROWSER_PID"
-
-# ── Wait for CDP port — pass port as CLI arg (fixes M4) ──
-python3 - "$DEV_CDP_PORT" <<"PY"
-import socket, time, sys
-port = int(sys.argv[1])
-for _ in range(60):
-    s = socket.socket()
-    s.settimeout(0.5)
-    try:
-        s.connect(("127.0.0.1", port))
-        s.close()
-        sys.exit(0)
-    except OSError:
-        time.sleep(0.5)
-print(f"[ERROR] BrowserOS CDP port {port} did not open", file=sys.stderr)
-sys.exit(1)
-PY
-echo "[start] Browser ready on CDP port $DEV_CDP_PORT"
+# ── Trigger extension loading (CDP tab creation bypasses profile picker gate) ──
+trigger_extensions
 
 # ── Start dev server ──
-echo "[start] Launching dev server..."
-nohup env \
-  BROWSEROS_SKIP_OPENCLAW=1 \
-  BROWSEROS_CDP_PORT="$DEV_CDP_PORT" \
-  BROWSEROS_SERVER_PORT="$DEV_SERVER_PORT" \
-  BROWSEROS_EXTENSION_PORT="$DEV_EXTENSION_PORT" \
-  bun run --filter @browseros/server start:ci \
-  > "$SERVER_LOG" 2>&1 &
-SERVER_PID=$!
-echo "$SERVER_PID" > "$DEV_SERVER_PID"
+start_dev_server
 
-# ── Wait for server health — pass port as CLI arg (fixes M4) ──
-python3 - "$DEV_SERVER_PORT" <<"PY"
-import json, time, urllib.request, sys
-port = sys.argv[1]
-url = f"http://127.0.0.1:{port}/health"
-for _ in range(60):
-    try:
-        with urllib.request.urlopen(url, timeout=1) as r:
-            data = json.load(r)
-        if data.get("status") == "ok" and data.get("cdpConnected") is True:
-            print(json.dumps(data))
-            sys.exit(0)
-        time.sleep(1)
-    except Exception:
-        time.sleep(0.5)
-print(f"[ERROR] BrowserOS server health check failed on {url}", file=sys.stderr)
-sys.exit(1)
-PY
-echo "[start] Server ready on port $DEV_SERVER_PORT"
+# ── Wait for server health ──
+wait_server_health 30 basic
+
+# ── Release lock on success ──
+release_lock
+
 echo "=== start-dev complete ==="
-
-# Release lock on success
-flock -u $LOCK_FD

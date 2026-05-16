@@ -3,4 +3,13 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 [[ -d "${REPO_ROOT}/packages/browseros-agent" ]] || REPO_ROOT="$(pwd)"
 cd "${REPO_ROOT}/packages/browseros-agent"
-bun run build:agent:dev
+# Build extension WITHOUT --mode development (HMR-free)
+# The old build:agent:dev used --mode development which injected
+# vite-hmr client code connecting to ws://localhost:3001.
+# That only works when the WXT dev server is running alongside the browser.
+# For mise start-dev we load the extension statically,
+# so we need a production build outputting to chrome-mv3-dev.
+cd "${REPO_ROOT}/packages/browseros-agent/apps/agent"
+rm -rf dist/chrome-mv3-dev
+bun wxt build  # outputs to dist/chrome-mv3 (HMR-free)
+mv dist/chrome-mv3 dist/chrome-mv3-dev

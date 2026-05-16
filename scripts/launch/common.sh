@@ -9,6 +9,34 @@
 # This ensures PID files survive reboots predictably and are
 # co-located with the profile data they protect.
 
+# ── Chromium sandbox detection ──
+# Ubuntu 24.04+ sets kernel.apparmor_restrict_unprivileged_userns=1
+# which blocks Chromium's built-in sandbox. We detect this and
+# add --no-sandbox only when needed. The "real" fix is:
+#   sudo sh -c 'echo kernel.apparmor_restrict_unprivileged_userns=0 > /etc/sysctl.d/99-allow-chromium-sandbox.conf && sysctl --system'
+_chromium_needs_no_sandbox() {
+  # Check if AppArmor userns restriction is active
+  local val
+  val=$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null) || val="0"
+  if [ "$val" = "1" ]; then
+    return 0  # needs --no-sandbox
+  fi
+  # Check if unprivileged userns is disabled
+  val=$(cat /proc/sys/kernel/unprivileged_userns_clone 2>/dev/null) || val="1"
+  if [ "$val" = "0" ]; then
+    return 0  # needs --no-sandbox
+  fi
+  return 1  # sandbox works fine
+}
+
+# Returns "--no-sandbox" if needed, empty string otherwise.
+# Use like: browser_args="$(_sandbox_flag) --other-args"
+_sandbox_flag() {
+  if _chromium_needs_no_sandbox; then
+    echo "--no-sandbox"
+  fi
+}
+
 # ── Directory constants ──
 DEV_PROFILE="${HOME}/.browseros-dev-chrome"
 DEV_BOS_DIR="${HOME}/.browseros-dev"
