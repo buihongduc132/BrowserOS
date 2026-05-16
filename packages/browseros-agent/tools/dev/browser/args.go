@@ -2,7 +2,9 @@ package browser
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
+	"runtime"
 
 	"browseros-dev/proc"
 )
@@ -15,8 +17,21 @@ type ArgsConfig struct {
 	LoadDevExtensions bool
 }
 
+// resolveBrowserBinary returns the BrowserOS executable path for the current OS.
+func resolveBrowserBinary() string {
+	if runtime.GOOS == "linux" {
+		// Check BROWSEROS_APP_PATH env first, then default location
+		if p := os.Getenv("BROWSEROS_APP_PATH"); p != "" {
+			return p
+		}
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, "Downloads", "alta", "BrowserOS.AppImage")
+	}
+	return "/Applications/BrowserOS.app/Contents/MacOS/BrowserOS"
+}
+
 func BuildArgs(cfg ArgsConfig) []string {
-	binary := "/Applications/BrowserOS.app/Contents/MacOS/BrowserOS"
+	binary := resolveBrowserBinary()
 
 	args := []string{binary}
 
@@ -28,8 +43,14 @@ func BuildArgs(cfg ArgsConfig) []string {
 		"--use-mock-keychain",
 		"--show-component-extension-options",
 		"--disable-browseros-server",
-		"--browseros-dock-icon=dev",
 	)
+
+	if runtime.GOOS == "linux" {
+		// --class sets the GTK application ID for GNOME taskbar association
+		args = append(args, "--class=browseros-dev")
+	} else {
+		args = append(args, "--browseros-dock-icon=dev")
+	}
 
 	if cfg.LoadDevExtensions {
 		args = append(args, "--disable-browseros-extensions")
@@ -47,6 +68,7 @@ func BuildArgs(cfg ArgsConfig) []string {
 		fmt.Sprintf("--browseros-server-port=%d", cfg.Ports.Server),
 		fmt.Sprintf("--browseros-proxy-port=%d", cfg.Ports.Server),
 		fmt.Sprintf("--browseros-extension-port=%d", cfg.Ports.Extension),
+		"--remote-allow-origins=*",
 		fmt.Sprintf("--user-data-dir=%s", cfg.UserDataDir),
 	)
 

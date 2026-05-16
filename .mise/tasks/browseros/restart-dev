@@ -1,49 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # restart-dev — Kill, rebuild, restart BrowserOS dev instance
-# Delegates to instance.sh for all shared logic.
-REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-[[ -d "${REPO_ROOT}/packages/browseros-agent" ]] || REPO_ROOT="$(pwd)"
-
-source "${REPO_ROOT}/scripts/launch/common.sh"
-source "${REPO_ROOT}/scripts/launch/instance.sh"
-declare_instance dev
-
-echo "=== browseros:restart-dev ==="
-echo ""
-echo "  ⚠  Data preservation: user profiles, LLM config, and extension"
-echo "     storage are NEVER touched by this script."
-echo ""
-
-echo "[1/4] Killing existing dev instance..."
-kill_instance
-
-echo "        Waiting for ports to release..."
-wait_ports_released 10
-
-echo "[2/4] Building dev extension..."
-if ! bash "${REPO_ROOT}/.mise/tasks/browseros/build-dev"; then
-  echo "" >&2
-  echo "[ERROR] Build failed! Dev instance is stopped." >&2
-  echo "        Fix the build error, then run:" >&2
-  echo "          mise run browseros:start-dev" >&2
-  exit 1
-fi
-
-echo "[3/4] Starting dev instance..."
-bash "${REPO_ROOT}/.mise/tasks/browseros/start-dev"
-
-echo "[4/4] Running smoke test..."
-if ! python3 "${REPO_ROOT}/scripts/verify/smoke-dev.py" "$INSTANCE_SERVER_PORT"; then
-  echo "" >&2
-  echo "[ERROR] Smoke test FAILED! Dev server is up but endpoints are broken." >&2
-  if [ -f "$INSTANCE_SERVER_LOG" ]; then
-    echo "" >&2
-    echo "=== Server log (last 20 lines) ===" >&2
-    tail -20 "$INSTANCE_SERVER_LOG" >&2
-  fi
-  exit 1
-fi
-
-echo ""
-echo "=== restart-dev complete ==="
+mise run browseros:kill-dev
+mise run browseros:start-dev

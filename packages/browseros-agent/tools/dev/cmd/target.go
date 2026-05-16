@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -60,6 +61,14 @@ type dogfoodConfigFile struct {
 	} `yaml:"ports"`
 }
 
+func defaultBrowserUserDataDirs() []string {
+	if runtime.GOOS == "linux" {
+		home, _ := os.UserHomeDir()
+		return []string{filepath.Join(home, ".browseros-dev-chrome")}
+	}
+	return []string{"/tmp/browseros-dev"}
+}
+
 func resolveResetTarget(root string, opts resetTargetOptions) (resetTarget, error) {
 	target := strings.TrimSpace(opts.Target)
 	if target == "" {
@@ -92,7 +101,7 @@ func resolveDevTarget(root string, opts resetTargetOptions) (resetTarget, error)
 		BrowserOSDir:        browserosDir,
 		LimaHome:            filepath.Join(browserosDir, "lima"),
 		Ports:               &ports,
-		BrowserUserDataDirs: []string{"/tmp/browseros-dev"},
+		BrowserUserDataDirs: defaultBrowserUserDataDirs(),
 		TempPrefixes:        []string{"browseros-test-", "browseros-dev-"},
 		WatchRunStateDir:    filepath.Join(browserosDir, "runs"),
 		DeleteRootLabel:     "Delete dev profile?",

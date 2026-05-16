@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"time"
 )
 
@@ -130,7 +131,11 @@ func (r *PortReservations) ReleaseAll() {
 }
 
 func KillPort(port int) {
-	exec.Command("sh", "-c", fmt.Sprintf("lsof -ti:%d | xargs kill -9 2>/dev/null || true", port)).Run()
+	if runtime.GOOS == "linux" {
+		exec.Command("sh", "-c", fmt.Sprintf("fuser -k %d/tcp 2>/dev/null || true", port)).Run()
+	} else {
+		exec.Command("sh", "-c", fmt.Sprintf("lsof -ti:%d | xargs kill -9 2>/dev/null || true", port)).Run()
+	}
 }
 
 func KillPortAndWait(port int, timeout time.Duration) error {

@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # status — Show BrowserOS dev instance status
-# Delegates to instance.sh print_status.
-REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-[[ -d "${REPO_ROOT}/packages/browseros-agent" ]] || REPO_ROOT="$(pwd)"
-
-source "${REPO_ROOT}/scripts/launch/common.sh"
-source "${REPO_ROOT}/scripts/launch/instance.sh"
-declare_instance dev
-
-print_status
+# Check if any BrowserOS processes are running
+echo "=== BrowserOS Processes ==="
+ps aux | grep -E 'BrowserOS|browseros-dev' | grep -v grep | head -10 || echo "  None running"
+echo ""
+echo "=== Ports ==="
+for port in 9000 9010 9100 9110 9300 9305; do
+  if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
+    echo "  :${port} — IN USE"
+  fi
+done

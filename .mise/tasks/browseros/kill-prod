@@ -1,14 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # kill-prod — Stop BrowserOS prod instance
-# Delegates to instance.sh kill_instance for unified kill logic.
-REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-[[ -d "${REPO_ROOT}/packages/browseros-agent" ]] || REPO_ROOT="$(pwd)"
-
-source "${REPO_ROOT}/scripts/launch/common.sh"
-source "${REPO_ROOT}/scripts/launch/instance.sh"
-declare_instance prod
-
-echo "=== browseros:kill-prod ==="
-kill_instance
-echo "=== kill-prod done ==="
+# For prod, we still need manual kill since it's not managed by the Go CLI.
+pkill -9 -f 'mount_Browse.*browseros' 2>/dev/null || true
+sleep 1
+rm -f ~/.config/browser-os/SingletonLock ~/.config/browser-os/SingletonCookie ~/.config/browser-os/SingletonSocket 2>/dev/null
+echo "[kill-prod] done"

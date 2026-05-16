@@ -1,62 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # start-prod — Launch BrowserOS prod instance (AppImage with embedded server)
-# Delegates to instance.sh for all shared logic.
-REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-[[ -d "${REPO_ROOT}/packages/browseros-agent" ]] || REPO_ROOT="$(pwd)"
+# Prod uses the AppImage directly, not the Go CLI.
+REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 
-source "${REPO_ROOT}/scripts/launch/common.sh"
-source "${REPO_ROOT}/scripts/launch/instance.sh"
-declare_instance prod
-
-SOAK_LOG="${INSTANCE_LOG_DIR}/soak.log"
-
-# ── Check prerequisites ──
-if [ ! -x "$INSTANCE_APP" ]; then
-  echo "[ERROR] BrowserOS AppImage missing: $INSTANCE_APP" >&2
+APPIMAGE="${BROWSEROS_APP_PATH:-$HOME/Downloads/alta/BrowserOS.AppImage}"
+if [[ ! -f "$APPIMAGE" ]]; then
+  echo "[ERROR] BrowserOS AppImage not found: $APPIMAGE" >&2
+  echo "        Set BROWSEROS_APP_PATH or install to ~/Downloads/alta/" >&2
   exit 1
 fi
 
-if is_browser_running "$INSTANCE_BROWSER_PID_FILE"; then
-  OLD_PID=$(cat "$INSTANCE_BROWSER_PID_FILE")
-  echo "[ERROR] Prod browser already running (PID $OLD_PID)." >&2
-  exit 1
-fi
+# Kill existing prod instance
+pkill -9 -f 'mount_Browse.*browseros' 2>/dev/null || true
+sleep 2
+rm -f ~/.config/browser-os/SingletonLock ~/.config/browser-os/SingletonCookie ~/.config/browser-os/SingletonSocket 2>/dev/null
 
-ensure_desktop_entries
-
-# ── Pre-flight: port orphan cleanup ──
-if port_in_use "$INSTANCE_CDP_PORT"; then
-  echo "[preflight] CDP port $INSTANCE_CDP_PORT occupied — attempting orphan cleanup..."
-  kill_port_orphan "$INSTANCE_CDP_PORT" "browseros"
-  sleep 1
-  if port_in_use "$INSTANCE_CDP_PORT"; then
-    echo "[ERROR] CDP port $INSTANCE_CDP_PORT still in use after cleanup." >&2
-    exit 1
-  fi
-fi
-if port_in_use "$INSTANCE_SERVER_PORT"; then
-  echo "[preflight] Server port $INSTANCE_SERVER_PORT occupied — attempting orphan cleanup..."
-  kill_port_orphan "$INSTANCE_SERVER_PORT" "browseros"
-  sleep 1
-  if port_in_use "$INSTANCE_SERVER_PORT"; then
-    echo "[ERROR] Server port $INSTANCE_SERVER_PORT still in use after cleanup." >&2
-    exit 1
-  fi
-fi
-
-copy_server_resources
-
-# ── Launch browser via wrapper (now uses exec — so we background + track PID) ──
-nohup "${REPO_ROOT}/scripts/launch/launch-browseros-prod.sh" > "${INSTANCE_BROWSER_LOG}" 2>&1 &
-BROWSER_PID=$!
-echo "$BROWSER_PID" > "$INSTANCE_BROWSER_PID_FILE"
-echo "[start] Browser PID: $BROWSER_PID"
-
-# ── Wait for health + soak ──
-wait_server_health 120 soak | tee "$SOAK_LOG"
-
-echo "=== start-prod complete ==="
-echo "HTTP: http://127.0.0.1:${INSTANCE_SERVER_PORT}"
-echo "MCP Proxy: http://127.0.0.1:${INSTANCE_SERVER_PORT}/mcp"
-echo "Logs: ${INSTANCE_LOG_DIR}"
+exec "$APPIMAGE" --class=browseros
