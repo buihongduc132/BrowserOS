@@ -1,23 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # status — Show BrowserOS instance status
-echo "=== BrowserOS Processes ==="
-ps aux | grep -E 'BrowserOS|browseros-dev' | grep -v grep | head -10 || echo "  None running"
+echo "=== Prod Ports (from server_config.json) ==="
+if [ -f "$HOME/.config/browser-os/.browseros/server_config.json" ]; then
+  python3 -c "
+import json, sys
+with open('$HOME/.config/browser-os/.browseros/server_config.json') as f:
+    cfg = json.load(f)
+ports = cfg.get('ports', {})
+for k, v in ports.items():
+    import subprocess
+    r = subprocess.run(['ss', '-tlnp'], capture_output=True, text=True)
+    used = f'IN USE (pid=' + str(v) + ')' if f':{v} ' in r.stdout else 'free'
+    print(f'  {k}: {v} — {used}')
+" 2>/dev/null || echo "  Could not read prod config"
+else
+  echo "  No prod server_config.json found"
+fi
+
 echo ""
-echo "=== Prod Ports (9000/9100/9300) ==="
-for port in 9000 9100 9300; do
-  if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
-    echo "  :${port} — IN USE (prod)"
-  else
-    echo "  :${port} — free"
-  fi
-done
-echo ""
-echo "=== Dev Ports (9010/9110/9310) ==="
-for port in 9010 9110 9310; do
+echo "=== Dev Ports (9010/9011/9012) ==="
+for port in 9010 9011 9012; do
   if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
     echo "  :${port} — IN USE (dev)"
   else
     echo "  :${port} — free"
   fi
 done
+
+echo ""
+echo "=== Running BrowserOS processes ==="
+ps aux | grep -E 'BrowserOS|browseros-dev|browseros_server' | grep -v grep | wc -l
+echo "  processes total"
