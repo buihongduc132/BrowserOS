@@ -26,8 +26,9 @@ var watchCmd = &cobra.Command{
 }
 
 var (
-	watchNew    bool
-	watchManual bool
+	watchNew      bool
+	watchManual   bool
+	watchAppImage bool
 )
 
 // defaultUserDataDir returns the browser profile directory for dev mode.
@@ -42,6 +43,7 @@ func defaultUserDataDir() string {
 func init() {
 	watchCmd.Flags().BoolVar(&watchNew, "new", false, "Use random available ports in 9000-9999 and create a fresh user-data directory")
 	watchCmd.Flags().BoolVar(&watchManual, "manual", false, "Build agent statically instead of WXT HMR mode")
+	watchCmd.Flags().BoolVar(&watchAppImage, "appimage", false, "Use AppImage with embedded extensions + external server (no build needed)")
 	rootCmd.AddCommand(watchCmd)
 }
 
@@ -62,6 +64,8 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	mode := "watch"
 	if watchManual {
 		mode = "manual"
+	} else if watchAppImage {
+		mode = "appimage"
 	}
 	var runLock *proc.WatchRunLock
 	acquireRunLock := func(ports proc.Ports) error {
@@ -151,7 +155,22 @@ func runWatch(cmd *cobra.Command, args []string) error {
 
 	agentDir := filepath.Join(root, "apps/agent")
 
-	if watchManual {
+	if watchAppImage {
+		// AppImage mode: embedded extensions from AppImage, no build needed.
+		// Only disable embedded server -- keep embedded extensions intact.
+		reservations.ReleaseCDP()
+		procs = append(procs, proc.StartManaged(ctx, &wg, proc.ProcConfig{
+			Tag:     proc.TagBrowser,
+			Dir:     root,
+			Restart: false,
+			Cmd: browser.BuildArgs(browser.ArgsConfig{
+				Root:              root,
+				Ports:             p,
+				UserDataDir:       userDataDir,
+				LoadDevExtensions: false,
+			}),
+		}))
+	} else if watchManual {
 		proc.LogMsg(proc.TagBuild, "Building agent (dev)...")
 		if err := proc.RunBlocking(ctx, agentDir, proc.TagBuild,
 			"bun", "--env-file=.env.development", "wxt", "build", "--mode", "development"); err != nil {

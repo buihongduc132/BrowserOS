@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# start-appimage — Launch BrowserOS with embedded extensions + external dev server
+# No build needed. Uses the AppImage's own extension. Fastest dev startup.
+# Equivalent to: browseros-dev watch --appimage
+mise run browseros:dev -- watch --appimage
