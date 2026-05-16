@@ -129,6 +129,23 @@ export class ChatService {
     const approvalConfigKey = this.buildApprovalConfigKey(
       request.toolApprovalConfig,
     )
+    const llmConfigKey = this.buildLlmConfigKey(agentConfig)
+
+    // Detect LLM config change mid-conversation → rebuild session
+    if (session && session.llmConfigKey !== llmConfigKey) {
+      logger.info('LLM config changed mid-conversation, rebuilding session', {
+        conversationId: request.conversationId,
+        provider: agentConfig.provider,
+        model: agentConfig.model,
+      })
+      session = await this.rebuildSession(
+        session,
+        request,
+        agentConfig,
+        mcpServerKey,
+        llmConfigKey,
+      )
+    }
 
     // Detect MCP config change mid-conversation → rebuild session
     if (session && session.mcpServerKey !== mcpServerKey) {
@@ -300,6 +317,7 @@ export class ChatService {
         browserContext,
         mcpServerKey,
         workingDir: request.userWorkingDir,
+        llmConfigKey,
         approvalConfigKey,
       }
       sessionStore.set(request.conversationId, session)
@@ -450,6 +468,7 @@ export class ChatService {
     request: ChatRequest,
     agentConfig: ResolvedAgentConfig,
     mcpServerKey: string,
+    llmConfigKey = this.buildLlmConfigKey(agentConfig),
   ): Promise<AgentSession> {
     const previousMessages = session.agent.messages
     await session.agent.dispose()
@@ -481,6 +500,7 @@ export class ChatService {
       browserContext,
       mcpServerKey,
       workingDir: request.userWorkingDir,
+      llmConfigKey,
       approvalConfigKey: this.buildApprovalConfigKey(
         request.toolApprovalConfig,
       ),
@@ -525,6 +545,22 @@ export class ChatService {
         }
       }
     }
+  }
+
+  private buildLlmConfigKey(config: ResolvedAgentConfig): string {
+    return JSON.stringify({
+      provider: config.provider,
+      model: config.model,
+      apiKey: config.apiKey,
+      baseUrl: config.baseUrl,
+      upstreamProvider: config.upstreamProvider,
+      resourceName: config.resourceName,
+      region: config.region,
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: config.secretAccessKey,
+      sessionToken: config.sessionToken,
+      accountId: config.accountId,
+    })
   }
 
   private buildApprovalConfigKey(config?: {

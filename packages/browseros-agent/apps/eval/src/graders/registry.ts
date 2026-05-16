@@ -1,12 +1,6 @@
 import type { GraderResult } from '../types'
 import { AgisdkStateDiffGrader } from './benchmark/agisdk-state-diff'
 import { InfinityStateGrader } from './benchmark/infinity-state'
-import { Mind2WebJudgeGrader } from './benchmark/mind2web'
-import { WebVoyagerGrader } from './benchmark/webvoyager'
-import { FaraAlignmentGrader } from './fara/alignment'
-import { FaraCombinedGrader } from './fara/combined'
-import { FaraMultimodalGrader } from './fara/multimodal'
-import { FaraRubricGrader } from './fara/rubric'
 import { PerformanceGrader } from './performance/performance-grader'
 import type { Grader, GraderInput } from './types'
 
@@ -26,56 +20,6 @@ export function createGrader(
       return new AgisdkStateDiffGrader()
     case 'infinity_state':
       return new InfinityStateGrader()
-
-    // LLM-based benchmark graders
-    case 'webvoyager_grader':
-      if (!options?.apiKey) return null
-      return new WebVoyagerGrader(
-        options.apiKey,
-        options.baseUrl,
-        options.model,
-      )
-    case 'mind2web_judge':
-    case 'mind2web_grader':
-      if (!options?.apiKey) return null
-      return new Mind2WebJudgeGrader(
-        options.apiKey,
-        options.baseUrl,
-        options.model,
-      )
-
-    // Fara individual verifiers
-    case 'fara_alignment':
-      if (!options?.apiKey) return null
-      return new FaraAlignmentGrader(
-        options.apiKey,
-        options.baseUrl,
-        options.model || 'gpt-4o-mini',
-      )
-    case 'fara_rubric':
-      if (!options?.apiKey) return null
-      return new FaraRubricGrader(
-        options.apiKey,
-        options.baseUrl,
-        options.model || 'gpt-4o-mini',
-      )
-    case 'fara_multimodal':
-      if (!options?.apiKey) return null
-      return new FaraMultimodalGrader(
-        options.apiKey,
-        options.baseUrl,
-        options.model || 'gpt-4o',
-      )
-
-    // Fara combined 3-verifier system (majority voting)
-    case 'fara_grader':
-    case 'fara_combined':
-      if (!options?.apiKey) return null
-      return new FaraCombinedGrader(
-        options.apiKey,
-        options.baseUrl,
-        options.model,
-      )
 
     // Multi-axis performance grader (Claude Agent SDK — uses its own Claude default model)
     case 'performance_grader':
@@ -116,12 +60,6 @@ export async function runGraders(
 // Export grader classes for direct use
 export {
   AgisdkStateDiffGrader,
-  FaraAlignmentGrader,
-  FaraCombinedGrader,
-  FaraMultimodalGrader,
-  FaraRubricGrader,
   InfinityStateGrader,
-  Mind2WebJudgeGrader,
   PerformanceGrader,
-  WebVoyagerGrader,
 }
