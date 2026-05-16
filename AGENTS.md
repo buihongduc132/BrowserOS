@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **BrowserOS** (24239 symbols, 48476 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **BrowserOS** (24266 symbols, 48495 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -73,9 +73,9 @@ BrowserOS uses a Go-based CLI (`browseros-dev`) for local dev lifecycle, invoked
 | Variable | Default | Description |
 |----------|---------|------------|
 | `BROWSEROS_APP_PATH` | `~/Downloads/alta/BrowserOS.AppImage` | Path to BrowserOS AppImage |
-| `BROWSEROS_CDP_PORT` | `9000` (prod) / `9005` (dev) | Chrome DevTools Protocol port |
-| `BROWSEROS_SERVER_PORT` | `9100` (prod) / `9105` (dev) | Unified server HTTP port |
-| `BROWSEROS_EXTENSION_PORT` | `9300` (prod) / `9305` (dev) | Extension port (deprecated, no-op) |
+| `BROWSEROS_CDP_PORT` | `9104` (prod) / `9010` (dev) | Chrome DevTools Protocol port |
+| `BROWSEROS_SERVER_PORT` | `9110` (prod) / `9115` (dev) | Unified server HTTP port |
+| `BROWSEROS_EXTENSION_PORT` | `9300` (prod) / `9305` (dev) | Extension port |
 
 ### Desktop Entries
 
@@ -98,9 +98,10 @@ Installed via `scripts/setup-desktop-entries.sh`. Dev icon gets green **β** bad
 | F2 | Profile picker gates `--load-extension` until tab created | `trigger_extensions()` creates 2 CDP tabs to bypass | F2 |
 | F3 | Dev `.desktop` had `Terminal=true` | Changed to `Terminal=false` | F3 |
 | F4 | `StartupWMClass=chromium-browser` didn't match `--class` | Use `StartupWMClass=browseros` / `browseros-dev` | F4 |
-| F5 | WXT `--mode development` injects HMR into extension | Use plain `wxt build`, copy to `chrome-mv3-dev/` | F5 |
+| F5 | WXT `--dev` flag injects HMR (NOT `--mode`) | Use `--mode development` WITHOUT `--dev` | F5 |
 | F6 | AppArmor userns blocks Chromium sandbox on Ubuntu 24.04+ | Sysctl `apparmor_restrict_unprivileged_userns=0` | F6 |
 | F7 | Copying prod profile to dev causes picker drift | Fresh profile per instance, no cross-pollination | F7 |
+| F8 | `VITE_PUBLIC_BROWSEROS_API` undefined → manifest `"undefined/home"` | `build-dev` uses `--mode development` to load `.env.development` | F8 |
 
 ---
 

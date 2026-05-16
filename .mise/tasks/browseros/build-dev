@@ -11,5 +11,11 @@ cd "${REPO_ROOT}/packages/browseros-agent"
 # so we need a production build outputting to chrome-mv3-dev.
 cd "${REPO_ROOT}/packages/browseros-agent/apps/agent"
 rm -rf dist/chrome-mv3-dev
-bun wxt build  # outputs to dist/chrome-mv3 (HMR-free)
+# Load .env.development vars so VITE_PUBLIC_BROWSEROS_API resolves correctly.
+# Without this, auth.content matches[] becomes "undefined/home" (invalid manifest).
+# --mode production is the WXT default but it only loads .env.production.
+# --mode development loads .env.development (which has the API URL).
+# We use --mode development for env loading but the build is still production-quality
+# (no HMR) because we don't pass --dev.
+bun wxt build --mode development
 mv dist/chrome-mv3 dist/chrome-mv3-dev

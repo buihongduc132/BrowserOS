@@ -54,13 +54,13 @@ Status: Fixed
 
 ---
 
-## F5: WXT dev build injects HMR (`ws://localhost:3001`) into extension
+## F5: WXT `--dev` flag (not `--mode`) injects HMR into extension
 
 **Symptom**: Extension errors on load — tries to connect to `ws://localhost:3001` (Vite HMR websocket).
 
-**Cause**: `bun wxt build --mode development` injects HMR client code into the extension bundle.
+**Cause**: WXT's HMR injection is triggered by the `--dev` CLI flag, NOT by `--mode development`. The old build used `wxt build --mode development` (no `--dev`) which was safe, but the original `build:agent:dev` script that preceded it used `wxt` with `--dev`.
 
-**Fix**: `build-dev` mise task now uses plain `wxt build` (production mode), then copies output to `chrome-mv3-dev/`.
+**Fix**: `build-dev` uses `wxt build --mode development` (loads `.env.development` for env vars) WITHOUT `--dev` flag. This gets correct env vars without HMR injection.
 
 **File**: `.mise/tasks/browseros/build-dev`
 
@@ -92,6 +92,20 @@ This is MORE secure than `--no-sandbox` (keeps seccomp + namespace sandbox, just
 **Fix**: Nuke dev profile, let BrowserOS create fresh. The `setup` mise task now starts with clean profile dirs.
 
 **File**: `.mise/tasks/browseros/setup` (profile creation)
+
+---
+
+## F8: `VITE_PUBLIC_BROWSEROS_API` undefined → manifest `matches: ["undefined/home"]`
+
+**Symptom**: Chrome refuses to load extension: `Invalid value for 'content_scripts[0].matches[0]': Missing scheme separator.`
+
+**Cause**: `entrypoints/auth.content/index.ts` uses template literal `` `${env.VITE_PUBLIC_BROWSEROS_API}/home` ``. When `VITE_PUBLIC_BROWSEROS_API` is undefined at build time, this resolves to the literal string `"undefined/home"` — not a valid URL scheme.
+
+**Root cause**: `build-dev` used plain `wxt build` (production mode). WXT in production mode loads `.env.production` (doesn't exist), NOT `.env.development`. The `VITE_PUBLIC_BROWSEROS_API` var is only defined in `.env.development`.
+
+**Fix**: `build-dev` now uses `wxt build --mode development` to load `.env.development` where `VITE_PUBLIC_BROWSEROS_API=https://api.browseros.com`. No `--dev` flag so no HMR injection.
+
+**File**: `.mise/tasks/browseros/build-dev`, `packages/browseros-agent/apps/agent/entrypoints/auth.content/index.ts`, `packages/browseros-agent/apps/agent/.env.development`
 
 ---
 

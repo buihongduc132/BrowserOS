@@ -434,7 +434,8 @@ with urllib.request.urlopen(req, timeout=5) as resp:
     tabs = json.loads(resp.read())
 ext_workers = [t for t in tabs if t["type"] == "service_worker"]
 if len(ext_workers) < 2:
-    print(f"[WARN] Only {len(ext_workers)} extension workers loaded (expected >=2)", file=sys.stderr)
+    print(f"[ERROR] Only {len(ext_workers)} extension workers loaded (expected >=2). Extension loading failed.", file=sys.stderr)
+    sys.exit(1)
 else:
     print(f"[trigger] {len(ext_workers)} extensions loaded")
 PY
