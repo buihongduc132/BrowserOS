@@ -70,6 +70,7 @@ describe('buildSidepanelPreparedSendMessagesRequest', () => {
         url: 'https://example.com',
         title: 'Example',
       },
+      userWorkspaces: [],
     })
   })
 
