@@ -2,4 +2,10 @@
 set -euo pipefail
 # start-dev — Launch BrowserOS dev (static build mode)
 # Delegates to the Go CLI (browseros-dev watch --manual)
-mise run browseros:dev watch --manual
+# Dev ports from ../../../scripts/ports.sh: 9010/9011/9012
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "${SCRIPT_DIR}/../../../scripts/ports.sh"
+
+echo "[start-dev] Dev ports: CDP=${DEV_CDP_PORT} Server=${DEV_SERVER_PORT} Extension=${DEV_EXTENSION_PORT}"
+mise run browseros:dev -- watch --manual

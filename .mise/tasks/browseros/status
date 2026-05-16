@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -uo pipefail
 # status — Show BrowserOS instance status
-# Uses ports from scripts/ports.sh — single source of truth.
+# Uses ports from ../../../scripts/ports.sh — single source of truth.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/../../../scripts/ports.sh"
 
-echo "=== Port Manifest (scripts/ports.sh) ==="
+echo "=== Port Manifest (../../../scripts/ports.sh) ==="
 echo "  PROD:  CDP=$PROD_CDP_PORT  Server=$PROD_SERVER_PORT  Extension=$PROD_EXTENSION_PORT"
 echo "  DEV:   CDP=$DEV_CDP_PORT  Server=$DEV_SERVER_PORT  Extension=$DEV_EXTENSION_PORT"
 
