@@ -1,14 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # kill-dev — Stop BrowserOS dev instance
-# Delegates to instance.sh kill_instance for unified kill logic.
-REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-[[ -d "${REPO_ROOT}/packages/browseros-agent" ]] || REPO_ROOT="$(pwd)"
-
-source "${REPO_ROOT}/scripts/launch/common.sh"
-source "${REPO_ROOT}/scripts/launch/instance.sh"
-declare_instance dev
-
-echo "=== browseros:kill-dev ==="
-kill_instance
-echo "=== kill-dev done ==="
+# Delegates to the Go CLI (browseros-dev cleanup)
+mise run browseros:dev cleanup --yes

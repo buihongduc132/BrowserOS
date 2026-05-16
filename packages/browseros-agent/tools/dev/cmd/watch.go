@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"syscall"
 	"time"
@@ -29,6 +30,15 @@ var (
 	watchManual bool
 )
 
+// defaultUserDataDir returns the browser profile directory for dev mode.
+func defaultUserDataDir() string {
+	if runtime.GOOS == "linux" {
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, ".browseros-dev-chrome")
+	}
+	return "/tmp/browseros-dev"
+}
+
 func init() {
 	watchCmd.Flags().BoolVar(&watchNew, "new", false, "Use random available ports in 9000-9999 and create a fresh user-data directory")
 	watchCmd.Flags().BoolVar(&watchManual, "manual", false, "Build agent statically instead of WXT HMR mode")
@@ -48,7 +58,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	}
 	p := defaultPorts
 	var reservations *proc.PortReservations
-	userDataDir := "/tmp/browseros-dev"
+	userDataDir := defaultUserDataDir()
 	mode := "watch"
 	if watchManual {
 		mode = "manual"

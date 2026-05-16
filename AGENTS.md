@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **BrowserOS** (24268 symbols, 48497 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **BrowserOS** (24264 symbols, 48503 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -88,21 +88,27 @@ Installed via `scripts/setup-desktop-entries.sh`. Dev icon gets green **β** bad
 
 ---
 
-## Dev Launch — Known Pitfalls
+## Dev Launch — Architecture
 
 > Full details: `flow/findings/dev-launch-stability.md`
 
-| # | Pitfall | Fix | Finding |
-|---|---------|-----|---------|
-| F1 | `--disable-browseros-extensions` blocks ALL extension loading | Don't use it; let bundled extensions load + overlay with `--load-extension` | F1 |
-| F2 | Profile picker gates `--load-extension` until tab created | `trigger_extensions()` creates 2 CDP tabs to bypass | F2 |
-| F3 | Dev `.desktop` had `Terminal=true` | Changed to `Terminal=false` | F3 |
-| F4 | `StartupWMClass=chromium-browser` didn't match `--class` | Use `StartupWMClass=browseros` / `browseros-dev` | F4 |
-| F5 | WXT `--dev` flag injects HMR (NOT `--mode`) | Use `--mode development` WITHOUT `--dev` | F5 |
-| F6 | AppArmor userns blocks Chromium sandbox on Ubuntu 24.04+ | Sysctl `apparmor_restrict_unprivileged_userns=0` | F6 |
-| F7 | Copying prod profile to dev causes picker drift | Fresh profile per instance, no cross-pollination | F7 |
-| F8 | `VITE_PUBLIC_BROWSEROS_API` undefined → manifest `"undefined/home"` | `build-dev` uses `--mode development` to load `.env.development` | F8 |
-| F9 | exit_type patch only fixed `Default/`, missed other profiles | Iterate ALL `*/Preferences` for crash fix | F9 |
+Dev launch is handled by the **upstream Go CLI** (`packages/browseros-agent/tools/dev/browseros-dev`).
+It was adapted for Linux with ~30 lines of changes (F10). Previous F1-F9 issues were all caused
+by bash scripts that reinvented the Go CLI — now removed.
+
+| Command | What it does |
+|---------|-------------|
+| `mise run browseros:start-dev` | `browseros-dev watch --manual` (static build) |
+| `mise run browseros:kill-dev` | `browseros-dev cleanup --yes` |
+| `mise run browseros:dev watch` | HMR mode (live reload) |
+| `mise run browseros:dev watch --new` | Random ports + fresh profile |
+| `mise run browseros:dev cleanup` | Kill processes, clear ports |
+| `mise run browseros:dev reset` | Cleanup + delete profile |
+
+The Go CLI handles: port reservation, CDP waiting, health checks, process supervision,
+singleton locks (flock), cleanup. No bash state management needed.
+
+Key findings (F1-F10) documented in `flow/findings/dev-launch-stability.md`.
 
 ---
 

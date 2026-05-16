@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -334,11 +335,21 @@ func browserProfilePIDsFromPSForUserDataDirs(output string, userDataDirs []strin
 }
 
 func isDevBrowserProcess(command string) bool {
-	return isBrowserProcessForUserDataDir(command, []string{"/tmp/browseros-dev"}, true)
+	var defaultDir string
+	if runtime.GOOS == "linux" {
+		home, _ := os.UserHomeDir()
+		defaultDir = filepath.Join(home, ".browseros-dev-chrome")
+	} else {
+		defaultDir = "/tmp/browseros-dev"
+	}
+	return isBrowserProcessForUserDataDir(command, []string{defaultDir}, true)
 }
 
 func isBrowserProcessForUserDataDir(command string, userDataDirs []string, includeDevTempProfiles bool) bool {
-	if !strings.Contains(command, "BrowserOS.app/Contents/MacOS/BrowserOS") {
+	// Match both macOS (.app) and Linux (AppImage) BrowserOS binaries
+	if !strings.Contains(command, "BrowserOS.app/Contents/MacOS/BrowserOS") &&
+		!strings.Contains(command, "BrowserOS.AppImage") &&
+		!strings.Contains(command, "mount_Browse") {
 		return false
 	}
 	for _, dir := range userDataDirs {

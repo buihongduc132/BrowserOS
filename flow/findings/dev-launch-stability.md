@@ -121,12 +121,32 @@ This is MORE secure than `--no-sandbox` (keeps seccomp + namespace sandbox, just
 
 ---
 
+## F10: 2,334 lines of bash reinvented the Go CLI wheel
+
+**Symptom**: Dev launch unstable across restarts. 9 findings (F1-F9) all caused by bash scripts replicating what the upstream Go CLI already handles natively.
+
+**Root cause**: Instead of adapting the existing `packages/browseros-agent/tools/dev/` Go CLI for Linux, we wrote 2,334 lines of bash infrastructure (instance.sh, common.sh, 9 mise tasks, desktop entry scripts). Each layer introduced its own failure modes: PID tracking via files, singleton locks via python scripts, port management via `ss`+`grep`+`kill`, profile patching via inline python. The Go CLI does all of this in compiled code with proper error handling.
+
+**Fix**: 
+- `browser/args.go`: Detect OS → use AppImage path on Linux, add `--class=browseros-dev` for GNOME taskbar
+- `proc/ports.go`: `KillPort` uses `fuser` on Linux instead of `lsof` (macOS-only)
+- `proc/process.go`: Match `BrowserOS.AppImage` + `mount_Browse` paths on Linux
+- `cmd/watch.go`: Default profile `~/.browseros-dev-chrome` on Linux (not `/tmp/`)
+- `cmd/target.go`: Dev target uses OS-aware browser user data dirs
+- Replaced 2,334 lines of bash with thin mise wrappers that call `./tools/dev/browseros-dev`
+
+**Files**: `browser/args.go`, `proc/ports.go`, `proc/process.go`, `cmd/watch.go`, `cmd/target.go`, `.mise/tasks/browseros/*`
+
+---
+
 ## Architecture Reference
 
 ```
 Prod flow:  .desktop → launch-browseros-prod.sh → AppImage (embedded server + extensions)
-Dev flow:   .desktop → launch-browseros-dev.sh → mise start-dev → AppImage (disabled server) + bun server
+Dev flow:   .desktop → launch-browseros-dev.sh → mise start-dev → Go CLI (browseros-dev watch --manual)
 ```
 
-Key difference: prod uses embedded `browseros_server`, dev uses external `bun run start:ci`.
-Key similarity: both now load bundled extensions (dev also loads `--load-extension` on top).
+The Go CLI (`browseros-dev`) handles: build, browser launch, CDP wait, server start, health check, process supervision, port management, singleton locks, cleanup.
+
+Key difference: prod uses embedded `browseros_server`, dev uses external server started by Go CLI.
+Upstream server error on Linux: `browseros-vm currently supports macOS only` — unrelated to our changes.

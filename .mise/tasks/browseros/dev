@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# dev — Run browseros-dev CLI directly (pass any subcommand)
+# Usage: mise run browseros:dev [watch|watch --manual|cleanup|reset|setup|...]
+#
+# This is the primary entry point. The Go CLI handles everything:
+# port management, CDP waiting, process supervision, cleanup.
+#
+# Examples:
+#   mise run browseros:dev watch --manual   # static build + browser + server
+#   mise run browseros:dev watch             # HMR mode + browser + server
+#   mise run browseros:dev watch --new       # random ports + fresh profile
+#   mise run browseros:dev cleanup           # kill processes, clear ports
+#   mise run browseros:dev reset             # cleanup + delete profile
+#   mise run browseros:dev setup             # install deps, build agent code
+
+REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+DEV_CLI="${REPO_ROOT}/packages/browseros-agent/tools/dev"
+
+# If REPO_ROOT doesn't contain the tools dir, fall back to CWD
+if [ ! -d "${DEV_CLI}" ]; then
+  DEV_CLI="$(pwd)/packages/browseros-agent/tools/dev"
+fi
+
+# Build the Go binary if needed
+if [ ! -x "${DEV_CLI}/browseros-dev" ]; then
+  echo "[mise] Building browseros-dev CLI..."
+  make -sC "${DEV_CLI}"
+fi
+
+exec "${DEV_CLI}/browseros-dev" "$@"

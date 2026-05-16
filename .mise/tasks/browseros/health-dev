@@ -1,12 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# health-dev — Single health check for BrowserOS dev instance
-# Delegates to instance.sh check_health.
-REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-[[ -d "${REPO_ROOT}/packages/browseros-agent" ]] || REPO_ROOT="$(pwd)"
-
-source "${REPO_ROOT}/scripts/launch/common.sh"
-source "${REPO_ROOT}/scripts/launch/instance.sh"
-declare_instance dev
-
-check_health
+# health-dev — Check BrowserOS dev instance health
+curl -sf "http://localhost:9100/health" | python3 -m json.tool 2>/dev/null || echo "Dev instance not running"
