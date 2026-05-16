@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **BrowserOS** (24266 symbols, 48495 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **BrowserOS** (24263 symbols, 48496 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -102,6 +102,7 @@ Installed via `scripts/setup-desktop-entries.sh`. Dev icon gets green **β** bad
 | F6 | AppArmor userns blocks Chromium sandbox on Ubuntu 24.04+ | Sysctl `apparmor_restrict_unprivileged_userns=0` | F6 |
 | F7 | Copying prod profile to dev causes picker drift | Fresh profile per instance, no cross-pollination | F7 |
 | F8 | `VITE_PUBLIC_BROWSEROS_API` undefined → manifest `"undefined/home"` | `build-dev` uses `--mode development` to load `.env.development` | F8 |
+| F9 | exit_type patch only fixed `Default/`, missed other profiles | Iterate ALL `*/Preferences` for crash fix | F9 |
 
 ---
 
