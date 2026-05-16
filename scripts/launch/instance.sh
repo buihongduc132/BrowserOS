@@ -128,11 +128,11 @@ _clean_stale_instance_state() {
     rm -f "${INSTANCE_PROFILE}/Crash Reports/pending/"*.lock 2>/dev/null || true
   fi
 
-  # Fix exit_type=Crashed in profile Preferences (triggers profile picker)
+  # Fix exit_type=Crashed in ALL profile Preferences (triggers profile picker)
   # BrowserOS shows profile picker on every launch if previous session crashed.
-  # Our kill -9 always looks like a crash. Patch it before launch.
-  local _prefs="${INSTANCE_PROFILE}/Default/Preferences"
-  if [[ -f "$_prefs" ]]; then
+  # Our kill -9 always looks like a crash. Patch ALL profiles, not just Default.
+  for _prefs in "${INSTANCE_PROFILE}"/*/Preferences; do
+    [[ -f "$_prefs" ]] || continue
     python3 -c "
 import json, sys
 try:
@@ -144,7 +144,7 @@ try:
       json.dump(p, f)
 except: pass
 " "$_prefs" 2>/dev/null || true
-  fi
+  done
 }
 
 # ═══════════════════════════════════════════════════════════════════════

@@ -109,6 +109,18 @@ This is MORE secure than `--no-sandbox` (keeps seccomp + namespace sandbox, just
 
 ---
 
+## F9: exit_type patch only fixed `Default/Preferences`, missed other profiles
+
+**Symptom**: Dev works on first start but fails on restart. Profile picker reappears.
+
+**Cause**: `_clean_stale_instance_state()` only patched `Default/Preferences` for `exit_type=Crashed`. BrowserOS's actual profile may be `Profile 2` (or any non-Default). Kill -9 sets `exit_type=Crashed` in ALL profile dirs. Next launch sees crash → shows picker → blocks extension loading.
+
+**Fix**: Iterate ALL `*/Preferences` files in the profile dir, not just `Default/`.
+
+**File**: `scripts/launch/instance.sh` (`_clean_stale_instance_state`)
+
+---
+
 ## Architecture Reference
 
 ```
