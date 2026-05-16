@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# health-dev — Check BrowserOS dev instance health
-curl -sf "http://localhost:9100/health" | python3 -m json.tool 2>/dev/null || echo "Dev instance not running"
+# health-dev — Check BrowserOS dev instance health (port 9110)
+curl -sf "http://localhost:9110/health" | python3 -m json.tool 2>/dev/null || echo "Dev instance not running"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # start-prod — Launch BrowserOS prod instance (AppImage with embedded server)
-# Prod uses the AppImage directly, not the Go CLI.
+# Prod uses ports 9000/9100/9300. Dev uses 9010/9110/9310. No conflict.
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 
 APPIMAGE="${BROWSEROS_APP_PATH:-$HOME/Downloads/alta/BrowserOS.AppImage}"
@@ -11,9 +11,16 @@ if [[ ! -f "$APPIMAGE" ]]; then
   exit 1
 fi
 
-# Kill existing prod instance
-pkill -9 -f 'mount_Browse.*browseros' 2>/dev/null || true
-sleep 2
-rm -f ~/.config/browser-os/SingletonLock ~/.config/browser-os/SingletonCookie ~/.config/browser-os/SingletonSocket 2>/dev/null
+# Only kill existing PROD instance (match by user-data-dir, NOT all BrowserOS)
+PROD_PROFILE="$HOME/.config/browser-os"
+if ps aux | grep -v grep | grep -q "user-data-dir=$PROD_PROFILE"; then
+  echo "[start-prod] Stopping existing prod instance..."
+  ps aux | grep -v grep | grep "user-data-dir=$PROD_PROFILE" | awk '{print $2}' | xargs kill 2>/dev/null || true
+  sleep 2
+fi
 
+# Clean stale singleton locks for prod profile only
+rm -f "$PROD_PROFILE/SingletonLock" "$PROD_PROFILE/SingletonCookie" "$PROD_PROFILE/SingletonSocket" 2>/dev/null
+
+echo "[start-prod] Launching on ports 9000/9100/9300..."
 exec "$APPIMAGE" --class=browseros

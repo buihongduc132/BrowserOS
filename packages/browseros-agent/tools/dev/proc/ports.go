@@ -28,7 +28,7 @@ const (
 	randomPortMax = 9999
 )
 
-var defaultLocalPorts = Ports{CDP: 9000, Server: 9100, Extension: 9300}
+var defaultLocalPorts = Ports{CDP: 9010, Server: 9110, Extension: 9310}
 
 func DefaultLocalPorts() Ports {
 	return defaultLocalPorts

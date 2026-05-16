@@ -1,8 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# kill-prod — Stop BrowserOS prod instance
-# For prod, we still need manual kill since it's not managed by the Go CLI.
-pkill -9 -f 'mount_Browse.*browseros' 2>/dev/null || true
+# kill-prod — Stop BrowserOS PROD instance only
+# Matches by user-data-dir to avoid killing dev instance.
+PROD_PROFILE="$HOME/.config/browser-os"
+
+killed=0
+for pid in $(ps aux | grep -v grep | grep "user-data-dir=$PROD_PROFILE" | awk '{print $2}' 2>/dev/null); do
+  kill "$pid" 2>/dev/null && killed=$((killed+1)) || true
+done
+
+# Also kill the AppImage wrapper process
+for pid in $(ps aux | grep -v grep | grep "BrowserOS.AppImage" | grep -v "browseros-dev-chrome" | awk '{print $2}' 2>/dev/null); do
+  kill "$pid" 2>/dev/null && killed=$((killed+1)) || true
+done
+
 sleep 1
-rm -f ~/.config/browser-os/SingletonLock ~/.config/browser-os/SingletonCookie ~/.config/browser-os/SingletonSocket 2>/dev/null
-echo "[kill-prod] done"
+rm -f "$PROD_PROFILE/SingletonLock" "$PROD_PROFILE/SingletonCookie" "$PROD_PROFILE/SingletonSocket" 2>/dev/null
+echo "[kill-prod] Stopped $killed prod process(es)"
