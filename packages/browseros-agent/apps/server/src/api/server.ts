@@ -16,6 +16,7 @@ import { Hono } from 'hono'
 import { websocket } from 'hono/bun'
 import { cors } from 'hono/cors'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
+import { AgentSessionStore } from '../agent/agent-session-store'
 import { HttpAgentError } from '../agent/errors'
 import { INLINED_ENV } from '../env'
 import { getAdvancedConfigPath } from '../lib/browseros-dir'
@@ -25,9 +26,14 @@ import { getDb } from '../lib/db'
 import { logger } from '../lib/logger'
 import { Sentry } from '../lib/sentry'
 import { getLimaHomeDir, resolveBundledLimactl, VM_NAME } from '../lib/vm'
+import { AssistantSessionStore } from '../sessions/assistant-session-store'
 import { createAclRoutes } from './routes/acl'
+import { createAgentSessionRoutes } from './routes/agent-sessions'
 import { createAgentRoutes } from './routes/agents'
+import { createAssistantSessionRoutes } from './routes/assistant-sessions'
 import { createChatRoutes } from './routes/chat'
+import { createCommandsRoutes } from './routes/commands'
+import { createCompactionRoutes } from './routes/compaction'
 import { createConfigRoutes } from './routes/config'
 import { createCreditsRoutes } from './routes/credits'
 import { createHealthRoute } from './routes/health'
@@ -44,8 +50,6 @@ import { createSkillsRoutes } from './routes/skills'
 import { createSoulRoutes } from './routes/soul'
 import { createStatusRoute } from './routes/status'
 import { createTerminalRoutes } from './routes/terminal'
-import { createAssistantSessionRoutes } from './routes/assistant-sessions'
-import { AssistantSessionStore } from '../sessions/assistant-session-store'
 import { GlobalAclPolicyService } from './services/acl/global-acl-policy'
 import {
   connectKlavisInBackground,
@@ -256,16 +260,35 @@ export async function createHttpServer(config: HttpServerConfig) {
     .route('/agents', agentRoutes)
     .route(
       '/assistant/sessions',
-      new Hono<Env>()
-        .use('/*', requireTrustedAppOrigin())
-        .route(
-          '/',
-          createAssistantSessionRoutes({
-            store: new AssistantSessionStore(getDb()),
-          }),
-        ),
+      new Hono<Env>().use('/*', requireTrustedAppOrigin()).route(
+        '/',
+        createAssistantSessionRoutes({
+          store: new AssistantSessionStore(getDb()),
+        }),
+      ),
     )
     .route('/claw', clawRoutes)
+    .route(
+      '/agent-sessions',
+      new Hono<Env>().use('/*', requireTrustedAppOrigin()).route(
+        '/',
+        createAgentSessionRoutes({
+          sessionStore: new AgentSessionStore(getDb()),
+        }),
+      ),
+    )
+    .route(
+      '/compaction',
+      new Hono<Env>()
+        .use('/*', requireTrustedAppOrigin())
+        .route('/', createCompactionRoutes()),
+    )
+    .route(
+      '/commands',
+      new Hono<Env>()
+        .use('/*', requireTrustedAppOrigin())
+        .route('/', createCommandsRoutes()),
+    )
 
   // Error handler
   app.onError((err, c) => {
