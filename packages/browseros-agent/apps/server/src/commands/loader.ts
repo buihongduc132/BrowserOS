@@ -55,7 +55,7 @@ async function parseCommandFile(
       name: `/${id}`,
       description: data.description,
       location: mdPath,
-      enabled: true,
+      enabled: data.enabled !== false,
       builtIn,
       model: typeof data.model === 'string' ? data.model : undefined,
     }

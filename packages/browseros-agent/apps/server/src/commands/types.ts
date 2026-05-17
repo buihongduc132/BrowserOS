@@ -10,6 +10,8 @@
 export type CommandFrontmatter = {
   description: string
   model?: string
+  /** Whether the command is active; defaults to true when absent */
+  enabled?: boolean
   /** Deferred fields — accepted but not processed at runtime in v1 */
   agent?: string
   subtask?: boolean
