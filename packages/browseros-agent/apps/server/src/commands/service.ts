@@ -118,7 +118,7 @@ export async function getCommand(id: string): Promise<CommandDetail | null> {
       name: `/${id}`,
       description: parsed.data.description,
       location: resolved.path,
-      enabled: true,
+      enabled: parsed.data.enabled !== false,
       builtIn: false,
       model:
         typeof parsed.data.model === 'string' ? parsed.data.model : undefined,
@@ -185,12 +185,19 @@ export async function updateCommand(
   const description = input.description ?? existing.description
   const content = input.content ?? parsed.content.trim()
   const model = input.model ?? existing.model
+  // Preserve existing enabled state; explicit input.enabled takes precedence
+  const enabled = input.enabled ?? existing.enabled ?? true
 
   const frontmatter: CommandFrontmatter = {
     description,
   }
   if (model) {
     frontmatter.model = model
+  }
+  // Only write enabled to frontmatter when explicitly false
+  // (absent = true by default, so we only need to persist false)
+  if (enabled === false) {
+    frontmatter.enabled = false
   }
 
   await writeFile(resolved.path, buildCommandMd(frontmatter, content))
@@ -200,7 +207,7 @@ export async function updateCommand(
     name: `/${id}`,
     description,
     location: resolved.path,
-    enabled: true,
+    enabled,
     builtIn: false,
     model,
   }

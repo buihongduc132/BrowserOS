@@ -101,6 +101,70 @@ describe('updateCommand', () => {
       updateCommand('clear', { description: 'Hacked' }),
     ).rejects.toThrow('built-in')
   })
+
+  it('persist enabled: false and read it back', async () => {
+    await createCommand({
+      name: 'toggle-test',
+      description: 'Toggle test',
+      content: 'Content.',
+    })
+    // Disable the command
+    const updated = await updateCommand('toggle-test', { enabled: false })
+    expect(updated.enabled).toBe(false)
+
+    // Re-read from disk to verify persistence
+    const detail = await getCommand('toggle-test')
+    expect(detail?.enabled).toBe(false)
+  })
+
+  it('re-enable a previously disabled command', async () => {
+    await createCommand({
+      name: 'reenable-test',
+      description: 'Reenable test',
+      content: 'Content.',
+    })
+    await updateCommand('reenable-test', { enabled: false })
+    const updated = await updateCommand('reenable-test', { enabled: true })
+    expect(updated.enabled).toBe(true)
+
+    const detail = await getCommand('reenable-test')
+    expect(detail?.enabled).toBe(true)
+  })
+
+  it('update with other fields preserves existing enabled: false state', async () => {
+    await createCommand({
+      name: 'preserve-test',
+      description: 'Original',
+      content: 'Content.',
+    })
+    // Disable first
+    await updateCommand('preserve-test', { enabled: false })
+
+    // Update description only — enabled should remain false
+    const updated = await updateCommand('preserve-test', {
+      description: 'Updated desc',
+    })
+    expect(updated.description).toBe('Updated desc')
+    expect(updated.enabled).toBe(false)
+
+    const detail = await getCommand('preserve-test')
+    expect(detail?.enabled).toBe(false)
+  })
+})
+
+describe('createCommand enabled default', () => {
+  it('returns enabled: true by default for new commands', async () => {
+    const cmd = await createCommand({
+      name: 'default-enabled',
+      description: 'Test',
+      content: 'Content.',
+    })
+    expect(cmd.enabled).toBe(true)
+
+    // Also verify getCommand returns true
+    const detail = await getCommand('default-enabled')
+    expect(detail?.enabled).toBe(true)
+  })
 })
 
 describe('deleteCommand', () => {
