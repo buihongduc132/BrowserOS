@@ -42,7 +42,7 @@ export const defaultCorsConfig: CorsOptions = {
     if (origin && isAllowedOrigin(origin)) return origin
     return null
   },
-  allowMethods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization', 'Accept'],
   credentials: true,
 }
