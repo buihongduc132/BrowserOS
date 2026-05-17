@@ -273,7 +273,7 @@ export async function createHttpServer(config: HttpServerConfig) {
       new Hono<Env>().use('/*', requireTrustedAppOrigin()).route(
         '/',
         createAgentSessionRoutes({
-          sessionStore: new AgentSessionStore(getDb()),
+          sessionStore: new AgentSessionStore(),
         }),
       ),
     )
