@@ -122,6 +122,15 @@ fi
 # ── Clean stale singleton locks ────────────────────────────────────────
 rm -f "$PROD_PROFILE/SingletonLock" "$PROD_PROFILE/SingletonCookie" "$PROD_PROFILE/SingletonSocket" 2>/dev/null
 
+# ── Ensure PROD ports are free (AppImage auto-assigns if occupied!) ──
+for port in "$PROD_CDP_PORT" "$PROD_SERVER_PORT" "$PROD_EXTENSION_PORT"; do
+  if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
+    echo "[start-prod] WARNING: Port $port is occupied — freeing it"
+    fuser -k "${port}/tcp" 2>/dev/null || true
+  fi
+done
+sleep 1
+
 # ── Launch ─────────────────────────────────────────────────────────────
 echo "[start-prod] Launching BrowserOS (ports: CDP=$PROD_CDP_PORT Server=$PROD_SERVER_PORT Ext=$PROD_EXTENSION_PORT)"
 exec "$APPIMAGE" --class=browseros
