@@ -1,5 +1,0 @@
-{
-  "name": "browseros-root",
-  "private": true,
-  "description": "Placeholder package.json required by Fusion worktree liveness check (hasRequiredWorktreeFiles checks for package.json at repo root)"
-}
