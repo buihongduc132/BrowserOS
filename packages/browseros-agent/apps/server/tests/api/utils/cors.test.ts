@@ -5,6 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import {
+  defaultCorsConfig,
   isAllowedOrigin,
   resetAllowedOriginsForTesting,
 } from '../../../src/api/utils/cors'
@@ -69,5 +70,15 @@ describe('isAllowedOrigin', () => {
     process.env.BROWSEROS_TRUSTED_ORIGINS = 'chrome-extension://abc,,, ,'
     expect(isAllowedOrigin('chrome-extension://abc')).toBe(true)
     expect(isAllowedOrigin('')).toBe(false)
+  })
+})
+
+describe('defaultCorsConfig', () => {
+  it('includes all required HTTP methods in allowMethods', () => {
+    const methods = defaultCorsConfig.allowMethods as string[]
+    const expected = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+    for (const method of expected) {
+      expect(methods).toContain(method)
+    }
   })
 })
