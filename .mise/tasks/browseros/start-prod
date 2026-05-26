@@ -133,4 +133,6 @@ sleep 1
 
 # ── Launch ─────────────────────────────────────────────────────────────
 echo "[start-prod] Launching BrowserOS (ports: CDP=$PROD_CDP_PORT Server=$PROD_SERVER_PORT Ext=$PROD_EXTENSION_PORT)"
-exec "$APPIMAGE" --class=browseros
+source "${SCRIPT_DIR}/../../../scripts/gpu-flags.sh"
+
+exec "$APPIMAGE" ${BROWSEROS_GPU_FLAGS} --class=browseros

@@ -16,7 +16,10 @@ import { Hono } from 'hono'
 import { websocket } from 'hono/bun'
 import { cors } from 'hono/cors'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
+import { AgentSessionStore } from '../agent/agent-session-store'
+import { resolveCompactionConfig } from '../agent/compaction-config'
 import { HttpAgentError } from '../agent/errors'
+import { SessionStore } from '../agent/session-store'
 import { INLINED_ENV } from '../env'
 import { getAdvancedConfigPath } from '../lib/browseros-dir'
 import { KlavisClient } from '../lib/clients/klavis/klavis-client'
@@ -27,6 +30,13 @@ import { Sentry } from '../lib/sentry'
 import { getLimaHomeDir, resolveBundledLimactl, VM_NAME } from '../lib/vm'
 import { createAclRoutes } from './routes/acl'
 import { createAgentRoutes } from './routes/agents'
+import { createAgentSessionRoutes } from './routes/agent-sessions'
+import { createCommandsRoutes } from './routes/commands'
+import {
+  type CompactionRouteDeps,
+  createCompactionRoutes,
+} from './routes/compaction'
+import { requireTrustedOrigin } from './middleware/require-trusted-origin'
 import { createChatRoutes } from './routes/chat'
 import { createConfigRoutes } from './routes/config'
 import { createCreditsRoutes } from './routes/credits'
@@ -254,6 +264,34 @@ export async function createHttpServer(config: HttpServerConfig) {
       }),
     )
     .route('/agents', agentRoutes)
+    .route(
+      '/agents',
+      createAgentSessionRoutes({ sessionStore: new AgentSessionStore() }),
+    )
+    .route(
+      '/compaction',
+      new Hono<Env>().use('/*', requireTrustedOrigin()).route(
+        '/',
+        createCompactionRoutes({
+          getConversationMessages: async (conversationId: string) => {
+            // NOTE: SessionStore is not shared with chat routes here.
+            // The POST /compact endpoint returns 503 until a proper
+            // model factory + shared session store is wired.
+            return null
+          },
+          getCompactionConfig: () => {
+            const raw = config.compaction
+            if (!raw) return undefined
+            try {
+              return resolveCompactionConfig(raw)
+            } catch {
+              return undefined
+            }
+          },
+        } as unknown as CompactionRouteDeps),
+      ),
+    )
+    .route('/commands', createCommandsRoutes())
     .route(
       '/assistant/sessions',
       new Hono<Env>()

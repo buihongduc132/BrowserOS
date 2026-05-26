@@ -118,7 +118,7 @@ export async function getCommand(id: string): Promise<CommandDetail | null> {
       name: `/${id}`,
       description: parsed.data.description,
       location: resolved.path,
-      enabled: true,
+      enabled: parsed.data.enabled !== false,
       builtIn: false,
       model:
         typeof parsed.data.model === 'string' ? parsed.data.model : undefined,
@@ -185,9 +185,11 @@ export async function updateCommand(
   const description = input.description ?? existing.description
   const content = input.content ?? parsed.content.trim()
   const model = input.model ?? existing.model
+  const enabled = input.enabled ?? (existing.enabled !== false)
 
   const frontmatter: CommandFrontmatter = {
     description,
+    enabled,
   }
   if (model) {
     frontmatter.model = model
@@ -200,7 +202,7 @@ export async function updateCommand(
     name: `/${id}`,
     description,
     location: resolved.path,
-    enabled: true,
+    enabled,
     builtIn: false,
     model,
   }
