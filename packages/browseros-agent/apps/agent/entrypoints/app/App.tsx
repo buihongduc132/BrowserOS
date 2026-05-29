@@ -10,13 +10,10 @@ import { OnboardingDemo } from '../onboarding/demo/OnboardingDemo'
 import { FeaturesPage } from '../onboarding/features/Features'
 import { Onboarding } from '../onboarding/index/Onboarding'
 import { StepsLayout } from '../onboarding/steps/StepsLayout'
-import { AclSettingsPage } from './acl-settings/AclSettingsPage'
-import { AdminDashboardPage } from './admin-dashboard/AdminDashboardPage'
 import { AdvancedConfigPage } from './advanced-config/AdvancedConfigPage'
 import { AgentCommandConversation } from './agent-command/AgentCommandConversation'
 import { AgentCommandHome } from './agent-command/AgentCommandHome'
 import { AgentCommandLayout } from './agent-command/agent-command-layout'
-import { AgentsPage } from './agents/AgentsPage'
 import { AclSettingsPage } from './acl-settings/AclSettingsPage'
 import { AdminDashboardPage } from './admin-dashboard/AdminDashboardPage'
 import { AISettingsPage } from './ai-settings/AISettingsPage'
@@ -38,7 +35,6 @@ import { ResetDataPage } from './reset-data/ResetDataPage'
 import { ScheduledTasksPage } from './scheduled-tasks/ScheduledTasksPage'
 import { SearchProviderPage } from './search-provider/SearchProviderPage'
 import { SkillsPage } from './skills/SkillsPage'
-import { SoulPage } from './soul/SoulPage'
 import { ToolApprovalsPage } from './tool-approvals/ToolApprovalsPage'
 import { UsagePage } from './usage/UsagePage'
 
@@ -118,9 +114,7 @@ export const App: FC = () => {
             ) : (
               <Route index element={<NewTab />} />
             )}
-            <Route path="soul" element={<SoulPage />} />
             <Route path="skills" element={<SkillsPage />} />
-            <Route path="memory" element={<MemoryPage />} />
           </Route>
 
           {/* Primary nav routes */}
@@ -206,11 +200,6 @@ export const App: FC = () => {
         <Route
           path="/settings/connect-mcp"
           element={<Navigate to="/connect-apps" replace />}
-        />
-        <Route path="/audit" element={<Navigate to="/home" replace />} />
-        <Route
-          path="/observability"
-          element={<Navigate to="/home" replace />}
         />
         <Route path="/executions" element={<Navigate to="/home" replace />} />
         <Route
