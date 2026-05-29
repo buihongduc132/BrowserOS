@@ -3,7 +3,7 @@
   "planFile": "flow/plans/2026-05-30_tab-ownership-and-browser-self-close.md",
   "intentionFile": "flow/intentions/2026-05-30_tab-ownership-and-browser-self-close.md",
   "createdAt": "2026-05-30T00:00:00Z",
-  "updatedAt": "2026-05-30T17:00:00Z",
+  "updatedAt": "2026-05-30T19:00:00Z",
   "status": "complete",
   "tasks": [
     {
@@ -228,11 +228,11 @@
       "checks_passed": "5/5",
       "tests_written": 2,
       "files_modified": [
-        "packages/browseros-agent/apps/server/src/api/services/mcp/mcp-server.ts",
-        "packages/browseros-agent/apps/server/tests/api/services/mcp/session-context.test.ts"
+        "packages/browseros-agent/apps/server/tests/api/services/mcp/session-context.test.ts",
+        "packages/browseros-agent/apps/server/src/api/services/mcp/mcp-server.ts"
       ],
-      "last_iteration": 1,
-      "notes": "MCP callers now receive session: { origin: 'sidepanel' }. All guards work for MCP. 2 unit tests passing."
+      "last_iteration": 5,
+      "notes": "MCP callers now receive session: { origin: \"sidepanel\", conversationId: \"mcp-${UUID}\" }. All guards work for MCP. 2+2 tests passing."
     },
     {
       "id": "T06",
@@ -287,8 +287,8 @@
         "packages/browseros-agent/apps/server/src/browser/tab-ownership-registry.ts",
         "packages/browseros-agent/apps/server/tests/browser/tab-ownership-registry.test.ts"
       ],
-      "last_iteration": 2,
-      "notes": "TabOwnershipRegistry implemented as standalone class in browser/tab-ownership-registry.ts. Exposed on Browser class as tabOwnership (readonly). All 6 checks passing. 26 unit tests."
+      "last_iteration": 5,
+      "notes": "TabOwnershipRegistry implemented. Exposed on Browser class as tabOwnership (readonly). All 6 checks passing. 26 unit tests."
     },
     {
       "id": "T07",
@@ -331,12 +331,12 @@
       "tests_written": 8,
       "files_modified": [
         "packages/browseros-agent/apps/server/src/tools/framework.ts",
-        "packages/browseros-agent/apps/server/src/tools/ownership-enforcement.ts",
+        "packages/browseros-agent/apps/server/tests/tools/ownership-enforcement.test.ts",
         "packages/browseros-agent/apps/server/src/tools/navigation.ts",
-        "packages/browseros-agent/apps/server/tests/tools/ownership-enforcement.test.ts"
+        "packages/browseros-agent/apps/server/src/tools/ownership-enforcement.ts"
       ],
-      "last_iteration": 2,
-      "notes": "Centralized ownership enforcement in executeTool(). enforceOwnership() helper auto-claims/warns/rejects. Extended ToolSessionContext with conversationId. Added strictOwnership flag. 8 tests."
+      "last_iteration": 5,
+      "notes": "Centralized ownership enforcement in executeTool(). Now checks both args.page (scalar) and args.pageIds (array). conversationId wired for chat+MCP paths. 8 tests."
     },
     {
       "id": "T08",
@@ -611,14 +611,15 @@
       "checks_passed": "4/4",
       "tests_written": 9,
       "files_modified": [
-        "packages/browseros-agent/apps/server/src/config.ts",
-        "packages/browseros-agent/apps/server/src/agent/ai-sdk-agent.ts",
-        "packages/browseros-agent/apps/server/src/api/routes/chat.ts",
+        "packages/browseros-agent/apps/server/src/api/server.ts",
         "packages/browseros-agent/apps/server/src/api/services/chat-service.ts",
-        "packages/browseros-agent/apps/server/src/api/server.ts"
+        "packages/browseros-agent/apps/server/src/api/routes/chat.ts",
+        "packages/browseros-agent/apps/server/src/api/routes/mcp.ts",
+        "packages/browseros-agent/apps/server/src/agent/ai-sdk-agent.ts",
+        "packages/browseros-agent/apps/server/src/config.ts"
       ],
-      "last_iteration": 4,
-      "notes": "Strict mode config toggle. tabOwnershipStrict added to ServerConfigSchema. Wired through ChatRouteDeps -> ChatServiceDeps -> AiSdkAgentConfig -> ToolContext. Default false (non-strict). 9 unit tests."
+      "last_iteration": 5,
+      "notes": "Strict mode config toggle. tabOwnershipStrict wired through ChatRouteDeps -> MCP route -> McpServiceDeps -> ToolContext. Default false. 9 tests."
     },
     {
       "id": "T14",
