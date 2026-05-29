@@ -1,0 +1,579 @@
+{
+  "planId": "tab-ownership-and-browser-self-close",
+  "planFile": "flow/plans/2026-05-30_tab-ownership-and-browser-self-close.md",
+  "intentionFile": "flow/intentions/2026-05-30_tab-ownership-and-browser-self-close.md",
+  "createdAt": "2026-05-30T00:00:00Z",
+  "updatedAt": "2026-05-30T12:00:00Z",
+  "status": "draft",
+  "tasks": [
+    {
+      "id": "T01",
+      "name": "P0.1: Last-visible-tab guard in close_page",
+      "desc": "Add guard in `close_page` (navigation.ts) that rejects closing the last visible tab in the last visible window. Applies to ALL modes (sidepanel, newtab, MCP). Check: list visible pages \u2192 if closing this one leaves 0 visible \u2192 reject.",
+      "labels": [
+        "P0",
+        "critical",
+        "server",
+        "navigation"
+      ],
+      "status": "completed",
+      "priority": "critical",
+      "assignee": null,
+      "dependencies": [],
+      "comments": [
+        {
+          "id": "C01",
+          "author": "investigation",
+          "date": "2026-05-29",
+          "body": "Root cause of browser self-closing. Chromium's CloseTab has no last-tab protection. Verified down to browser_handler.cc:CloseTab() \u2192 tab_strip->CloseWebContentsAt() with no guard."
+        },
+        {
+          "id": "C02",
+          "author": "claude-verification",
+          "date": "2026-05-29",
+          "body": "Confirmed: sidepanel mode has NO guard at all. Only newtab checks origin === 'newtab'. MCP callers have ctx.session = undefined so even newtab guard is bypassed."
+        }
+      ],
+      "files": [
+        "packages/browseros-agent/apps/server/src/tools/navigation.ts",
+        "packages/browseros-agent/apps/server/src/browser/browser.ts"
+      ],
+      "checks": [
+        "close_page rejects when target is last visible tab in last visible window",
+        "Hidden tabs do NOT count as visible",
+        "Scheduled tasks (hidden pages) are not blocked",
+        "Works for sidepanel, newtab, AND MCP modes",
+        "Error message is clear: 'Cannot close the last visible tab'"
+      ],
+      "checks_passed": "5/5",
+      "tests_written": 10,
+      "files_modified": [
+        "packages/browseros-agent/apps/server/src/tools/navigation.ts",
+        "packages/browseros-agent/apps/server/tests/tools/navigation-last-visible-tab-guard.test.ts"
+      ],
+      "last_iteration": 1,
+      "notes": "Last-visible-tab guard in close_page. Fires before newtab origin guard. Applies to all modes. 10 unit tests passing."
+    },
+    {
+      "id": "T02",
+      "name": "P0.2: Last-visible-window guard in close_window",
+      "desc": "Add guard in `close_window` (windows.ts) that rejects closing the last visible window. No guard exists currently in ANY mode. close_window calls CDP Browser.closeWindow \u2192 Chromium closes immediately.",
+      "labels": [
+        "P0",
+        "critical",
+        "server",
+        "windows"
+      ],
+      "status": "completed",
+      "priority": "critical",
+      "assignee": null,
+      "dependencies": [],
+      "comments": [
+        {
+          "id": "C03",
+          "author": "investigation",
+          "date": "2026-05-29",
+          "body": "close_window has ZERO protection \u2014 not even in newtab mode. Verified: windows.ts handler directly calls ctx.browser.closeWindow(args.windowId) with no checks."
+        },
+        {
+          "id": "C04",
+          "author": "claude-verification",
+          "date": "2026-05-29",
+          "body": "Also check set_window_visibility \u2014 deny hiding the last visible window (indirect bypass: hide all windows \u2192 close hidden)."
+        }
+      ],
+      "files": [
+        "packages/browseros-agent/apps/server/src/tools/windows.ts",
+        "packages/browseros-agent/apps/server/src/browser/browser.ts"
+      ],
+      "checks": [
+        "close_window rejects when target is last visible window",
+        "Hidden windows do NOT count as visible",
+        "set_window_visibility rejects hiding the last visible window",
+        "Error message is clear: 'Cannot close the last visible window'"
+      ],
+      "checks_passed": "4/4",
+      "tests_written": 9,
+      "files_modified": [
+        "packages/browseros-agent/apps/server/src/tools/windows.ts",
+        "packages/browseros-agent/apps/server/tests/tools/windows-last-visible-guard.test.ts"
+      ],
+      "last_iteration": 1,
+      "notes": "Last-visible-window guard in close_window + set_window_visibility. 9 unit tests passing."
+    },
+    {
+      "id": "T03",
+      "name": "P0.3: Sidepanel origin-tab guard for close_page and navigate_page",
+      "desc": "Extend the existing newtab-only guard to also protect the sidepanel active tab. In sidepanel mode, the active tab from browserContext is the origin tab \u2014 closing/navigating it disrupts the user's workflow. Add sidepanel to the origin check.",
+      "labels": [
+        "P0",
+        "critical",
+        "server",
+        "navigation"
+      ],
+      "status": "completed",
+      "priority": "critical",
+      "assignee": null,
+      "dependencies": [
+        "T05"
+      ],
+      "comments": [
+        {
+          "id": "C05",
+          "author": "investigation",
+          "date": "2026-05-29",
+          "body": "Current guard: `ctx.session?.origin === 'newtab'` \u2014 sidepanel mode is completely unprotected. The LLM can close/navigate the tab the user is viewing while chatting from the sidepanel."
+        },
+        {
+          "id": "C06",
+          "author": "claude-verification",
+          "date": "2026-05-29",
+          "body": "navigate_page guard should be narrowed to action === 'url' only. Back/forward/reload on the origin tab is safe (doesn't destroy the chat UI). Current guard over-blocks these in newtab mode (V7)."
+        }
+      ],
+      "files": [
+        "packages/browseros-agent/apps/server/src/tools/navigation.ts"
+      ],
+      "checks": [
+        "close_page rejects when target is the sidepanel origin tab",
+        "navigate_page rejects URL navigation on sidepanel origin tab",
+        "navigate_page ALLOWS back/forward/reload on origin tab (both modes)",
+        "new_page still works (creates background tabs)",
+        "Does NOT break scheduled tasks (they use hidden pages)"
+      ],
+      "checks_passed": "5/5",
+      "tests_written": 11,
+      "files_modified": [
+        "packages/browseros-agent/apps/server/src/tools/navigation.ts",
+        "packages/browseros-agent/apps/server/tests/tools/navigation-sidepanel-origin-guard.test.ts"
+      ],
+      "last_iteration": 1,
+      "notes": "Extended origin-tab guard to sidepanel mode. navigate_page guard narrowed to URL action only (back/forward/reload safe). 11 unit tests passing."
+    },
+    {
+      "id": "T04",
+      "name": "P0.4: close_tab_group guard",
+      "desc": "Add guard in `close_tab_group` (tab-groups.ts) \u2014 currently zero protection. If a tab group contains the last visible tab(s), closing it would close the browser. Check before closing.",
+      "labels": [
+        "P0",
+        "critical",
+        "server",
+        "tab-groups"
+      ],
+      "status": "completed",
+      "priority": "critical",
+      "assignee": null,
+      "dependencies": [],
+      "comments": [
+        {
+          "id": "C07",
+          "author": "claude-verification",
+          "date": "2026-05-29",
+          "body": "NEW finding: close_tab_group bypasses close_page entirely \u2014 it calls CDP closeTabGroup which closes all tabs in the group at the Chromium level. Zero guards in tab-groups.ts."
+        }
+      ],
+      "files": [
+        "packages/browseros-agent/apps/server/src/tools/tab-groups.ts",
+        "packages/browseros-agent/apps/server/src/browser/browser.ts"
+      ],
+      "checks": [
+        "close_tab_group rejects if closing the group would leave 0 visible tabs",
+        "Works when group contains the last visible tab",
+        "Ungrouping tabs (ungroup_tabs) is NOT blocked \u2014 just removes group, doesn't close tabs",
+        "Hidden tabs in group do not count toward visible count"
+      ],
+      "checks_passed": "4/4",
+      "tests_written": 6,
+      "files_modified": [
+        "packages/browseros-agent/apps/server/src/tools/tab-groups.ts",
+        "packages/browseros-agent/apps/server/tests/tools/tab-groups-last-visible-guard.test.ts"
+      ],
+      "last_iteration": 1,
+      "notes": "close_tab_group guard checks if group contains last visible tabs. 6 unit tests passing."
+    },
+    {
+      "id": "T05",
+      "name": "P0.5: Fix MCP session context (ctx.session undefined)",
+      "desc": "MCP callers bypass ALL guards because ctx.session is undefined. The MCP route (mcp.ts) creates per-request servers without passing ToolSessionContext. Fix: derive session context from MCP headers and pass it through to tool handlers.",
+      "labels": [
+        "P0",
+        "critical",
+        "server",
+        "mcp"
+      ],
+      "status": "completed",
+      "priority": "critical",
+      "assignee": null,
+      "dependencies": [],
+      "comments": [
+        {
+          "id": "C08",
+          "author": "claude-verification",
+          "date": "2026-05-29",
+          "body": "CRITICAL: MCP route has X-BrowserOS-Agent-Id and X-BrowserOS-Default-Window-Id headers but does NOT construct a ToolSessionContext. register-mcp.ts creates tool context without session field. ALL existing guards check ctx.session?.origin which is always undefined for MCP."
+        }
+      ],
+      "files": [
+        "packages/browseros-agent/apps/server/src/api/routes/mcp.ts",
+        "packages/browseros-agent/apps/server/src/api/services/mcp/register-mcp.ts",
+        "packages/browseros-agent/apps/server/src/tools/framework.ts"
+      ],
+      "checks": [
+        "MCP tool calls receive a valid ToolSessionContext",
+        "Origin defaults to 'sidepanel' for MCP callers (safe default)",
+        "originPageId is resolved from X-BrowserOS-Default-Window-Id header",
+        "All existing guards work correctly for MCP callers after fix",
+        "Per-request server still has no shared state (no regression)"
+      ],
+      "checks_passed": "5/5",
+      "tests_written": 2,
+      "files_modified": [
+        "packages/browseros-agent/apps/server/src/api/services/mcp/mcp-server.ts",
+        "packages/browseros-agent/apps/server/tests/api/services/mcp/session-context.test.ts"
+      ],
+      "last_iteration": 1,
+      "notes": "MCP callers now receive session: { origin: 'sidepanel' }. All guards work for MCP. 2 unit tests passing."
+    },
+    {
+      "id": "T06",
+      "name": "P1.1: TabOwnershipRegistry in Browser class",
+      "desc": "Add a TabOwnershipRegistry to the Browser class (browser.ts). Tracks which conversation/agent owns which page. Methods: claim(), release(), isLocked(), getOwner(), releaseIdle(), refreshActivity(). This is the foundation for P1.2-P1.4 and P2.",
+      "labels": [
+        "P1",
+        "high",
+        "server",
+        "browser",
+        "foundation"
+      ],
+      "status": "pending",
+      "priority": "high",
+      "assignee": null,
+      "dependencies": [
+        "T01",
+        "T02",
+        "T03",
+        "T04",
+        "T05"
+      ],
+      "comments": [
+        {
+          "id": "C09",
+          "author": "investigation",
+          "date": "2026-05-29",
+          "body": "Zero concept of tab ownership exists anywhere. PageInfo has no controlledBy field. Browser class tracks pages by ID but no ownership. Multiple conversations can (and do) operate on same tabs simultaneously."
+        },
+        {
+          "id": "C10",
+          "author": "design",
+          "date": "2026-05-29",
+          "body": "Registry must live on Browser class (singleton) not per-request \u2014 MCP creates per-request servers. Shared state must be at the Browser level."
+        }
+      ],
+      "files": [
+        "packages/browseros-agent/apps/server/src/browser/browser.ts"
+      ],
+      "checks": [
+        "claim() prevents double-claiming by different conversations",
+        "release() only works for the owning conversation",
+        "releaseIdle() correctly sweeps stale locks",
+        "refreshActivity() touches lastActivityAt",
+        "Thread-safe for concurrent MCP requests",
+        "No regression on existing Browser API"
+      ]
+    },
+    {
+      "id": "T07",
+      "name": "P1.2: Enforce tab ownership in tool handlers",
+      "desc": "Wire TabOwnershipRegistry into tool handlers (close_page, navigate_page, click, fill, type, evaluate). When a tool targets a page, check if it's owned by another conversation. If strict mode: reject. If non-strict: warn but proceed. Auto-claim on first tool use per page per conversation.",
+      "labels": [
+        "P1",
+        "high",
+        "server",
+        "tools"
+      ],
+      "status": "pending",
+      "priority": "high",
+      "assignee": null,
+      "dependencies": [
+        "T06"
+      ],
+      "comments": [
+        {
+          "id": "C11",
+          "author": "design",
+          "date": "2026-05-29",
+          "body": "Opt-in via config: tab_ownership_strict (default: false). When false, log warning but don't block. When true, reject tool calls on locked tabs. This avoids breaking existing workflows during rollout."
+        }
+      ],
+      "files": [
+        "packages/browseros-agent/apps/server/src/tools/navigation.ts",
+        "packages/browseros-agent/apps/server/src/tools/input.ts",
+        "packages/browseros-agent/apps/server/src/tools/dom.ts",
+        "packages/browseros-agent/apps/server/src/tools/page-actions.ts"
+      ],
+      "checks": [
+        "Tool handlers check ownership before executing on a page",
+        "Auto-claim on first tool use per page per conversation",
+        "Strict mode rejects; non-strict mode warns",
+        "Ownership released when conversation ends",
+        "No regression on single-conversation usage"
+      ]
+    },
+    {
+      "id": "T08",
+      "name": "P1.3: Enrich list_pages with ownership info",
+      "desc": "Extend list_pages response to include `controlledBy: { conversationId, agentId } | null` per page. LLM sessions need this to know which tabs are already taken before attempting to interact.",
+      "labels": [
+        "P1",
+        "high",
+        "server",
+        "navigation"
+      ],
+      "status": "pending",
+      "priority": "high",
+      "assignee": null,
+      "dependencies": [
+        "T06"
+      ],
+      "comments": [
+        {
+          "id": "C12",
+          "author": "user-intent",
+          "date": "2026-05-29",
+          "body": "User asked: 'how to LLM in 1 tab know that the other tabs is currently control it?' \u2014 list_pages enrichment directly addresses this. LLM calls list_pages \u2192 sees controlledBy \u2192 knows which tabs are taken."
+        }
+      ],
+      "files": [
+        "packages/browseros-agent/apps/server/src/tools/navigation.ts"
+      ],
+      "checks": [
+        "list_pages response includes controlledBy field per page",
+        "controlledBy is null for unlocked pages",
+        "controlledBy shows conversationId and agentId for locked pages",
+        "MCP callers also see ownership info",
+        "PageInfo type updated"
+      ]
+    },
+    {
+      "id": "T09",
+      "name": "P1.4: MCP tab ownership tools (lock_tab / unlock_tab)",
+      "desc": "Add explicit MCP tools for tab locking: lock_tab(page) claims ownership, unlock_tab(page) releases it. Lets MCP callers manage ownership explicitly rather than relying on auto-claim.",
+      "labels": [
+        "P1",
+        "high",
+        "server",
+        "mcp"
+      ],
+      "status": "pending",
+      "priority": "high",
+      "assignee": null,
+      "dependencies": [
+        "T06"
+      ],
+      "comments": [
+        {
+          "id": "C13",
+          "author": "user-intent",
+          "date": "2026-05-29",
+          "body": "User asked: 'have the option that make LLM to not allowed to interact with controlled tabs' and 'which from mcp' \u2014 explicit lock/unlock tools let MCP callers declare intent."
+        }
+      ],
+      "files": [
+        "packages/browseros-agent/apps/server/src/tools/navigation.ts",
+        "packages/browseros-agent/apps/server/src/api/services/mcp/register-mcp.ts"
+      ],
+      "checks": [
+        "lock_tool claims ownership for the calling conversation",
+        "unlock_tool releases ownership",
+        "Cannot lock a page already owned by another conversation",
+        "Tools appear in MCP tool list",
+        "list_pages reflects lock state"
+      ]
+    },
+    {
+      "id": "T10",
+      "name": "P2.1: Extend glow.content with ownership indicator",
+      "desc": "Extend the existing glow.content content script to show a persistent ownership indicator (badge/chip) on controlled tabs. Enrich GlowMessage type with { agentName, lockHeld, controlledBy }. Keep existing pulsing border behavior.",
+      "labels": [
+        "P2",
+        "medium",
+        "extension",
+        "content-script"
+      ],
+      "status": "pending",
+      "priority": "medium",
+      "assignee": null,
+      "dependencies": [
+        "T06"
+      ],
+      "comments": [
+        {
+          "id": "C14",
+          "author": "user-intent",
+          "date": "2026-05-29",
+          "body": "User asked: 'can we implement it as another plugins itself ? or inside the current plugins itself ?' \u2014 Answer: extend existing glow.content. Already has the content script + messaging infrastructure."
+        },
+        {
+          "id": "C15",
+          "author": "investigation",
+          "date": "2026-05-29",
+          "body": "glow.content already runs on all pages (*://*/*), injects pulsing orange border, has stop button. useNotifyActiveTab.tsx already dispatches glow messages with conversationId + isActive. Just need to enrich the message and add persistent indicator."
+        }
+      ],
+      "files": [
+        "packages/browseros-agent/apps/agent/entrypoints/glow.content/index.ts",
+        "packages/browseros-agent/apps/agent/entrypoints/glow.content/GlowMessage.ts"
+      ],
+      "checks": [
+        "GlowMessage type includes agentName, lockHeld, controlledBy",
+        "Persistent badge/chip shows on controlled tabs",
+        "Existing pulsing border behavior preserved",
+        "Stop button still works",
+        "Badge updates when ownership changes",
+        "Badge disappears when ownership released"
+      ]
+    },
+    {
+      "id": "T11",
+      "name": "P2.2: Wire TabOwnershipRegistry to glow dispatch",
+      "desc": "Wire TabOwnershipRegistry changes to emit events that the sidepanel's useNotifyActiveTab listens to. Enrich GlowMessage with ownership data from the registry. MCP callers should also trigger glow.",
+      "labels": [
+        "P2",
+        "medium",
+        "extension",
+        "wiring"
+      ],
+      "status": "pending",
+      "priority": "medium",
+      "assignee": null,
+      "dependencies": [
+        "T06",
+        "T10"
+      ],
+      "comments": [
+        {
+          "id": "C16",
+          "author": "design",
+          "date": "2026-05-29",
+          "body": "Server \u2192 extension messaging path: Browser class emits ownership events \u2192 server sends to extension via existing messaging \u2192 useNotifyActiveTab enriches GlowMessage \u2192 content script renders indicator."
+        }
+      ],
+      "files": [
+        "packages/browseros-agent/apps/agent/entrypoints/sidepanel/index/useNotifyActiveTab.tsx",
+        "packages/browseros-agent/apps/server/src/browser/browser.ts"
+      ],
+      "checks": [
+        "Ownership changes trigger glow message dispatch",
+        "useNotifyActiveTab receives ownership data",
+        "GlowMessage enriched with registry data",
+        "MCP callers trigger glow via server messaging",
+        "No duplicate glow activations"
+      ]
+    },
+    {
+      "id": "T12",
+      "name": "P4.1: Idle lock release with configurable timeout",
+      "desc": "Add configurable idle-based auto-release for tab locks. Config key: tab_lock_idle_timeout_ms (default: 3600000 = 1 hour). Periodic sweep (60s) releases locks idle beyond threshold. Tool calls refresh lastActivityAt.",
+      "labels": [
+        "P4",
+        "low",
+        "server",
+        "config"
+      ],
+      "status": "pending",
+      "priority": "low",
+      "assignee": null,
+      "dependencies": [
+        "T06"
+      ],
+      "comments": [
+        {
+          "id": "C17",
+          "author": "user-intent",
+          "date": "2026-05-29",
+          "body": "User asked: 'it can have configuration to release that lock after some idle time (like 1 hour)' \u2014 direct implementation of this request."
+        }
+      ],
+      "files": [
+        "packages/browseros-agent/apps/server/src/browser/browser.ts",
+        "packages/browseros-agent/apps/server/src/agent/ai-sdk-agent.ts"
+      ],
+      "checks": [
+        "Default timeout is 1 hour (3600000ms)",
+        "Sweep runs every 60s",
+        "Tool calls refresh lastActivityAt",
+        "Configurable via server config",
+        "Release fires event for glow cleanup",
+        "No lock leaks on conversation end"
+      ]
+    },
+    {
+      "id": "T13",
+      "name": "P4.2: Strict mode configuration toggle",
+      "desc": "Add config key tab_ownership_strict (default: false). When true: reject tool calls on locked tabs. When false: warn but allow. Allows gradual rollout without breaking existing workflows.",
+      "labels": [
+        "P4",
+        "low",
+        "server",
+        "config"
+      ],
+      "status": "pending",
+      "priority": "low",
+      "assignee": null,
+      "dependencies": [
+        "T06",
+        "T07"
+      ],
+      "comments": [
+        {
+          "id": "C18",
+          "author": "design",
+          "date": "2026-05-29",
+          "body": "Non-strict default ensures no breaking changes during rollout. Users can opt into strict mode after verifying their workflows."
+        }
+      ],
+      "files": [
+        "packages/browseros-agent/apps/server/src/tools/framework.ts",
+        "packages/browseros-agent/apps/server/src/agent/ai-sdk-agent.ts"
+      ],
+      "checks": [
+        "Default is non-strict (warn only)",
+        "Strict mode rejects with clear error showing lock owner",
+        "Configurable per-conversation or global",
+        "Warning includes conversationId of lock owner"
+      ]
+    },
+    {
+      "id": "T14",
+      "name": "V6 Mitigation: Neutralize window.close() in evaluate_script",
+      "desc": "evaluate_script can run window.close() which bypasses all tool-level guards. Inject Object.defineProperty override on controlled pages to neutralize window.close(). Low priority \u2014 requires page-level injection.",
+      "labels": [
+        "P3",
+        "low",
+        "defense-in-depth"
+      ],
+      "status": "pending",
+      "priority": "low",
+      "assignee": null,
+      "dependencies": [],
+      "comments": [
+        {
+          "id": "C19",
+          "author": "claude-verification",
+          "date": "2026-05-29",
+          "body": "Could-fix. LLM can inject window.close() via evaluate_script which bypasses close_page guard entirely. Defense in depth only \u2014 unlikely in normal usage."
+        }
+      ],
+      "files": [
+        "packages/browseros-agent/apps/server/src/tools/page-actions.ts",
+        "packages/browseros-agent/apps/agent/entrypoints/glow.content/index.ts"
+      ],
+      "checks": [
+        "window.close() overridden on pages with active LLM sessions",
+        "Override logs warning instead of closing",
+        "Restore original window.close on session end",
+        "Does not break legitimate page close flows"
+      ]
+    }
+  ]
+}
