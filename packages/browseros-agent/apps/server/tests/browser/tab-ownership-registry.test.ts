@@ -1,0 +1,268 @@
+/**
+ * TabOwnershipRegistry unit tests.
+ *
+ * The registry tracks which conversation/agent owns which page.
+ * It lives on the Browser class (singleton) so all MCP request-servers
+ * share the same ownership state.
+ *
+ * Methods under test:
+ *   claim(), release(), isLocked(), getOwner(), releaseIdle(), refreshActivity()
+ */
+
+import { describe, it, expect, beforeEach } from 'bun:test'
+import { TabOwnershipRegistry } from '../../src/browser/tab-ownership-registry'
+
+describe('TabOwnershipRegistry', () => {
+  let registry: TabOwnershipRegistry
+
+  beforeEach(() => {
+    registry = new TabOwnershipRegistry()
+  })
+
+  // ── claim() ──
+
+  describe('claim()', () => {
+    it('should claim an unowned page', () => {
+      const result = registry.claim('conv-1', 42, 'agent-A')
+      expect(result).toBe(true)
+      expect(registry.isLocked(42)).toBe(true)
+    })
+
+    it('should allow re-claiming by the same conversation', () => {
+      registry.claim('conv-1', 42, 'agent-A')
+      const result = registry.claim('conv-1', 42, 'agent-A')
+      expect(result).toBe(true)
+    })
+
+    it('should prevent double-claiming by a different conversation', () => {
+      registry.claim('conv-1', 42, 'agent-A')
+      const result = registry.claim('conv-2', 42, 'agent-B')
+      expect(result).toBe(false)
+    })
+
+    it('should work without agentId', () => {
+      const result = registry.claim('conv-1', 42)
+      expect(result).toBe(true)
+      const owner = registry.getOwner(42)
+      expect(owner?.ownerConversationId).toBe('conv-1')
+      expect(owner?.ownerAgentId).toBeUndefined()
+    })
+
+    it('should set lockedAt and lastActivityAt to current time', () => {
+      const before = Date.now()
+      registry.claim('conv-1', 42)
+      const after = Date.now()
+
+      const owner = registry.getOwner(42)!
+      expect(owner.lockedAt).toBeGreaterThanOrEqual(before)
+      expect(owner.lockedAt).toBeLessThanOrEqual(after)
+      expect(owner.lastActivityAt).toBeGreaterThanOrEqual(before)
+      expect(owner.lastActivityAt).toBeLessThanOrEqual(after)
+    })
+
+    it('should claim multiple pages for the same conversation', () => {
+      expect(registry.claim('conv-1', 1)).toBe(true)
+      expect(registry.claim('conv-1', 2)).toBe(true)
+      expect(registry.claim('conv-1', 3)).toBe(true)
+      expect(registry.isLocked(1)).toBe(true)
+      expect(registry.isLocked(2)).toBe(true)
+      expect(registry.isLocked(3)).toBe(true)
+    })
+
+    it('should allow different conversations to claim different pages', () => {
+      expect(registry.claim('conv-1', 1)).toBe(true)
+      expect(registry.claim('conv-2', 2)).toBe(true)
+      expect(registry.isLocked(1)).toBe(true)
+      expect(registry.isLocked(2)).toBe(true)
+      expect(registry.getOwner(1)?.ownerConversationId).toBe('conv-1')
+      expect(registry.getOwner(2)?.ownerConversationId).toBe('conv-2')
+    })
+  })
+
+  // ── release() ──
+
+  describe('release()', () => {
+    it('should release a page owned by the calling conversation', () => {
+      registry.claim('conv-1', 42)
+      const result = registry.release('conv-1', 42)
+      expect(result).toBe(true)
+      expect(registry.isLocked(42)).toBe(false)
+    })
+
+    it('should NOT release a page owned by another conversation', () => {
+      registry.claim('conv-1', 42)
+      const result = registry.release('conv-2', 42)
+      expect(result).toBe(false)
+      expect(registry.isLocked(42)).toBe(true)
+    })
+
+    it('should return false for a page that is not locked', () => {
+      const result = registry.release('conv-1', 999)
+      expect(result).toBe(false)
+    })
+
+    it('should allow re-claiming after release', () => {
+      registry.claim('conv-1', 42)
+      registry.release('conv-1', 42)
+      expect(registry.claim('conv-2', 42)).toBe(true)
+      expect(registry.getOwner(42)?.ownerConversationId).toBe('conv-2')
+    })
+  })
+
+  // ── isLocked() ──
+
+  describe('isLocked()', () => {
+    it('should return false for an unlocked page', () => {
+      expect(registry.isLocked(42)).toBe(false)
+    })
+
+    it('should return true for a claimed page', () => {
+      registry.claim('conv-1', 42)
+      expect(registry.isLocked(42)).toBe(true)
+    })
+
+    it('should return false after release', () => {
+      registry.claim('conv-1', 42)
+      registry.release('conv-1', 42)
+      expect(registry.isLocked(42)).toBe(false)
+    })
+  })
+
+  // ── getOwner() ──
+
+  describe('getOwner()', () => {
+    it('should return null for an unlocked page', () => {
+      expect(registry.getOwner(42)).toBeNull()
+    })
+
+    it('should return ownership info for a locked page', () => {
+      registry.claim('conv-1', 42, 'agent-A')
+      const owner = registry.getOwner(42)!
+      expect(owner.ownerConversationId).toBe('conv-1')
+      expect(owner.ownerAgentId).toBe('agent-A')
+      expect(typeof owner.lockedAt).toBe('number')
+      expect(typeof owner.lastActivityAt).toBe('number')
+    })
+
+    it('should return null after release', () => {
+      registry.claim('conv-1', 42)
+      registry.release('conv-1', 42)
+      expect(registry.getOwner(42)).toBeNull()
+    })
+  })
+
+  // ── refreshActivity() ──
+
+  describe('refreshActivity()', () => {
+    it('should update lastActivityAt for a locked page', async () => {
+      registry.claim('conv-1', 42)
+      const original = registry.getOwner(42)!.lastActivityAt
+
+      // Wait a tiny bit to ensure time difference
+      await new Promise((r) => setTimeout(r, 5))
+
+      registry.refreshActivity(42)
+      const updated = registry.getOwner(42)!.lastActivityAt
+      expect(updated).toBeGreaterThan(original)
+    })
+
+    it('should be a no-op for an unlocked page', () => {
+      expect(() => registry.refreshActivity(999)).not.toThrow()
+    })
+
+    it('should NOT change lockedAt', async () => {
+      registry.claim('conv-1', 42)
+      const originalLockedAt = registry.getOwner(42)!.lockedAt
+
+      await new Promise((r) => setTimeout(r, 5))
+      registry.refreshActivity(42)
+
+      expect(registry.getOwner(42)!.lockedAt).toBe(originalLockedAt)
+    })
+  })
+
+  // ── releaseIdle() ──
+
+  describe('releaseIdle()', () => {
+    it('should release locks idle beyond the threshold', () => {
+      // Manually inject a stale entry
+      registry.claim('conv-1', 1)
+      registry.claim('conv-2', 2)
+
+      // Backdate page 1's lastActivityAt
+      const owner1 = registry.getOwner(1)!
+      registry['_entries'].set(1, {
+        ...owner1,
+        lastActivityAt: Date.now() - 10_000, // 10 seconds ago
+      })
+
+      const released = registry.releaseIdle(5_000) // 5 second threshold
+      expect(released).toBe(1)
+      expect(registry.isLocked(1)).toBe(false)
+      expect(registry.isLocked(2)).toBe(true) // still fresh
+    })
+
+    it('should not release recently active locks', () => {
+      registry.claim('conv-1', 42)
+      const released = registry.releaseIdle(60_000) // 1 minute
+      expect(released).toBe(0)
+      expect(registry.isLocked(42)).toBe(true)
+    })
+
+    it('should release multiple stale locks', () => {
+      registry.claim('conv-1', 1)
+      registry.claim('conv-2', 2)
+      registry.claim('conv-3', 3)
+
+      // Backdate all
+      for (const pageId of [1, 2, 3]) {
+        const owner = registry.getOwner(pageId)!
+        registry['_entries'].set(pageId, {
+          ...owner,
+          lastActivityAt: Date.now() - 10_000,
+        })
+      }
+
+      const released = registry.releaseIdle(5_000)
+      expect(released).toBe(3)
+      expect(registry.isLocked(1)).toBe(false)
+      expect(registry.isLocked(2)).toBe(false)
+      expect(registry.isLocked(3)).toBe(false)
+    })
+
+    it('should return 0 when no locks exist', () => {
+      const released = registry.releaseIdle(1_000)
+      expect(released).toBe(0)
+    })
+  })
+
+  // ── Thread safety (concurrent claim attempts) ──
+
+  describe('concurrent claims', () => {
+    it('should handle rapid sequential claims from different conversations', () => {
+      // Simulate rapid claims - first one wins, rest fail
+      const results: boolean[] = []
+      for (let i = 0; i < 10; i++) {
+        results.push(registry.claim(`conv-${i}`, 42))
+      }
+
+      // Exactly one should succeed (the first)
+      expect(results.filter(Boolean).length).toBe(1)
+      expect(results[0]).toBe(true)
+      for (let i = 1; i < 10; i++) {
+        expect(results[i]).toBe(false)
+      }
+    })
+  })
+
+  // ── Regression: ensure Browser API is not broken ──
+
+  describe('no regression on Browser API', () => {
+    it('should be instantiable as a standalone class', () => {
+      const reg = new TabOwnershipRegistry()
+      expect(reg).toBeDefined()
+      expect(reg.isLocked(1)).toBe(false)
+      expect(reg.getOwner(1)).toBeNull()
+    })
+  })
+})

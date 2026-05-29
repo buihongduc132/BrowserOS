@@ -14,6 +14,8 @@ import {
 } from './content-markdown'
 import { type DomSearchResult, parseNodeAttributes } from './dom'
 import * as elements from './elements'
+import * as extensionBridge from './extension-bridge'
+import * as extensions from './extensions'
 import type { HistoryEntry } from './history'
 import * as history from './history'
 import * as keyboard from './keyboard'
@@ -22,8 +24,7 @@ import type { AXNode } from './snapshot'
 import * as snapshot from './snapshot'
 import type { TabGroup } from './tab-groups'
 import * as tabGroups from './tab-groups'
-import * as extensions from './extensions'
-import * as extensionBridge from './extension-bridge'
+import { TabOwnershipRegistry } from './tab-ownership-registry'
 
 export interface PageInfo {
   pageId: number
@@ -99,6 +100,7 @@ export class Browser {
   private pages = new Map<number, PageInfo>()
   private sessions = new Map<string, string>()
   private nextPageId = 1
+  readonly tabOwnership = new TabOwnershipRegistry()
 
   constructor(cdp: CdpBackend) {
     this.cdp = cdp
@@ -1501,7 +1503,9 @@ export class Browser {
 
   // --- Extension Message Bridge (L3) ---
 
-  async listMessageableExtensions(): Promise<extensionBridge.MessageableExtension[]> {
+  async listMessageableExtensions(): Promise<
+    extensionBridge.MessageableExtension[]
+  > {
     return extensionBridge.listMessageableExtensions(this.cdp)
   }
 
@@ -1510,7 +1514,12 @@ export class Browser {
     message: unknown,
     timeoutMs?: number,
   ): Promise<unknown> {
-    return extensionBridge.sendExtensionMessage(this.cdp, extensionId, message, timeoutMs)
+    return extensionBridge.sendExtensionMessage(
+      this.cdp,
+      extensionId,
+      message,
+      timeoutMs,
+    )
   }
 
   // --- Tab Groups ---
