@@ -227,6 +227,37 @@ describe('close_page last-visible-tab guard', () => {
     )
   })
 
+  it('rejects closing a non-existent page ID without crashing', async () => {
+    const pages = [makePage({ pageId: 1 })]
+    const { browser, wasClosePageCalled } = createMockBrowser(pages)
+
+    // Closing a page that doesn't exist in listPages
+    const result = await executeClosePage(browser, 999)
+
+    // Should either error (page not found) or the guard shouldn't block
+    // because page 999 isn't in the visible list — page 1 is still there
+    // The key invariant: guard only triggers if closing the target would leave 0 visible
+    // Since page 999 isn't in the list, closing it doesn't affect visible count
+    assert.ok(
+      !textOf(result).includes('Cannot close the last visible tab'),
+      `Last-visible-tab guard should NOT trigger for non-existent page`,
+    )
+  })
+
+  it('guard still blocks when all pages have about:blank URLs', async () => {
+    // Edge case: about:blank pages are still visible tabs
+    const pages = [makePage({ pageId: 1, url: 'about:blank' })]
+    const { browser } = createMockBrowser(pages)
+
+    const result = await executeClosePage(browser, 1)
+
+    assert.ok(result.isError, 'Expected error — about:blank is still a visible tab')
+    assert.ok(
+      textOf(result).includes('Cannot close the last visible tab'),
+      `Expected last-visible-tab error, got: ${textOf(result)}`,
+    )
+  })
+
   it('newtab guard still works when multiple visible tabs exist', async () => {
     const pages = [makePage({ pageId: 1 }), makePage({ pageId: 2 })]
     const { browser } = createMockBrowser(pages)
