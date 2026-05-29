@@ -15,7 +15,7 @@ import {
 
 describe('CONFIG_KEYS', () => {
   test('has 37 keys total', () => {
-    expect(CONFIG_KEYS).toHaveLength(37)
+    expect(CONFIG_KEYS).toHaveLength(39)
   })
 
   test('all keys have unique dot-paths', () => {

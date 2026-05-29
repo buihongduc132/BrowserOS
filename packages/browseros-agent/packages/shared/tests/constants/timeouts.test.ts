@@ -21,7 +21,7 @@ const TIMEOUTS_MODULE_PATH = JSON.stringify(
 )
 
 // ---------------------------------------------------------------------------
-// 1. Default values — all 26 constants
+// 1. Default values — all 28 constants
 // ---------------------------------------------------------------------------
 
 describe('TIMEOUTS default values', () => {
@@ -66,10 +66,14 @@ describe('TIMEOUTS default values', () => {
     expect(TIMEOUTS.OAUTH_POLL_INTERVAL).toBe(2_000)
     expect(TIMEOUTS.OAUTH_POLL_TIMEOUT).toBe(300_000)
     expect(TIMEOUTS.DEVICE_CODE_POLL_SAFETY_MARGIN).toBe(3_000)
+
+    // Tab ownership idle lock
+    expect(TIMEOUTS.TAB_LOCK_IDLE).toBe(3_600_000) // 1 hour
+    expect(TIMEOUTS.TAB_LOCK_SWEEP_INTERVAL).toBe(60_000) // 60s
   })
 
-  it('exports exactly 26 timeout keys', () => {
-    expect(Object.keys(TIMEOUTS)).toHaveLength(26)
+  it('exports exactly 28 timeout keys', () => {
+    expect(Object.keys(TIMEOUTS)).toHaveLength(28)
   })
 
   it('all values are positive numbers', () => {
