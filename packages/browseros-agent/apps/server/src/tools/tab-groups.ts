@@ -167,6 +167,26 @@ export const close_tab_group = defineTool({
     groupId: z.string(),
   }),
   handler: async (args, ctx, response) => {
+    // Last-visible-tab guard: reject if closing this group would leave 0 visible tabs.
+    const groups = await ctx.browser.listTabGroups()
+    const group = groups.find((g) => g.groupId === args.groupId)
+    if (group) {
+      const allPages = await ctx.browser.listPages()
+      const visiblePages = allPages.filter((p) => !p.isHidden)
+      const groupVisiblePages = visiblePages.filter(
+        (p) => group.pageIds.includes(p.pageId),
+      )
+      const nonGroupVisiblePages = visiblePages.filter(
+        (p) => !group.pageIds.includes(p.pageId),
+      )
+      if (groupVisiblePages.length > 0 && nonGroupVisiblePages.length === 0) {
+        response.error(
+          'Cannot close the last visible tab — closing this tab group would close the browser.',
+        )
+        return
+      }
+    }
+
     await ctx.browser.closeTabGroup(args.groupId)
     response.text(`Closed tab group ${args.groupId} and all its tabs`)
     response.data({ action: 'close_tab_group', groupId: args.groupId })
