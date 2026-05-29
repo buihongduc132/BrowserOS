@@ -3,7 +3,7 @@
   "planFile": "flow/plans/2026-05-30_tab-ownership-and-browser-self-close.md",
   "intentionFile": "flow/intentions/2026-05-30_tab-ownership-and-browser-self-close.md",
   "createdAt": "2026-05-30T00:00:00Z",
-  "updatedAt": "2026-06-01T00:00:00Z",
+  "updatedAt": "2026-06-01T12:00:00Z",
   "status": "complete",
   "tasks": [
     {
@@ -661,7 +661,7 @@
         "packages/browseros-agent/apps/server/src/tools/window-close-guard.ts",
         "packages/browseros-agent/apps/server/src/tools/snapshot.ts"
       ],
-      "last_iteration": 20,
+      "last_iteration": 21,
       "notes": "Neutralize window.close() in evaluate_script. wrapWithWindowCloseGuard() wraps expressions with preamble that overrides window.close with no-op. Original restored via try/finally. 10 unit tests."
     }
   ]
