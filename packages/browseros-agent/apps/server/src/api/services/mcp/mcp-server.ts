@@ -66,8 +66,6 @@ export function createMcpServer(deps: McpServiceDeps): McpServer {
     // MCP callers get sidepanel-level protections by default.
     // This ensures guards (last-visible-tab, origin-tab) work for MCP
     // callers instead of being silently bypassed (ctx.session was undefined).
-    // originPageId is intentionally undefined — MCP callers have no host tab.
-    // MCP callers get sidepanel-level protections by default.
     // A stable per-connection UUID ensures ownership tracking works:
     // claim/release/isLocked all require a conversationId.
     // originPageId is intentionally undefined — MCP callers have no host tab.

@@ -60,7 +60,7 @@ export function enforceOwnership(
   }
 
   // Page is owned by someone else
-  const isStrict = (ctx as Record<string, unknown>).strictOwnership === true
+  const isStrict = ctx.strictOwnership === true
 
   if (isStrict) {
     return {
