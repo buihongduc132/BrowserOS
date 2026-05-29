@@ -66,7 +66,10 @@ export const list_pages = defineTool({
       return {
         ...p,
         controlledBy: owner
-          ? { conversationId: owner.ownerConversationId, agentId: owner.ownerAgentId }
+          ? {
+              conversationId: owner.ownerConversationId,
+              agentId: owner.ownerAgentId,
+            }
           : null,
       }
     })
@@ -438,7 +441,9 @@ export const lock_tab = defineTool({
       return
     }
 
-    response.text(`Locked page ${args.page} for conversation ${ctx.session.conversationId}`)
+    response.text(
+      `Locked page ${args.page} for conversation ${ctx.session.conversationId}`,
+    )
     response.data({ page: args.page, locked: true })
   },
 })

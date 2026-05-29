@@ -179,7 +179,11 @@ export class TabOwnershipRegistry {
     }, sweepIntervalMs)
 
     // Prevent the timer from keeping the process alive
-    if (this.sweepTimer && typeof this.sweepTimer === 'object' && 'unref' in this.sweepTimer) {
+    if (
+      this.sweepTimer &&
+      typeof this.sweepTimer === 'object' &&
+      'unref' in this.sweepTimer
+    ) {
       this.sweepTimer.unref()
     }
   }

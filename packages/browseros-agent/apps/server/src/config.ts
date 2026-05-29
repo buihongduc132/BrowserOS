@@ -381,4 +381,3 @@ function parseAbsolutePath(val: unknown, baseDir: string): string | undefined {
   if (typeof val !== 'string') return undefined
   return toAbsolutePath(val, baseDir)
 }
-

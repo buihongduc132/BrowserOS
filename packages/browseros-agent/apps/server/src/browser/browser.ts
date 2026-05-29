@@ -1,4 +1,5 @@
 import type { ProtocolApi } from '@browseros/cdp-protocol/protocol-api'
+import { TIMEOUTS } from '@browseros/shared/constants/timeouts'
 import { logger } from '../lib/logger'
 import type { CdpBackend } from './backends/types'
 import type { BookmarkNode } from './bookmarks'
@@ -24,7 +25,6 @@ import type { AXNode } from './snapshot'
 import * as snapshot from './snapshot'
 import type { TabGroup } from './tab-groups'
 import * as tabGroups from './tab-groups'
-import { TIMEOUTS } from '@browseros/shared/constants/timeouts'
 import { TabOwnershipRegistry } from './tab-ownership-registry'
 
 export interface PageInfo {

@@ -173,8 +173,8 @@ export const close_tab_group = defineTool({
     if (group) {
       const allPages = await ctx.browser.listPages()
       const visiblePages = allPages.filter((p) => !p.isHidden)
-      const groupVisiblePages = visiblePages.filter(
-        (p) => group.pageIds.includes(p.pageId),
+      const groupVisiblePages = visiblePages.filter((p) =>
+        group.pageIds.includes(p.pageId),
       )
       const nonGroupVisiblePages = visiblePages.filter(
         (p) => !group.pageIds.includes(p.pageId),

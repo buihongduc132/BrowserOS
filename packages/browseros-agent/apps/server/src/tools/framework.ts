@@ -87,7 +87,9 @@ export async function executeTool(
     ownershipPageIds.push(singlePage)
   }
   if (Array.isArray(multiPage)) {
-    ownershipPageIds.push(...multiPage.filter((p): p is number => typeof p === 'number'))
+    ownershipPageIds.push(
+      ...multiPage.filter((p): p is number => typeof p === 'number'),
+    )
   }
 
   for (const pageId of ownershipPageIds) {
