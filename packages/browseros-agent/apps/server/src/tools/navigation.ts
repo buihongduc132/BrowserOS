@@ -277,6 +277,22 @@ export const close_page = defineTool({
     action: z.literal('close_page'),
   }),
   handler: async (args, ctx, response) => {
+    // Last-visible-tab guard: reject if closing would leave 0 visible tabs.
+    // This prevents the browser from exiting when the last tab is closed.
+    // Applies to ALL session modes (sidepanel, newtab, MCP/undefined).
+    const allPages = await ctx.browser.listPages()
+    const visiblePages = allPages.filter((p) => !p.isHidden)
+    const remainingVisible = visiblePages.filter(
+      (p) => p.pageId !== args.page,
+    )
+    if (remainingVisible.length === 0) {
+      response.error(
+        'Cannot close the last visible tab — this would close the browser.',
+      )
+      return
+    }
+
+    // Newtab origin guard: reject if closing the host tab in new-tab mode.
     if (
       ctx.session?.origin === 'newtab' &&
       ctx.session.originPageId !== undefined &&
