@@ -117,7 +117,49 @@ export const close_window = defineTool({
       return
     }
 
+    // Ownership guard: check if any pages in the target window are owned
+    // by a different conversation. In strict mode, reject. Otherwise warn.
+    const allPages = await ctx.browser.listPages()
+    const windowPages = allPages.filter(
+      (p) => p.windowId === args.windowId,
+    )
+    const registry = ctx.browser.tabOwnership
+    const conversationId = ctx.session?.conversationId
+    if (registry && conversationId) {
+      const foreignOwned = windowPages.filter((p) => {
+        const owner = registry.getOwner(p.pageId)
+        return owner && owner.ownerConversationId !== conversationId
+      })
+
+      if (foreignOwned.length > 0) {
+        const ownerIds = [
+          ...new Set(
+            foreignOwned.map((p) => registry.getOwner(p.pageId)?.ownerConversationId),
+          ),
+        ].filter(Boolean)
+
+        if (ctx.strictOwnership) {
+          response.error(
+            `Cannot close window ${args.windowId}: contains ${foreignOwned.length} page(s) locked by conversation(s) ${ownerIds.join(', ')}. Use list_pages to find unlocked tabs.`,
+          )
+          return
+        }
+
+        response.text(
+          `⚠️ Window ${args.windowId} contains ${foreignOwned.length} page(s) locked by conversation(s) ${ownerIds.join(', ')}. Proceeding in non-strict mode.`,
+        )
+      }
+    }
+
     await ctx.browser.closeWindow(args.windowId)
+
+    // Release ownership locks for pages in the closed window to prevent stale locks
+    if (registry) {
+      for (const page of windowPages) {
+        registry.forceReleasePage(page.pageId)
+      }
+    }
+
     response.text(`Closed window ${args.windowId}`)
     response.data({ action: 'close_window', windowId: args.windowId })
     response.includePages()

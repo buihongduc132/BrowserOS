@@ -19,7 +19,7 @@
  * Uses eval() to support both expressions and multi-statement code.
  */
 export const WINDOW_CLOSE_GUARD_PREAMBLE = `(function() {
-  const _origClose = window.close;
+  const _bOsWcOrig = window.close;
   Object.defineProperty(window, 'close', {
     value: function() { console.warn('[BrowserOS] window.close() blocked — use close_page tool instead'); },
     configurable: true,
@@ -31,7 +31,7 @@ export const WINDOW_CLOSE_GUARD_PREAMBLE = `(function() {
 const WINDOW_CLOSE_GUARD_POSTAMBLE = `);
   } finally {
     Object.defineProperty(window, 'close', {
-      value: _origClose,
+      value: _bOsWcOrig,
       configurable: true,
       writable: true
     });

@@ -38,7 +38,7 @@ describe('window.close() guard', () => {
     it('should restore window.close after execution', () => {
       const wrapped = wrapWithWindowCloseGuard('42')
       expect(wrapped).toContain('finally')
-      expect(wrapped).toContain('_origClose')
+      expect(wrapped).toContain('_bOsWcOrig')
     })
   })
 
@@ -46,7 +46,7 @@ describe('window.close() guard', () => {
 
   describe('WINDOW_CLOSE_GUARD_PREAMBLE', () => {
     it('should save the original window.close', () => {
-      expect(WINDOW_CLOSE_GUARD_PREAMBLE).toContain('_origClose')
+      expect(WINDOW_CLOSE_GUARD_PREAMBLE).toContain('_bOsWcOrig')
       expect(WINDOW_CLOSE_GUARD_PREAMBLE).toContain('window.close')
     })
 
