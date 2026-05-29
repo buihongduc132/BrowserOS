@@ -451,6 +451,10 @@ export class ChatService {
       session.hiddenPageId = undefined
       this.closeHiddenPage(pageId, conversationId)
     }
+
+    // Release all tab ownership locks held by this conversation
+    this.deps.browser.tabOwnership?.releaseAllForConversation(conversationId)
+
     const deleted = await this.deps.sessionStore.delete(conversationId)
     return { deleted, sessionCount: this.deps.sessionStore.count() }
   }

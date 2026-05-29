@@ -328,10 +328,9 @@ export const close_page = defineTool({
 
     await ctx.browser.closePage(args.page)
 
-    // Release ownership after successful close
-    if (ctx.session?.conversationId) {
-      ctx.browser.tabOwnership?.release(ctx.session.conversationId, args.page)
-    }
+    // Force-release ownership after successful close (page is gone)
+    // Use forceReleasePage because the page is destroyed — any conversation's lock is stale
+    ctx.browser.tabOwnership?.forceReleasePage(args.page)
 
     response.text(`Closed page ${args.page}`)
     response.data({ page: args.page, action: 'close_page' })
