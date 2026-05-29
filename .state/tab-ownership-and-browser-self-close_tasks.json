@@ -3,13 +3,13 @@
   "planFile": "flow/plans/2026-05-30_tab-ownership-and-browser-self-close.md",
   "intentionFile": "flow/intentions/2026-05-30_tab-ownership-and-browser-self-close.md",
   "createdAt": "2026-05-30T00:00:00Z",
-  "updatedAt": "2026-06-01T12:00:00Z",
+  "updatedAt": "2026-06-01T18:00:00Z",
   "status": "complete",
   "tasks": [
     {
       "id": "T01",
       "name": "P0.1: Last-visible-tab guard in close_page",
-      "desc": "Add guard in `close_page` (navigation.ts) that rejects closing the last visible tab in the last visible window. Applies to ALL modes (sidepanel, newtab, MCP). Check: list visible pages → if closing this one leaves 0 visible → reject.",
+      "desc": "Add guard in `close_page` (navigation.ts) that rejects closing the last visible tab in the last visible window. Applies to ALL modes (sidepanel, newtab, MCP). Check: list visible pages \u2192 if closing this one leaves 0 visible \u2192 reject.",
       "labels": [
         "P0",
         "critical",
@@ -25,7 +25,7 @@
           "id": "C01",
           "author": "investigation",
           "date": "2026-05-29",
-          "body": "Root cause of browser self-closing. Chromium's CloseTab has no last-tab protection. Verified down to browser_handler.cc:CloseTab() → tab_strip->CloseWebContentsAt() with no guard."
+          "body": "Root cause of browser self-closing. Chromium's CloseTab has no last-tab protection. Verified down to browser_handler.cc:CloseTab() \u2192 tab_strip->CloseWebContentsAt() with no guard."
         },
         {
           "id": "C02",
@@ -57,7 +57,7 @@
     {
       "id": "T02",
       "name": "P0.2: Last-visible-window guard in close_window",
-      "desc": "Add guard in `close_window` (windows.ts) that rejects closing the last visible window. No guard exists currently in ANY mode. close_window calls CDP Browser.closeWindow → Chromium closes immediately.",
+      "desc": "Add guard in `close_window` (windows.ts) that rejects closing the last visible window. No guard exists currently in ANY mode. close_window calls CDP Browser.closeWindow \u2192 Chromium closes immediately.",
       "labels": [
         "P0",
         "critical",
@@ -73,13 +73,13 @@
           "id": "C03",
           "author": "investigation",
           "date": "2026-05-29",
-          "body": "close_window has ZERO protection — not even in newtab mode. Verified: windows.ts handler directly calls ctx.browser.closeWindow(args.windowId) with no checks."
+          "body": "close_window has ZERO protection \u2014 not even in newtab mode. Verified: windows.ts handler directly calls ctx.browser.closeWindow(args.windowId) with no checks."
         },
         {
           "id": "C04",
           "author": "claude-verification",
           "date": "2026-05-29",
-          "body": "Also check set_window_visibility — deny hiding the last visible window (indirect bypass: hide all windows → close hidden)."
+          "body": "Also check set_window_visibility \u2014 deny hiding the last visible window (indirect bypass: hide all windows \u2192 close hidden)."
         }
       ],
       "files": [
@@ -104,7 +104,7 @@
     {
       "id": "T03",
       "name": "P0.3: Sidepanel origin-tab guard for close_page and navigate_page",
-      "desc": "Extend the existing newtab-only guard to also protect the sidepanel active tab. In sidepanel mode, the active tab from browserContext is the origin tab — closing/navigating it disrupts the user's workflow. Add sidepanel to the origin check.",
+      "desc": "Extend the existing newtab-only guard to also protect the sidepanel active tab. In sidepanel mode, the active tab from browserContext is the origin tab \u2014 closing/navigating it disrupts the user's workflow. Add sidepanel to the origin check.",
       "labels": [
         "P0",
         "critical",
@@ -122,7 +122,7 @@
           "id": "C05",
           "author": "investigation",
           "date": "2026-05-29",
-          "body": "Current guard: `ctx.session?.origin === 'newtab'` — sidepanel mode is completely unprotected. The LLM can close/navigate the tab the user is viewing while chatting from the sidepanel."
+          "body": "Current guard: `ctx.session?.origin === 'newtab'` \u2014 sidepanel mode is completely unprotected. The LLM can close/navigate the tab the user is viewing while chatting from the sidepanel."
         },
         {
           "id": "C06",
@@ -153,7 +153,7 @@
     {
       "id": "T04",
       "name": "P0.4: close_tab_group guard",
-      "desc": "Add guard in `close_tab_group` (tab-groups.ts) — currently zero protection. If a tab group contains the last visible tab(s), closing it would close the browser. Check before closing.",
+      "desc": "Add guard in `close_tab_group` (tab-groups.ts) \u2014 currently zero protection. If a tab group contains the last visible tab(s), closing it would close the browser. Check before closing.",
       "labels": [
         "P0",
         "critical",
@@ -169,7 +169,7 @@
           "id": "C07",
           "author": "claude-verification",
           "date": "2026-05-29",
-          "body": "NEW finding: close_tab_group bypasses close_page entirely — it calls CDP closeTabGroup which closes all tabs in the group at the Chromium level. Zero guards in tab-groups.ts."
+          "body": "NEW finding: close_tab_group bypasses close_page entirely \u2014 it calls CDP closeTabGroup which closes all tabs in the group at the Chromium level. Zero guards in tab-groups.ts."
         }
       ],
       "files": [
@@ -179,7 +179,7 @@
       "checks": [
         "close_tab_group rejects if closing the group would leave 0 visible tabs",
         "Works when group contains the last visible tab",
-        "Ungrouping tabs (ungroup_tabs) is NOT blocked — just removes group, doesn't close tabs",
+        "Ungrouping tabs (ungroup_tabs) is NOT blocked \u2014 just removes group, doesn't close tabs",
         "Hidden tabs in group do not count toward visible count"
       ],
       "checks_passed": "4/4",
@@ -268,7 +268,7 @@
           "id": "C10",
           "author": "design",
           "date": "2026-05-29",
-          "body": "Registry must live on Browser class (singleton) not per-request — MCP creates per-request servers. Shared state must be at the Browser level."
+          "body": "Registry must live on Browser class (singleton) not per-request \u2014 MCP creates per-request servers. Shared state must be at the Browser level."
         }
       ],
       "files": [
@@ -283,14 +283,14 @@
         "No regression on existing Browser API"
       ],
       "checks_passed": "6/6",
-      "tests_written": 26,
+      "tests_written": 37,
       "files_modified": [
         "packages/browseros-agent/apps/server/src/browser/browser.ts",
         "packages/browseros-agent/apps/server/src/browser/tab-ownership-registry.ts",
         "packages/browseros-agent/apps/server/tests/browser/tab-ownership-registry.test.ts"
       ],
-      "last_iteration": 20,
-      "notes": "TabOwnershipRegistry implemented. Exposed on Browser class as tabOwnership (readonly). All 6 checks passing. 28 unit tests."
+      "last_iteration": 22,
+      "notes": "TabOwnershipRegistry with 37 unit tests. TOCTOU race + idle sweep callback + lifecycle tests added I22."
     },
     {
       "id": "T07",
@@ -361,7 +361,7 @@
           "id": "C12",
           "author": "user-intent",
           "date": "2026-05-29",
-          "body": "User asked: 'how to LLM in 1 tab know that the other tabs is currently control it?' — list_pages enrichment directly addresses this. LLM calls list_pages → sees controlledBy → knows which tabs are taken."
+          "body": "User asked: 'how to LLM in 1 tab know that the other tabs is currently control it?' \u2014 list_pages enrichment directly addresses this. LLM calls list_pages \u2192 sees controlledBy \u2192 knows which tabs are taken."
         }
       ],
       "files": [
@@ -404,7 +404,7 @@
           "id": "C13",
           "author": "user-intent",
           "date": "2026-05-29",
-          "body": "User asked: 'have the option that make LLM to not allowed to interact with controlled tabs' and 'which from mcp' — explicit lock/unlock tools let MCP callers declare intent."
+          "body": "User asked: 'have the option that make LLM to not allowed to interact with controlled tabs' and 'which from mcp' \u2014 explicit lock/unlock tools let MCP callers declare intent."
         }
       ],
       "files": [
@@ -450,7 +450,7 @@
           "id": "C14",
           "author": "user-intent",
           "date": "2026-05-29",
-          "body": "User asked: 'can we implement it as another plugins itself ? or inside the current plugins itself ?' — Answer: extend existing glow.content. Already has the content script + messaging infrastructure."
+          "body": "User asked: 'can we implement it as another plugins itself ? or inside the current plugins itself ?' \u2014 Answer: extend existing glow.content. Already has the content script + messaging infrastructure."
         },
         {
           "id": "C15",
@@ -503,7 +503,7 @@
           "id": "C16",
           "author": "design",
           "date": "2026-05-29",
-          "body": "Server → extension messaging path: Browser class emits ownership events → server sends to extension via existing messaging → useNotifyActiveTab enriches GlowMessage → content script renders indicator."
+          "body": "Server \u2192 extension messaging path: Browser class emits ownership events \u2192 server sends to extension via existing messaging \u2192 useNotifyActiveTab enriches GlowMessage \u2192 content script renders indicator."
         }
       ],
       "files": [
@@ -549,7 +549,7 @@
           "id": "C17",
           "author": "user-intent",
           "date": "2026-05-29",
-          "body": "User asked: 'it can have configuration to release that lock after some idle time (like 1 hour)' — direct implementation of this request."
+          "body": "User asked: 'it can have configuration to release that lock after some idle time (like 1 hour)' \u2014 direct implementation of this request."
         }
       ],
       "files": [
@@ -627,7 +627,7 @@
     {
       "id": "T14",
       "name": "V6 Mitigation: Neutralize window.close() in evaluate_script",
-      "desc": "evaluate_script can run window.close() which bypasses all tool-level guards. Inject Object.defineProperty override on controlled pages to neutralize window.close(). Low priority — requires page-level injection.",
+      "desc": "evaluate_script can run window.close() which bypasses all tool-level guards. Inject Object.defineProperty override on controlled pages to neutralize window.close(). Low priority \u2014 requires page-level injection.",
       "labels": [
         "P3",
         "low",
@@ -642,7 +642,7 @@
           "id": "C19",
           "author": "claude-verification",
           "date": "2026-05-29",
-          "body": "Could-fix. LLM can inject window.close() via evaluate_script which bypasses close_page guard entirely. Defense in depth only — unlikely in normal usage."
+          "body": "Could-fix. LLM can inject window.close() via evaluate_script which bypasses close_page guard entirely. Defense in depth only \u2014 unlikely in normal usage."
         }
       ],
       "files": [
