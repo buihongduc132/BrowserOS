@@ -227,9 +227,7 @@ I12 confirmation: All 138 task-specific tests pass (0 fail). 1838 total suite pa
         "Per-request server still has no shared state (no regression)"
       ],
       "checks_passed": "5/5",
-      "tests_written": 2,
-      "files_modified": [
-        "packages/browseros-agent/apps/server/tests/api/services/mcp/session-context.test.ts",
+      "tests_written": 4,
         "packages/browseros-agent/apps/server/src/api/services/mcp/mcp-server.ts"
       ],
       "last_iteration": 6,
