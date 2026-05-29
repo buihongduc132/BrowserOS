@@ -105,6 +105,14 @@ export const TIMEOUTS = {
   get DEVICE_CODE_POLL_SAFETY_MARGIN() {
     return configStore.get('TIMEOUTS.DEVICE_CODE_POLL_SAFETY_MARGIN')
   },
+
+  // Tab ownership
+  get TAB_LOCK_IDLE() {
+    return configStore.get('TIMEOUTS.TAB_LOCK_IDLE')
+  },
+  get TAB_LOCK_SWEEP_INTERVAL() {
+    return configStore.get('TIMEOUTS.TAB_LOCK_SWEEP_INTERVAL')
+  },
 }
 
 export type TimeoutKey = keyof typeof TIMEOUTS

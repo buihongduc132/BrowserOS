@@ -12,6 +12,11 @@ export type PostAction =
 
 export interface ToolResultMetadata {
   tabId?: number
+  lockHeld?: boolean
+  controlledBy?: {
+    conversationId: string
+    agentId?: string
+  }
 }
 
 export interface ToolResult {

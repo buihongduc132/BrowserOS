@@ -19,9 +19,27 @@ export interface OwnershipEntry {
   lastActivityAt: number
 }
 
+/** Callback fired when the idle sweep releases a lock. */
+export type LockReleasedCallback = (
+  pageId: number,
+  entry: OwnershipEntry,
+) => void
+
 export class TabOwnershipRegistry {
   /** Map<pageId, OwnershipEntry> */
   _entries = new Map<number, OwnershipEntry>()
+
+  /** Callback invoked when the idle sweep releases a lock. */
+  onLockReleased?: LockReleasedCallback
+
+  /** Handle for the periodic idle sweep timer. */
+  private sweepTimer: ReturnType<typeof setInterval> | null = null
+
+  /** Default idle timeout: 1 hour (3600000ms). */
+  static readonly DEFAULT_IDLE_TIMEOUT_MS = 3_600_000
+
+  /** Default sweep interval: 60 seconds (60000ms). */
+  static readonly DEFAULT_SWEEP_INTERVAL_MS = 60_000
 
   /**
    * Claim ownership of a page for a conversation.
@@ -126,5 +144,60 @@ export class TabOwnershipRegistry {
       }
     }
     return released
+  }
+
+  // ── Idle Sweep ──
+
+  /**
+   * Start a periodic sweep that auto-releases idle locks.
+   *
+   * @param idleTimeoutMs - Locks idle beyond this are released (default: 1 hour)
+   * @param sweepIntervalMs - How often to check (default: 60 seconds)
+   */
+  startIdleSweep(
+    idleTimeoutMs: number = TabOwnershipRegistry.DEFAULT_IDLE_TIMEOUT_MS,
+    sweepIntervalMs: number = TabOwnershipRegistry.DEFAULT_SWEEP_INTERVAL_MS,
+  ): void {
+    // Stop any existing sweep first (idempotent restart)
+    this.stopIdleSweep()
+
+    this.sweepTimer = setInterval(() => {
+      // Collect entries before deletion so callback gets valid data
+      const toRelease: Array<{ pageId: number; entry: OwnershipEntry }> = []
+      const now = Date.now()
+
+      for (const [pageId, entry] of this._entries) {
+        if (now - entry.lastActivityAt > idleTimeoutMs) {
+          toRelease.push({ pageId, entry })
+        }
+      }
+
+      for (const { pageId, entry } of toRelease) {
+        this._entries.delete(pageId)
+        this.onLockReleased?.(pageId, entry)
+      }
+    }, sweepIntervalMs)
+
+    // Prevent the timer from keeping the process alive
+    if (this.sweepTimer && typeof this.sweepTimer === 'object' && 'unref' in this.sweepTimer) {
+      this.sweepTimer.unref()
+    }
+  }
+
+  /**
+   * Stop the idle sweep timer.
+   */
+  stopIdleSweep(): void {
+    if (this.sweepTimer !== null) {
+      clearInterval(this.sweepTimer)
+      this.sweepTimer = null
+    }
+  }
+
+  /**
+   * Check if the idle sweep timer is currently active.
+   */
+  isSweepActive(): boolean {
+    return this.sweepTimer !== null
   }
 }

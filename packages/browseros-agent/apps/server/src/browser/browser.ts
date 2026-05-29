@@ -24,6 +24,7 @@ import type { AXNode } from './snapshot'
 import * as snapshot from './snapshot'
 import type { TabGroup } from './tab-groups'
 import * as tabGroups from './tab-groups'
+import { TIMEOUTS } from '@browseros/shared/constants/timeouts'
 import { TabOwnershipRegistry } from './tab-ownership-registry'
 
 export interface PageInfo {
@@ -106,6 +107,26 @@ export class Browser {
     this.cdp = cdp
     this.consoleCollector = new ConsoleCollector(cdp)
     this.setupEventHandlers()
+    this.startTabOwnershipIdleSweep()
+  }
+
+  /**
+   * Start the idle sweep for tab ownership locks using shared config.
+   * Called automatically in constructor. Override via TIMEOUTS.TAB_LOCK_IDLE
+   * and TIMEOUTS.TAB_LOCK_SWEEP_INTERVAL config keys.
+   */
+  startTabOwnershipIdleSweep(): void {
+    this.tabOwnership.startIdleSweep(
+      TIMEOUTS.TAB_LOCK_IDLE,
+      TIMEOUTS.TAB_LOCK_SWEEP_INTERVAL,
+    )
+  }
+
+  /**
+   * Stop the idle sweep. Call on shutdown.
+   */
+  stopTabOwnershipIdleSweep(): void {
+    this.tabOwnership.stopIdleSweep()
   }
 
   isCdpConnected(): boolean {
