@@ -265,4 +265,31 @@ describe('TabOwnershipRegistry', () => {
       expect(reg.getOwner(1)).toBeNull()
     })
   })
+
+  // ── releaseAllForConversation ──
+
+  describe('releaseAllForConversation()', () => {
+    it('should release all pages owned by a specific conversation', () => {
+      registry.claim('conv-1', 1)
+      registry.claim('conv-1', 2)
+      registry.claim('conv-1', 3)
+      registry.claim('conv-2', 4)
+      registry.claim('conv-2', 5)
+
+      const released = registry.releaseAllForConversation('conv-1')
+      expect(released).toBe(3)
+      expect(registry.isLocked(1)).toBe(false)
+      expect(registry.isLocked(2)).toBe(false)
+      expect(registry.isLocked(3)).toBe(false)
+      expect(registry.isLocked(4)).toBe(true) // conv-2 still owns these
+      expect(registry.isLocked(5)).toBe(true)
+    })
+
+    it('should return 0 if conversation owns no pages', () => {
+      registry.claim('conv-1', 1)
+      const released = registry.releaseAllForConversation('conv-2')
+      expect(released).toBe(0)
+      expect(registry.isLocked(1)).toBe(true)
+    })
+  })
 })
