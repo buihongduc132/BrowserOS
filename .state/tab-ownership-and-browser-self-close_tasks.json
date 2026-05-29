@@ -3,7 +3,7 @@
   "planFile": "flow/plans/2026-05-30_tab-ownership-and-browser-self-close.md",
   "intentionFile": "flow/intentions/2026-05-30_tab-ownership-and-browser-self-close.md",
   "createdAt": "2026-05-30T00:00:00Z",
-  "updatedAt": "2026-05-31T04:00:00Z",
+  "updatedAt": "2026-05-31T12:00:00Z",
   "status": "complete",
   "tasks": [
     {
@@ -52,7 +52,7 @@
         "packages/browseros-agent/apps/server/tests/tools/navigation-last-visible-tab-guard.test.ts"
       ],
       "last_iteration": 10,
-      "notes": "I10 final audit: all 128 task-specific tests pass (0 fail). 1832 total tests pass across suite (126 fail are pre-existing CDP integration tests needing running browser). Typecheck errors pre-existing (extensions.ts TS7006). Lint errors pre-existing. Ast-grep has pre-existing broken rule. No regressions from tab-ownership work. All 14 tasks verified complete."
+I11 audit (I%5+I%7 ceremony): Fixed verifier findings. Fix1: close_page uses forceReleasePage() instead of release() so non-owner conversations can clean up stale locks. Fix2: deleteSession calls releaseAllForConversation() to immediately release locks on conversation end. 125 task-specific tests pass (0 fail). 1832 total suite pass. All 14 tasks verified complete. No regressions.
     },
     {
       "id": "T02",
