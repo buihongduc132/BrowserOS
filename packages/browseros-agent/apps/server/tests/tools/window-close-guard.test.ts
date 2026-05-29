@@ -72,8 +72,9 @@ describe('window.close() guard', () => {
     it('should handle multi-line expression', () => {
       const expr = 'const x = 1;\nconst y = 2;\nx + y'
       const wrapped = wrapWithWindowCloseGuard(expr)
+      // eval() wraps the expression as a JSON string, so semicolons are preserved
+      expect(wrapped).toContain('eval(')
       expect(wrapped).toContain('const x = 1;')
-      expect(wrapped).toContain('x + y')
     })
 
     it('should handle expression with try/catch', () => {

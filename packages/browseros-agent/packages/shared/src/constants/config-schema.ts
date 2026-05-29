@@ -354,7 +354,8 @@ export const CONFIG_KEYS: ConfigKeyMeta[] = [
     min: 60_000,
     max: 86_400_000,
     default: 3_600_000,
-    description: 'Idle timeout before auto-releasing tab ownership locks (default: 1 hour)',
+    description:
+      'Idle timeout before auto-releasing tab ownership locks (default: 1 hour)',
     envVar: 'BROWSEROS_TIMEOUT_TAB_LOCK_IDLE',
   },
   {
@@ -366,7 +367,8 @@ export const CONFIG_KEYS: ConfigKeyMeta[] = [
     min: 10_000,
     max: 300_000,
     default: 60_000,
-    description: 'How often to check for idle tab ownership locks (default: 60s)',
+    description:
+      'How often to check for idle tab ownership locks (default: 60s)',
     envVar: 'BROWSEROS_TIMEOUT_TAB_LOCK_SWEEP_INTERVAL',
   },
   {

@@ -66,6 +66,11 @@ export const useNotifyActiveTab = ({
   const toolTabId = extractTabId(latestTool as ToolUIPart | null)
   const ownership = extractOwnership(latestTool as ToolUIPart | null)
 
+  // Extract primitive values for stable dependency comparison
+  const ownershipLockHeld = ownership.lockHeld
+  const ownershipAgentName = ownership.controlledBy?.agentId
+  const ownershipConvId = ownership.controlledBy?.conversationId
+
   useEffect(() => {
     const isStreaming = status === 'streaming'
 
@@ -136,9 +141,11 @@ export const useNotifyActiveTab = ({
       sendGlow(targetTabId, {
         conversationId,
         isActive: true,
-        lockHeld: ownership.lockHeld,
-        agentName: ownership.controlledBy?.agentId,
-        controlledBy: ownership.controlledBy,
+        lockHeld: ownershipLockHeld,
+        agentName: ownershipAgentName,
+        controlledBy: ownershipConvId
+          ? { conversationId: ownershipConvId, agentId: ownershipAgentName }
+          : undefined,
       })
 
       activeTabIdRef.current = targetTabId
@@ -150,7 +157,15 @@ export const useNotifyActiveTab = ({
     return () => {
       cancelled = true
     }
-  }, [conversationId, status, hasToolCalls, toolTabId])
+  }, [
+    conversationId,
+    status,
+    hasToolCalls,
+    toolTabId,
+    ownershipLockHeld,
+    ownershipAgentName,
+    ownershipConvId,
+  ])
 
   return
 }

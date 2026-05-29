@@ -89,6 +89,15 @@ export class TabOwnershipRegistry {
   }
 
   /**
+   * Force-release ownership of a page, regardless of who owns it.
+   * Used when a page is destroyed (e.g., close_tab_group) to prevent stale locks.
+   * Returns true if a lock was removed.
+   */
+  forceReleasePage(pageId: number): boolean {
+    return this._entries.delete(pageId)
+  }
+
+  /**
    * Check if a page is currently locked (owned by any conversation).
    */
   isLocked(pageId: number): boolean {

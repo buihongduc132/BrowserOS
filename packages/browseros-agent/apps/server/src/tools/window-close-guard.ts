@@ -7,12 +7,16 @@
  *
  * This prevents an LLM from accidentally closing the browser by running
  * `window.close()` through the evaluate_script tool.
+ *
+ * Supports both single expressions and multi-statement inputs.
+ * Uses eval() inside the IIFE so statements like `const x = 1` work.
  */
 
 /**
  * The preamble injected before the user's expression.
  * Saves the original window.close, overrides it with a safe no-op,
  * and ensures restoration via try/finally.
+ * Uses eval() to support both expressions and multi-statement code.
  */
 export const WINDOW_CLOSE_GUARD_PREAMBLE = `(function() {
   const _origClose = window.close;
@@ -22,7 +26,7 @@ export const WINDOW_CLOSE_GUARD_PREAMBLE = `(function() {
     writable: true
   });
   try {
-    return (` as const
+    return eval(` as const
 
 const WINDOW_CLOSE_GUARD_POSTAMBLE = `);
   } finally {
@@ -39,12 +43,12 @@ const WINDOW_CLOSE_GUARD_POSTAMBLE = `);
  * The expression is evaluated inside a try/finally block that:
  * 1. Saves the original window.close
  * 2. Overrides it with a no-op
- * 3. Evaluates the expression
+ * 3. Evaluates the expression via eval() (supports statements + expressions)
  * 4. Restores the original window.close
  *
- * @param expression - The JavaScript expression to wrap
+ * @param expression - The JavaScript expression or statements to wrap
  * @returns The wrapped expression
  */
 export function wrapWithWindowCloseGuard(expression: string): string {
-  return `${WINDOW_CLOSE_GUARD_PREAMBLE}${expression}${WINDOW_CLOSE_GUARD_POSTAMBLE}`
+  return `${WINDOW_CLOSE_GUARD_PREAMBLE}${JSON.stringify(expression)}${WINDOW_CLOSE_GUARD_POSTAMBLE}`
 }

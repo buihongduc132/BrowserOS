@@ -188,6 +188,14 @@ export const close_tab_group = defineTool({
     }
 
     await ctx.browser.closeTabGroup(args.groupId)
+
+    // Release ownership for all tabs that were in the closed group
+    if (group) {
+      for (const pageId of group.pageIds) {
+        ctx.browser.tabOwnership?.forceReleasePage(pageId)
+      }
+    }
+
     response.text(`Closed tab group ${args.groupId} and all its tabs`)
     response.data({ action: 'close_tab_group', groupId: args.groupId })
     response.includePages()

@@ -292,4 +292,35 @@ describe('TabOwnershipRegistry', () => {
       expect(registry.isLocked(1)).toBe(true)
     })
   })
+
+  // ── forceReleasePage ──
+
+  describe('forceReleasePage()', () => {
+    it('should release a page regardless of who owns it', () => {
+      const reg = new TabOwnershipRegistry()
+      reg.claim('conv-A', 1, 'agent-A')
+      reg.claim('conv-A', 2, 'agent-A')
+      reg.claim('conv-B', 3, 'agent-B')
+
+      // Force release page 1 (owned by conv-A) without needing conv-A's ID
+      expect(reg.forceReleasePage(1)).toBe(true)
+      expect(reg.isLocked(1)).toBe(false)
+
+      // Other locks remain
+      expect(reg.isLocked(2)).toBe(true)
+      expect(reg.isLocked(3)).toBe(true)
+    })
+
+    it('should return false for a page that is not locked', () => {
+      const reg = new TabOwnershipRegistry()
+      expect(reg.forceReleasePage(999)).toBe(false)
+    })
+
+    it('should allow re-claiming after force release', () => {
+      const reg = new TabOwnershipRegistry()
+      reg.claim('conv-A', 1)
+      reg.forceReleasePage(1)
+      expect(reg.claim('conv-B', 1)).toBe(true)
+    })
+  })
 })
