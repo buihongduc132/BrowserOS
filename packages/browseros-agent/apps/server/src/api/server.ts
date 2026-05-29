@@ -49,6 +49,7 @@ import { createOAuthRoutes } from './routes/oauth'
 import { createOpenClawRoutes } from './routes/openclaw'
 import { createProviderRoutes } from './routes/provider'
 import { createRefinePromptRoutes } from './routes/refine-prompt'
+import { createScreencastRoute } from './routes/screencast'
 import { createShutdownRoute } from './routes/shutdown'
 import { createSkillsRoutes } from './routes/skills'
 import { createSoulRoutes } from './routes/soul'
@@ -263,6 +264,7 @@ export async function createHttpServer(config: HttpServerConfig) {
         aiSdkDevtoolsEnabled: config.aiSdkDevtoolsEnabled,
       }),
     )
+    .route('/screencast', createScreencastRoute({ browser }))
     .route('/agents', agentRoutes)
     .route(
       '/agents',

@@ -50,6 +50,13 @@ function getSurveyParams(): { maxTurns?: number; experimentId?: string } {
   return { maxTurns, experimentId }
 }
 
+// Agent management moved into AI & Agents settings; conversations live under
+// /home/agents. Keep old /agents links alive.
+const LegacyAgentRedirect: FC = () => {
+  const params = useParams()
+  return <Navigate to={`/home/agents/${params.agentId ?? ''}`} replace />
+}
+
 const OptionsRedirect: FC = () => {
   const params = useParams()
   const path = params['*'] || ''
@@ -205,6 +212,7 @@ export const App: FC = () => {
           path="/observability"
           element={<Navigate to="/home" replace />}
         />
+        <Route path="/executions" element={<Navigate to="/home" replace />} />
         <Route
           path="/audit"
           element={<Navigate to={alphaEnabled ? '/admin' : '/home'} replace />}
@@ -214,9 +222,10 @@ export const App: FC = () => {
           element={<Navigate to={alphaEnabled ? '/admin' : '/home'} replace />}
         />
         <Route
-          path="/executions"
-          element={<Navigate to={alphaEnabled ? '/admin' : '/home'} replace />}
+          path="/agents"
+          element={<Navigate to={alphaEnabled ? '/agents' : '/settings/ai?section=claude'} replace />}
         />
+        <Route path="/agents/:agentId" element={<LegacyAgentRedirect />} />
         <Route path="/options/*" element={<OptionsRedirect />} />
 
         {/* Fallback to home */}

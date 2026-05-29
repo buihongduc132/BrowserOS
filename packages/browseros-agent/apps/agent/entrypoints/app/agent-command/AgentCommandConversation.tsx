@@ -39,18 +39,13 @@ function AgentConversationController({
   initialMessage,
   onInitialMessageConsumed,
   agents,
-  agentPathPrefix,
-  createAgentPath,
 }: {
   agentId: string
   sessionId: string
   initialMessage: string | null
   onInitialMessageConsumed: () => void
   agents: AgentEntry[]
-  agentPathPrefix: string
-  createAgentPath: string
 }) {
-  const navigate = useNavigate()
   const initialMessageSentRef = useRef<string | null>(null)
   const onInitialMessageConsumedRef = useRef(onInitialMessageConsumed)
   const agent = agents.find((entry) => entry.agentId === agentId)
@@ -202,9 +197,6 @@ function AgentConversationController({
           ) : null}
           <ConversationInput
             variant="conversation"
-            agents={agents}
-            selectedAgentId={agentId}
-            onSelectAgent={handleSelectAgent}
             onSend={(input) => {
               const attachments = input.attachments.map((a) => a.payload)
               const attachmentPreviews = input.attachments.map((a) => ({
@@ -228,11 +220,9 @@ function AgentConversationController({
               }
               void send({ text: input.text, attachments, attachmentPreviews })
             }}
-            onCreateAgent={() => navigate(createAgentPath)}
             onStop={handleStop}
             streaming={streaming}
             disabled={disabled}
-            status="running"
             attachmentsEnabled={true}
             placeholder={
               streaming
@@ -250,7 +240,6 @@ interface AgentCommandConversationProps {
   variant?: 'command' | 'page'
   backPath?: string
   agentPathPrefix?: string
-  createAgentPath?: string
 }
 
 function inferAdapterFromEntry(
@@ -271,7 +260,6 @@ export const AgentCommandConversation: FC<AgentCommandConversationProps> = ({
   variant = 'command',
   backPath = '/home',
   agentPathPrefix = '/home/agents',
-  createAgentPath = '/agents',
 }) => {
   const { agentId } = useParams<{ agentId: string }>()
   const sessionId = useAgentSessionId()
@@ -400,8 +388,6 @@ export const AgentCommandConversation: FC<AgentCommandConversationProps> = ({
               onInitialMessageConsumed={() => {
                 setSearchParams(() => new URLSearchParams(), { replace: true })
               }}
-              agentPathPrefix={agentPathPrefix}
-              createAgentPath={createAgentPath}
             />
           </div>
         </div>

@@ -39,3 +39,4 @@ browseros-server.log
 .browseros-prod-resources/bin/browseros_server.vendor
 .fusion
 .pi
+.llm/
