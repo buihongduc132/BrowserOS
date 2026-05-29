@@ -102,6 +102,21 @@ export const close_window = defineTool({
     windowId: z.number(),
   }),
   handler: async (args, ctx, response) => {
+    // Last-visible-window guard: reject if closing would leave 0 visible windows.
+    const windows = await ctx.browser.listWindows()
+    const visibleWindows = windows.filter((w) => w.isVisible)
+    const target = windows.find((w) => w.windowId === args.windowId)
+    const isTargetVisible = target?.isVisible ?? false
+    const remainingVisible = isTargetVisible
+      ? visibleWindows.filter((w) => w.windowId !== args.windowId)
+      : visibleWindows
+    if (remainingVisible.length === 0) {
+      response.error(
+        'Cannot close the last visible window — this would close the browser.',
+      )
+      return
+    }
+
     await ctx.browser.closeWindow(args.windowId)
     response.text(`Closed window ${args.windowId}`)
     response.data({ action: 'close_window', windowId: args.windowId })
@@ -148,6 +163,23 @@ export const set_window_visibility = defineTool({
     window: windowInfoSchema,
   }),
   handler: async (args, ctx, response) => {
+    // Last-visible-window guard for hiding: reject if hiding would leave 0 visible windows.
+    if (!args.visible) {
+      const windows = await ctx.browser.listWindows()
+      const visibleWindows = windows.filter((w) => w.isVisible)
+      const target = windows.find((w) => w.windowId === args.windowId)
+      const isTargetVisible = target?.isVisible ?? false
+      const remainingVisible = isTargetVisible
+        ? visibleWindows.filter((w) => w.windowId !== args.windowId)
+        : visibleWindows
+      if (remainingVisible.length === 0) {
+        response.error(
+          'Cannot hide the last visible window — this would close the browser.',
+        )
+        return
+      }
+    }
+
     const result = await ctx.browser.setWindowVisibility(args.windowId, {
       visible: args.visible,
       activate: args.activate,
