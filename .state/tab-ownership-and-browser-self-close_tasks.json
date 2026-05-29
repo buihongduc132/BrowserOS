@@ -3,7 +3,7 @@
   "planFile": "flow/plans/2026-05-30_tab-ownership-and-browser-self-close.md",
   "intentionFile": "flow/intentions/2026-05-30_tab-ownership-and-browser-self-close.md",
   "createdAt": "2026-05-30T00:00:00Z",
-  "updatedAt": "2026-05-30T19:00:00Z",
+  "updatedAt": "2026-05-31T01:00:00Z",
   "status": "complete",
   "tasks": [
     {
@@ -46,13 +46,13 @@
         "Error message is clear: 'Cannot close the last visible tab'"
       ],
       "checks_passed": "5/5",
-      "tests_written": 10,
+      "tests_written": 12,
       "files_modified": [
         "packages/browseros-agent/apps/server/src/tools/navigation.ts",
         "packages/browseros-agent/apps/server/tests/tools/navigation-last-visible-tab-guard.test.ts"
       ],
-      "last_iteration": 1,
-      "notes": "Last-visible-tab guard in close_page. Fires before newtab origin guard. Applies to all modes. 10 unit tests passing."
+      "last_iteration": 7,
+      "notes": "I7 audit: verifier found B1 (stale hook deps), B2 (biome config fmt), S1 (eval multi-stmt), S2 (tab-group ownership leak). All fixed. Added forceReleasePage() to registry. 140 tests passing."
     },
     {
       "id": "T02",
@@ -231,7 +231,7 @@
         "packages/browseros-agent/apps/server/tests/api/services/mcp/session-context.test.ts",
         "packages/browseros-agent/apps/server/src/api/services/mcp/mcp-server.ts"
       ],
-      "last_iteration": 5,
+      "last_iteration": 6,
       "notes": "MCP callers now receive session: { origin: \"sidepanel\", conversationId: \"mcp-${UUID}\" }. All guards work for MCP. 2+2 tests passing."
     },
     {
@@ -287,8 +287,8 @@
         "packages/browseros-agent/apps/server/src/browser/tab-ownership-registry.ts",
         "packages/browseros-agent/apps/server/tests/browser/tab-ownership-registry.test.ts"
       ],
-      "last_iteration": 5,
-      "notes": "TabOwnershipRegistry implemented. Exposed on Browser class as tabOwnership (readonly). All 6 checks passing. 26 unit tests."
+      "last_iteration": 6,
+      "notes": "TabOwnershipRegistry implemented. Exposed on Browser class as tabOwnership (readonly). All 6 checks passing. 28 unit tests."
     },
     {
       "id": "T07",
@@ -335,8 +335,8 @@
         "packages/browseros-agent/apps/server/src/tools/navigation.ts",
         "packages/browseros-agent/apps/server/src/tools/ownership-enforcement.ts"
       ],
-      "last_iteration": 5,
-      "notes": "Centralized ownership enforcement in executeTool(). Now checks both args.page (scalar) and args.pageIds (array). conversationId wired for chat+MCP paths. 8 tests."
+      "last_iteration": 6,
+      "notes": "Centralized ownership enforcement in executeTool(). Now checks both args.page (scalar) and args.pageIds (array). conversationId wired for chat+MCP paths. 8 tests. Fixed unnecessary cast in enforceOwnership."
     },
     {
       "id": "T08",
@@ -570,8 +570,8 @@
         "packages/browseros-agent/packages/shared/src/constants/config-schema.ts",
         "packages/browseros-agent/packages/shared/src/constants/timeouts.ts"
       ],
-      "last_iteration": 4,
-      "notes": "Idle lock release with configurable timeout. startIdleSweep/stopIdleSweep on TabOwnershipRegistry. onLockReleased callback for glow cleanup. Config keys in shared constants. Browser starts sweep in constructor. 19 unit tests."
+      "last_iteration": 6,
+      "notes": "Idle lock release with configurable timeout. startIdleSweep/stopIdleSweep on TabOwnershipRegistry. onLockReleased callback for glow cleanup. Config keys in shared constants. Browser starts sweep in constructor. 19 unit tests. I6: fixed timing race in idle sweep test."
     },
     {
       "id": "T13",
@@ -618,7 +618,7 @@
         "packages/browseros-agent/apps/server/src/agent/ai-sdk-agent.ts",
         "packages/browseros-agent/apps/server/src/config.ts"
       ],
-      "last_iteration": 5,
+      "last_iteration": 6,
       "notes": "Strict mode config toggle. tabOwnershipStrict wired through ChatRouteDeps -> MCP route -> McpServiceDeps -> ToolContext. Default false. 9 tests."
     },
     {
