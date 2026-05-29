@@ -4,6 +4,7 @@ import type { GlowMessage } from './GlowMessage'
 const GLOW_OVERLAY_ID = 'browseros-glow-overlay'
 const GLOW_STYLES_ID = 'browseros-glow-styles'
 const GLOW_STOP_BTN_ID = 'browseros-glow-stop-btn'
+const OWNERSHIP_BADGE_ID = 'browseros-ownership-badge'
 
 const GLOW_THICKNESS = 1.0
 const GLOW_OPACITY = 0.6
@@ -95,6 +96,36 @@ function injectStyles(): void {
 
     #${GLOW_STOP_BTN_ID}:hover {
       background: rgba(185, 28, 28, 1) !important;
+    }
+
+    #${OWNERSHIP_BADGE_ID} {
+      position: fixed !important;
+      top: 12px !important;
+      right: 12px !important;
+      padding: 6px 12px !important;
+      border-radius: 8px !important;
+      background: rgba(34, 34, 34, 0.9) !important;
+      color: white !important;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+      font-size: 12px !important;
+      font-weight: 500 !important;
+      pointer-events: none !important;
+      z-index: 2147483647 !important;
+      display: flex !important;
+      align-items: center !important;
+      gap: 6px !important;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+      opacity: 0;
+      animation: browseros-glow-btn-fade-in 420ms cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
+      white-space: nowrap !important;
+    }
+
+    #${OWNERSHIP_BADGE_ID} .browseros-badge-dot {
+      width: 8px !important;
+      height: 8px !important;
+      border-radius: 50% !important;
+      background: #fb6618 !important;
+      display: inline-block !important;
     }
   `
   const appendStyle = () => document.head.appendChild(style)
@@ -190,6 +221,42 @@ function stopGlow(): void {
   }
 }
 
+function showOwnershipBadge(message: GlowMessage): void {
+  hideOwnershipBadge()
+
+  if (!message.lockHeld) return
+
+  injectStyles()
+
+  const badge = document.createElement('div')
+  badge.id = OWNERSHIP_BADGE_ID
+
+  const dot = document.createElement('span')
+  dot.className = 'browseros-badge-dot'
+
+  const label = document.createElement('span')
+  label.textContent = message.agentName
+    ? `Controlled by ${message.agentName}`
+    : 'Controlled'
+
+  badge.appendChild(dot)
+  badge.appendChild(label)
+
+  const appendBadge = () => document.body.appendChild(badge)
+  if (document.body) {
+    appendBadge()
+  } else {
+    document.addEventListener('DOMContentLoaded', appendBadge, { once: true })
+  }
+}
+
+function hideOwnershipBadge(): void {
+  const badge = document.getElementById(OWNERSHIP_BADGE_ID)
+  if (badge) {
+    badge.remove()
+  }
+}
+
 export default defineContentScript({
   matches: ['*://*/*'],
   runAt: 'document_start',
@@ -207,9 +274,11 @@ export default defineContentScript({
         if (message.isActive) {
           activeConversationId = message.conversationId
           startGlow()
+          showOwnershipBadge(message)
         } else if (message.conversationId === activeConversationId) {
           activeConversationId = null
           stopGlow()
+          hideOwnershipBadge()
           if (message.showConfetti) {
             fireConfetti()
           }
