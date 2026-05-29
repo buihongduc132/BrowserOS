@@ -245,7 +245,7 @@
         "browser",
         "foundation"
       ],
-      "status": "pending",
+      "status": "completed",
       "priority": "high",
       "assignee": null,
       "dependencies": [
@@ -279,7 +279,16 @@
         "refreshActivity() touches lastActivityAt",
         "Thread-safe for concurrent MCP requests",
         "No regression on existing Browser API"
-      ]
+      ],
+      "checks_passed": "6/6",
+      "tests_written": 26,
+      "files_modified": [
+        "packages/browseros-agent/apps/server/src/browser/browser.ts",
+        "packages/browseros-agent/apps/server/src/browser/tab-ownership-registry.ts",
+        "packages/browseros-agent/apps/server/tests/browser/tab-ownership-registry.test.ts"
+      ],
+      "last_iteration": 2,
+      "notes": "TabOwnershipRegistry implemented as standalone class in browser/tab-ownership-registry.ts. Exposed on Browser class as tabOwnership (readonly). All 6 checks passing. 26 unit tests."
     },
     {
       "id": "T07",
@@ -291,7 +300,7 @@
         "server",
         "tools"
       ],
-      "status": "pending",
+      "status": "completed",
       "priority": "high",
       "assignee": null,
       "dependencies": [
@@ -317,7 +326,17 @@
         "Strict mode rejects; non-strict mode warns",
         "Ownership released when conversation ends",
         "No regression on single-conversation usage"
-      ]
+      ],
+      "checks_passed": "5/5",
+      "tests_written": 8,
+      "files_modified": [
+        "packages/browseros-agent/apps/server/src/tools/framework.ts",
+        "packages/browseros-agent/apps/server/src/tools/ownership-enforcement.ts",
+        "packages/browseros-agent/apps/server/src/tools/navigation.ts",
+        "packages/browseros-agent/apps/server/tests/tools/ownership-enforcement.test.ts"
+      ],
+      "last_iteration": 2,
+      "notes": "Centralized ownership enforcement in executeTool(). enforceOwnership() helper auto-claims/warns/rejects. Extended ToolSessionContext with conversationId. Added strictOwnership flag. 8 tests."
     },
     {
       "id": "T08",
