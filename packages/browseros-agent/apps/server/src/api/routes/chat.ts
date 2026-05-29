@@ -19,6 +19,7 @@ interface ChatRouteDeps {
   browserosId?: string
   klavisRef?: KlavisProxyRef
   aiSdkDevtoolsEnabled?: boolean
+  tabOwnershipStrict?: boolean
 }
 
 export function createChatRoutes(deps: ChatRouteDeps) {
@@ -38,6 +39,7 @@ export function createChatRoutes(deps: ChatRouteDeps) {
     registry: deps.registry,
     browserosId,
     aiSdkDevtoolsEnabled: deps.aiSdkDevtoolsEnabled,
+    tabOwnershipStrict: deps.tabOwnershipStrict,
     assistantSessionStore,
   })
 

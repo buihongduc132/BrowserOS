@@ -46,6 +46,7 @@ export interface AiSdkAgentConfig {
   klavisRef?: KlavisProxyRef
   browserosId?: string
   aiSdkDevtoolsEnabled?: boolean
+  tabOwnershipStrict?: boolean
 }
 
 export class AiSdkAgent {
@@ -96,6 +97,7 @@ export class AiSdkAgent {
         origin: config.resolvedConfig.origin,
         originPageId,
       },
+      strictOwnership: config.tabOwnershipStrict ?? false,
     }
     const allBrowserTools = buildBrowserToolSet(config.registry, toolContext)
     const browserTools = config.resolvedConfig.chatMode

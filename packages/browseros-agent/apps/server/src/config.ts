@@ -51,6 +51,7 @@ export const ServerConfigSchema = z.object({
   instanceChromiumVersion: z.string().optional(),
   aiSdkDevtoolsEnabled: z.boolean(),
   compaction: CompactionStrategySchema.optional(),
+  tabOwnershipStrict: z.boolean().default(false),
 })
 
 export type ServerConfig = z.infer<typeof ServerConfigSchema>
@@ -345,6 +346,7 @@ function getDefaults(cwd: string): PartialConfig {
     executionDir: cwd,
     mcpAllowRemote: false,
     aiSdkDevtoolsEnabled: false,
+    tabOwnershipStrict: false,
   }
 }
 

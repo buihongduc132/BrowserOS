@@ -30,6 +30,7 @@ export interface ChatServiceDeps {
   registry: ToolRegistry
   browserosId?: string
   aiSdkDevtoolsEnabled?: boolean
+  tabOwnershipStrict?: boolean
   /** Optional: assistant session metadata store for workspace tracking + AGENTS.md */
   assistantSessionStore?: AssistantSessionStore
 }
@@ -309,6 +310,7 @@ export class ChatService {
         klavisRef: this.deps.klavisRef,
         browserosId: this.deps.browserosId,
         aiSdkDevtoolsEnabled: this.deps.aiSdkDevtoolsEnabled,
+        tabOwnershipStrict: this.deps.tabOwnershipStrict,
         aclRules: request.aclRules,
       })
       session = {
@@ -492,6 +494,7 @@ export class ChatService {
       klavisRef: this.deps.klavisRef,
       browserosId: this.deps.browserosId,
       aiSdkDevtoolsEnabled: this.deps.aiSdkDevtoolsEnabled,
+      tabOwnershipStrict: this.deps.tabOwnershipStrict,
       aclRules: request.aclRules,
     })
     const newSession: AgentSession = {
