@@ -3,7 +3,7 @@
   "planFile": "flow/plans/2026-05-30_tab-ownership-and-browser-self-close.md",
   "intentionFile": "flow/intentions/2026-05-30_tab-ownership-and-browser-self-close.md",
   "createdAt": "2026-05-30T00:00:00Z",
-  "updatedAt": "2026-05-30T16:00:00Z",
+  "updatedAt": "2026-05-30T16:30:00Z",
   "status": "draft",
   "tasks": [
     {
@@ -583,7 +583,7 @@
         "server",
         "config"
       ],
-      "status": "pending",
+      "status": "completed",
       "priority": "low",
       "assignee": null,
       "dependencies": [
@@ -607,7 +607,18 @@
         "Strict mode rejects with clear error showing lock owner",
         "Configurable per-conversation or global",
         "Warning includes conversationId of lock owner"
-      ]
+      ],
+      "checks_passed": "4/4",
+      "tests_written": 9,
+      "files_modified": [
+        "packages/browseros-agent/apps/server/src/config.ts",
+        "packages/browseros-agent/apps/server/src/agent/ai-sdk-agent.ts",
+        "packages/browseros-agent/apps/server/src/api/routes/chat.ts",
+        "packages/browseros-agent/apps/server/src/api/services/chat-service.ts",
+        "packages/browseros-agent/apps/server/src/api/server.ts"
+      ],
+      "last_iteration": 4,
+      "notes": "Strict mode config toggle. tabOwnershipStrict added to ServerConfigSchema. Wired through ChatRouteDeps -> ChatServiceDeps -> AiSdkAgentConfig -> ToolContext. Default false (non-strict). 9 unit tests."
     },
     {
       "id": "T14",
