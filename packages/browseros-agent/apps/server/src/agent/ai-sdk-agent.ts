@@ -96,6 +96,8 @@ export class AiSdkAgent {
       session: {
         origin: config.resolvedConfig.origin,
         originPageId,
+        conversationId: config.resolvedConfig.conversationId,
+        agentId: config.browserosId,
       },
       strictOwnership: config.tabOwnershipStrict ?? false,
     }

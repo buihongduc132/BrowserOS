@@ -77,11 +77,21 @@ export async function executeTool(
     return response.toResult()
   }
 
-  // Centralized tab ownership enforcement: if the tool takes a `page` param,
-  // auto-claim or reject based on ownership state before the handler runs.
-  const ownershipPageId = (args as Record<string, unknown>).page
-  if (typeof ownershipPageId === 'number') {
-    const ownership = enforceOwnership(ctx, ownershipPageId)
+  // Centralized tab ownership enforcement: if the tool takes a `page` param
+  // or `pageIds` array, auto-claim or reject based on ownership state before
+  // the handler runs.
+  const ownershipPageIds: number[] = []
+  const singlePage = (args as Record<string, unknown>).page
+  const multiPage = (args as Record<string, unknown>).pageIds
+  if (typeof singlePage === 'number') {
+    ownershipPageIds.push(singlePage)
+  }
+  if (Array.isArray(multiPage)) {
+    ownershipPageIds.push(...multiPage.filter((p): p is number => typeof p === 'number'))
+  }
+
+  for (const pageId of ownershipPageIds) {
+    const ownership = enforceOwnership(ctx, pageId)
     if (!ownership.allowed) {
       response.error(ownership.error ?? 'Tab ownership conflict')
       return response.toResult()

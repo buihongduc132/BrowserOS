@@ -252,6 +252,7 @@ export async function createHttpServer(config: HttpServerConfig) {
         resourcesDir,
         policyService: aclPolicyService,
         klavisRef,
+        tabOwnershipStrict: config.tabOwnershipStrict,
       }),
     )
     .route(

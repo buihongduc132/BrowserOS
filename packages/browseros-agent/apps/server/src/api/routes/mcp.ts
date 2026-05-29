@@ -24,6 +24,8 @@ interface McpRouteDeps {
   resourcesDir: string
   policyService?: GlobalAclPolicyService
   klavisRef?: KlavisProxyRef
+  /** When true, MCP tool calls on tabs owned by another conversation are rejected. */
+  tabOwnershipStrict?: boolean
 }
 
 function parseOptionalNumber(value: string | undefined): number | undefined {
@@ -47,6 +49,7 @@ export function createMcpRoutes(deps: McpRouteDeps) {
     if (accept.includes('text/event-stream')) {
       const mcpServer = createMcpServer({
         ...deps,
+        strictOwnership: deps.tabOwnershipStrict,
         aclRules: deps.policyService
           ? await resolveAclPolicyForMcpRequest({ policyService: deps.policyService })
           : undefined,
@@ -104,6 +107,8 @@ export function createMcpRoutes(deps: McpRouteDeps) {
       ...deps,
       observer,
       defaultWindowId,
+      agentId,
+      strictOwnership: deps.tabOwnershipStrict,
     })
     const transport = new StreamableHTTPTransport({
       sessionIdGenerator: undefined,

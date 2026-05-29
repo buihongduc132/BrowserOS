@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
+import { randomUUID } from 'node:crypto'
+
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import type { Browser } from '../../../browser/browser'
@@ -31,6 +33,11 @@ export interface McpServiceDeps {
   // bind every browser tool call to a specific window without the
   // agent needing to be aware of it.
   defaultWindowId?: number
+  // Optional agent identifier for the MCP connection.
+  // Used in tab ownership tracking so the owning agent is visible.
+  agentId?: string
+  // When true, tool calls on tabs owned by another conversation are rejected.
+  strictOwnership?: boolean
 }
 
 export function createMcpServer(deps: McpServiceDeps): McpServer {
@@ -60,7 +67,16 @@ export function createMcpServer(deps: McpServiceDeps): McpServer {
     // This ensures guards (last-visible-tab, origin-tab) work for MCP
     // callers instead of being silently bypassed (ctx.session was undefined).
     // originPageId is intentionally undefined — MCP callers have no host tab.
-    session: { origin: 'sidepanel' },
+    // MCP callers get sidepanel-level protections by default.
+    // A stable per-connection UUID ensures ownership tracking works:
+    // claim/release/isLocked all require a conversationId.
+    // originPageId is intentionally undefined — MCP callers have no host tab.
+    session: {
+      origin: 'sidepanel',
+      conversationId: `mcp-${randomUUID()}`,
+      agentId: deps.agentId,
+    },
+    strictOwnership: deps.strictOwnership ?? false,
   })
 
   // Register Klavis proxy tools (if connected via background init)
