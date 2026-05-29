@@ -393,3 +393,100 @@ export const wait_for = defineTool({
     }
   },
 })
+
+export const lock_tab = defineTool({
+  name: 'lock_tab',
+  description:
+    'Explicitly claim ownership of a page (tab). Prevents other conversations from controlling this tab. Use list_pages to see current ownership.',
+  input: z.object({
+    page: pageParam,
+  }),
+  output: z.object({
+    page: z.number(),
+    locked: z.boolean(),
+  }),
+  handler: async (args, ctx, response) => {
+    if (!ctx.session?.conversationId) {
+      response.error('Cannot lock tab: no conversation context.')
+      return
+    }
+
+    // Verify page exists
+    const page = ctx.browser.getPageInfo(args.page)
+    if (!page) {
+      response.error(`Page ${args.page} not found.`)
+      return
+    }
+
+    const ownership = ctx.browser.tabOwnership
+    if (!ownership) {
+      response.error('Tab ownership is not available.')
+      return
+    }
+
+    const claimed = ownership.claim(
+      ctx.session.conversationId,
+      args.page,
+      ctx.session.agentId,
+    )
+
+    if (!claimed) {
+      const owner = ownership.getOwner(args.page)
+      response.error(
+        `Page ${args.page} is already locked by conversation ${owner?.ownerConversationId}.`,
+      )
+      return
+    }
+
+    response.text(`Locked page ${args.page} for conversation ${ctx.session.conversationId}`)
+    response.data({ page: args.page, locked: true })
+  },
+})
+
+export const unlock_tab = defineTool({
+  name: 'unlock_tab',
+  description:
+    'Release ownership of a page (tab). Other conversations can then claim it.',
+  input: z.object({
+    page: pageParam,
+  }),
+  output: z.object({
+    page: z.number(),
+    unlocked: z.boolean(),
+  }),
+  handler: async (args, ctx, response) => {
+    if (!ctx.session?.conversationId) {
+      response.error('Cannot unlock tab: no conversation context.')
+      return
+    }
+
+    // Verify page exists
+    const page = ctx.browser.getPageInfo(args.page)
+    if (!page) {
+      response.error(`Page ${args.page} not found.`)
+      return
+    }
+
+    const ownership = ctx.browser.tabOwnership
+    if (!ownership) {
+      response.error('Tab ownership is not available.')
+      return
+    }
+
+    const released = ownership.release(ctx.session.conversationId, args.page)
+
+    if (!released) {
+      const owner = ownership.getOwner(args.page)
+      if (owner && owner.ownerConversationId !== ctx.session.conversationId) {
+        response.error(
+          `Cannot unlock page ${args.page}: owned by conversation ${owner.ownerConversationId}.`,
+        )
+        return
+      }
+      // Not locked or already released — idempotent success
+    }
+
+    response.text(`Unlocked page ${args.page}`)
+    response.data({ page: args.page, unlocked: true })
+  },
+})

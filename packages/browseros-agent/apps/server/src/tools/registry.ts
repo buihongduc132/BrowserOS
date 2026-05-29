@@ -38,11 +38,13 @@ import {
   close_page,
   get_active_page,
   list_pages,
+  lock_tab,
   move_page,
   navigate_page,
   new_hidden_page,
   new_page,
   show_page,
+  unlock_tab,
   // biome-ignore lint/correctness/noUnusedImports: temporarily disabled
   wait_for,
 } from './navigation'
@@ -97,6 +99,11 @@ export const registry = createRegistry([
   show_page,
   move_page,
   close_page,
+
+  // Tab Ownership (2)
+  lock_tab,
+  unlock_tab,
+
   // wait_for, // temporarily disabled
 
   // Observation (9)

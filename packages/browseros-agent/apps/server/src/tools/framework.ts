@@ -28,6 +28,7 @@ export interface ToolSessionContext {
   origin?: 'sidepanel' | 'newtab'
   originPageId?: number
   conversationId?: string
+  agentId?: string
 }
 
 export type ToolContext = {
