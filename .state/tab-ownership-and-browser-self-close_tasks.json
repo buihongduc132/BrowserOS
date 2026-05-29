@@ -3,7 +3,7 @@
   "planFile": "flow/plans/2026-05-30_tab-ownership-and-browser-self-close.md",
   "intentionFile": "flow/intentions/2026-05-30_tab-ownership-and-browser-self-close.md",
   "createdAt": "2026-05-30T00:00:00Z",
-  "updatedAt": "2026-05-31T01:00:00Z",
+  "updatedAt": "2026-05-31T02:00:00Z",
   "status": "complete",
   "tasks": [
     {
@@ -516,14 +516,15 @@
         "No duplicate glow activations"
       ],
       "checks_passed": "5/5",
-      "tests_written": 0,
+      "tests_written": 7,
       "files_modified": [
         "packages/browseros-agent/apps/agent/entrypoints/sidepanel/index/useNotifyActiveTab.tsx",
         "packages/browseros-agent/apps/server/src/tools/response.ts",
-        "packages/browseros-agent/apps/server/src/tools/framework.ts"
+        "packages/browseros-agent/apps/server/src/tools/framework.ts",
+        "packages/browseros-agent/apps/server/tests/tools/glow-ownership-metadata.test.ts"
       ],
-      "last_iteration": 3,
-      "notes": "Wired ownership data from TabOwnershipRegistry to glow dispatch via tool output metadata. executeTool() enriches metadata with lockHeld + controlledBy. useNotifyActiveTab extracts and passes to GlowMessage."
+      "last_iteration": 8,
+      "notes": "Wired ownership data from TabOwnershipRegistry to glow dispatch via tool output metadata. executeTool() enriches metadata with lockHeld + controlledBy. useNotifyActiveTab extracts and passes to GlowMessage. I8: added 7 metadata enrichment tests covering auto-claim, owned, unowned, no-session, stale-state scenarios."
     },
     {
       "id": "T12",
