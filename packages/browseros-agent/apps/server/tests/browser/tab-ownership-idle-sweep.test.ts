@@ -30,22 +30,24 @@ describe('TabOwnershipRegistry idle sweep', () => {
       registry.claim('conv-1', 1)
       registry.claim('conv-2', 2)
 
-      // Backdate page 1's lastActivityAt to be idle
+      // Backdate page 1's lastActivityAt to be idle (well beyond threshold)
       const entry1 = registry.getOwner(1)!
       registry['_entries'].set(1, {
         ...entry1,
-        lastActivityAt: Date.now() - 200, // 200ms ago
+        lastActivityAt: Date.now() - 500, // 500ms ago
       })
 
-      // Start sweep with 100ms idle threshold, 50ms interval
-      registry.startIdleSweep(100, 50)
+      // Start sweep with 200ms idle threshold, 50ms interval
+      // Page 1: 500ms idle > 200ms threshold → released
+      // Page 2: fresh (~0ms idle) < 200ms threshold → kept
+      registry.startIdleSweep(200, 50)
 
       // Wait for at least one sweep cycle
       await new Promise((r) => setTimeout(r, 120))
 
-      // Page 1 should be released (idle > 100ms)
+      // Page 1 should be released (idle > 200ms)
       expect(registry.isLocked(1)).toBe(false)
-      // Page 2 should still be locked (fresh)
+      // Page 2 should still be locked (fresh, well under threshold even with timer jitter)
       expect(registry.isLocked(2)).toBe(true)
     })
 
