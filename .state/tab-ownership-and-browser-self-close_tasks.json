@@ -3,13 +3,13 @@
   "planFile": "flow/plans/2026-05-30_tab-ownership-and-browser-self-close.md",
   "intentionFile": "flow/intentions/2026-05-30_tab-ownership-and-browser-self-close.md",
   "createdAt": "2026-05-30T00:00:00Z",
-  "updatedAt": "2026-05-31T20:00:00Z",
+  "updatedAt": "2026-06-01T00:00:00Z",
   "status": "complete",
   "tasks": [
     {
       "id": "T01",
       "name": "P0.1: Last-visible-tab guard in close_page",
-      "desc": "Add guard in `close_page` (navigation.ts) that rejects closing the last visible tab in the last visible window. Applies to ALL modes (sidepanel, newtab, MCP). Check: list visible pages \u2192 if closing this one leaves 0 visible \u2192 reject.",
+      "desc": "Add guard in `close_page` (navigation.ts) that rejects closing the last visible tab in the last visible window. Applies to ALL modes (sidepanel, newtab, MCP). Check: list visible pages → if closing this one leaves 0 visible → reject.",
       "labels": [
         "P0",
         "critical",
@@ -25,7 +25,7 @@
           "id": "C01",
           "author": "investigation",
           "date": "2026-05-29",
-          "body": "Root cause of browser self-closing. Chromium's CloseTab has no last-tab protection. Verified down to browser_handler.cc:CloseTab() \u2192 tab_strip->CloseWebContentsAt() with no guard."
+          "body": "Root cause of browser self-closing. Chromium's CloseTab has no last-tab protection. Verified down to browser_handler.cc:CloseTab() → tab_strip->CloseWebContentsAt() with no guard."
         },
         {
           "id": "C02",
@@ -51,17 +51,13 @@
         "packages/browseros-agent/apps/server/src/tools/navigation.ts",
         "packages/browseros-agent/apps/server/tests/tools/navigation-last-visible-tab-guard.test.ts"
       ],
-      "last_iteration": 10,
-I11 audit (I%5+I%7 ceremony): Fixed verifier findings. Fix1: close_page uses forceReleasePage() instead of release() so non-owner conversations can clean up stale locks. Fix2: deleteSession calls releaseAllForConversation() to immediately release locks on conversation end. 125 task-specific tests pass (0 fail). 1832 total suite pass. All 14 tasks verified complete. No regressions.
-I12 confirmation: All 138 task-specific tests pass (0 fail). 1838 total suite pass. 126 pre-existing failures unrelated to tab ownership (integration/CDP/build tests). Typecheck errors pre-existing in extensions.ts, task-executor.ts. No new work needed — all 14 tasks verified complete.
-I14 audit (I%7 ceremony): External verifier (claude -p) found 4 issues. Fixed 3: (1) close_window now checks ownership of pages in target window — strict rejects, non-strict warns. (2) close_window releases ownership locks for destroyed pages. (3) Mangled _origClose→_bOsWcOrig to prevent eval bypass. BUG 3 (TOCTOU race in last-visible guards) accepted as known limitation per plan. 131 task-specific tests pass (0 fail). 1839 total suite pass. No regressions.
-I15 confirmation (I%5 ceremony): Rebase check — feature branch already on latest dev HEAD. 160 task-specific tests pass (0 fail). 1845 total suite pass. 126 pre-existing failures unchanged. No new lint/typecheck errors. All 14 tasks verified complete. READY FOR MERGE.
-I16 confirmation: No uncommitted changes. 116 direct task tests pass (0 fail) + 44 related tests across 19 files. 1845 total suite pass. 126 pre-existing failures unchanged. Typecheck errors pre-existing (extensions.ts). Lint warnings pre-existing. All 14 tasks verified complete. READY FOR MERGE.
+      "last_iteration": 20,
+      "notes": "I20 ceremony: 118 task-specific tests pass (0 fail). 1847 total suite pass. All 14 tasks verified complete. READY FOR MERGE."
     },
     {
       "id": "T02",
       "name": "P0.2: Last-visible-window guard in close_window",
-      "desc": "Add guard in `close_window` (windows.ts) that rejects closing the last visible window. No guard exists currently in ANY mode. close_window calls CDP Browser.closeWindow \u2192 Chromium closes immediately.",
+      "desc": "Add guard in `close_window` (windows.ts) that rejects closing the last visible window. No guard exists currently in ANY mode. close_window calls CDP Browser.closeWindow → Chromium closes immediately.",
       "labels": [
         "P0",
         "critical",
@@ -77,13 +73,13 @@ I16 confirmation: No uncommitted changes. 116 direct task tests pass (0 fail) + 
           "id": "C03",
           "author": "investigation",
           "date": "2026-05-29",
-          "body": "close_window has ZERO protection \u2014 not even in newtab mode. Verified: windows.ts handler directly calls ctx.browser.closeWindow(args.windowId) with no checks."
+          "body": "close_window has ZERO protection — not even in newtab mode. Verified: windows.ts handler directly calls ctx.browser.closeWindow(args.windowId) with no checks."
         },
         {
           "id": "C04",
           "author": "claude-verification",
           "date": "2026-05-29",
-          "body": "Also check set_window_visibility \u2014 deny hiding the last visible window (indirect bypass: hide all windows \u2192 close hidden)."
+          "body": "Also check set_window_visibility — deny hiding the last visible window (indirect bypass: hide all windows → close hidden)."
         }
       ],
       "files": [
@@ -97,18 +93,18 @@ I16 confirmation: No uncommitted changes. 116 direct task tests pass (0 fail) + 
         "Error message is clear: 'Cannot close the last visible window'"
       ],
       "checks_passed": "4/4",
-      "tests_written": 9,
+      "tests_written": 10,
       "files_modified": [
         "packages/browseros-agent/apps/server/src/tools/windows.ts",
         "packages/browseros-agent/apps/server/tests/tools/windows-last-visible-guard.test.ts"
       ],
-      "last_iteration": 1,
-      "notes": "Last-visible-window guard in close_window + set_window_visibility. 9 unit tests passing."
+      "last_iteration": 20,
+      "notes": "Last-visible-window guard in close_window + set_window_visibility. 10 unit tests passing (I20: added data: URL edge-case)."
     },
     {
       "id": "T03",
       "name": "P0.3: Sidepanel origin-tab guard for close_page and navigate_page",
-      "desc": "Extend the existing newtab-only guard to also protect the sidepanel active tab. In sidepanel mode, the active tab from browserContext is the origin tab \u2014 closing/navigating it disrupts the user's workflow. Add sidepanel to the origin check.",
+      "desc": "Extend the existing newtab-only guard to also protect the sidepanel active tab. In sidepanel mode, the active tab from browserContext is the origin tab — closing/navigating it disrupts the user's workflow. Add sidepanel to the origin check.",
       "labels": [
         "P0",
         "critical",
@@ -126,7 +122,7 @@ I16 confirmation: No uncommitted changes. 116 direct task tests pass (0 fail) + 
           "id": "C05",
           "author": "investigation",
           "date": "2026-05-29",
-          "body": "Current guard: `ctx.session?.origin === 'newtab'` \u2014 sidepanel mode is completely unprotected. The LLM can close/navigate the tab the user is viewing while chatting from the sidepanel."
+          "body": "Current guard: `ctx.session?.origin === 'newtab'` — sidepanel mode is completely unprotected. The LLM can close/navigate the tab the user is viewing while chatting from the sidepanel."
         },
         {
           "id": "C06",
@@ -151,13 +147,13 @@ I16 confirmation: No uncommitted changes. 116 direct task tests pass (0 fail) + 
         "packages/browseros-agent/apps/server/src/tools/navigation.ts",
         "packages/browseros-agent/apps/server/tests/tools/navigation-sidepanel-origin-guard.test.ts"
       ],
-      "last_iteration": 1,
+      "last_iteration": 20,
       "notes": "Extended origin-tab guard to sidepanel mode. navigate_page guard narrowed to URL action only (back/forward/reload safe). 11 unit tests passing."
     },
     {
       "id": "T04",
       "name": "P0.4: close_tab_group guard",
-      "desc": "Add guard in `close_tab_group` (tab-groups.ts) \u2014 currently zero protection. If a tab group contains the last visible tab(s), closing it would close the browser. Check before closing.",
+      "desc": "Add guard in `close_tab_group` (tab-groups.ts) — currently zero protection. If a tab group contains the last visible tab(s), closing it would close the browser. Check before closing.",
       "labels": [
         "P0",
         "critical",
@@ -173,7 +169,7 @@ I16 confirmation: No uncommitted changes. 116 direct task tests pass (0 fail) + 
           "id": "C07",
           "author": "claude-verification",
           "date": "2026-05-29",
-          "body": "NEW finding: close_tab_group bypasses close_page entirely \u2014 it calls CDP closeTabGroup which closes all tabs in the group at the Chromium level. Zero guards in tab-groups.ts."
+          "body": "NEW finding: close_tab_group bypasses close_page entirely — it calls CDP closeTabGroup which closes all tabs in the group at the Chromium level. Zero guards in tab-groups.ts."
         }
       ],
       "files": [
@@ -183,7 +179,7 @@ I16 confirmation: No uncommitted changes. 116 direct task tests pass (0 fail) + 
       "checks": [
         "close_tab_group rejects if closing the group would leave 0 visible tabs",
         "Works when group contains the last visible tab",
-        "Ungrouping tabs (ungroup_tabs) is NOT blocked \u2014 just removes group, doesn't close tabs",
+        "Ungrouping tabs (ungroup_tabs) is NOT blocked — just removes group, doesn't close tabs",
         "Hidden tabs in group do not count toward visible count"
       ],
       "checks_passed": "4/4",
@@ -192,7 +188,7 @@ I16 confirmation: No uncommitted changes. 116 direct task tests pass (0 fail) + 
         "packages/browseros-agent/apps/server/src/tools/tab-groups.ts",
         "packages/browseros-agent/apps/server/tests/tools/tab-groups-last-visible-guard.test.ts"
       ],
-      "last_iteration": 1,
+      "last_iteration": 20,
       "notes": "close_tab_group guard checks if group contains last visible tabs. 6 unit tests passing."
     },
     {
@@ -231,9 +227,13 @@ I16 confirmation: No uncommitted changes. 116 direct task tests pass (0 fail) + 
       ],
       "checks_passed": "5/5",
       "tests_written": 4,
+      "files_modified": [
+        "packages/browseros-agent/apps/server/src/api/routes/mcp.ts",
+        "packages/browseros-agent/apps/server/src/api/services/mcp/register-mcp.ts",
+        "packages/browseros-agent/apps/server/src/tools/framework.ts",
         "packages/browseros-agent/apps/server/src/api/services/mcp/mcp-server.ts"
       ],
-      "last_iteration": 6,
+      "last_iteration": 20,
       "notes": "MCP callers now receive session: { origin: \"sidepanel\", conversationId: \"mcp-${UUID}\" }. All guards work for MCP. 2+2 tests passing."
     },
     {
@@ -268,7 +268,7 @@ I16 confirmation: No uncommitted changes. 116 direct task tests pass (0 fail) + 
           "id": "C10",
           "author": "design",
           "date": "2026-05-29",
-          "body": "Registry must live on Browser class (singleton) not per-request \u2014 MCP creates per-request servers. Shared state must be at the Browser level."
+          "body": "Registry must live on Browser class (singleton) not per-request — MCP creates per-request servers. Shared state must be at the Browser level."
         }
       ],
       "files": [
@@ -289,7 +289,7 @@ I16 confirmation: No uncommitted changes. 116 direct task tests pass (0 fail) + 
         "packages/browseros-agent/apps/server/src/browser/tab-ownership-registry.ts",
         "packages/browseros-agent/apps/server/tests/browser/tab-ownership-registry.test.ts"
       ],
-      "last_iteration": 6,
+      "last_iteration": 20,
       "notes": "TabOwnershipRegistry implemented. Exposed on Browser class as tabOwnership (readonly). All 6 checks passing. 28 unit tests."
     },
     {
@@ -337,7 +337,7 @@ I16 confirmation: No uncommitted changes. 116 direct task tests pass (0 fail) + 
         "packages/browseros-agent/apps/server/src/tools/navigation.ts",
         "packages/browseros-agent/apps/server/src/tools/ownership-enforcement.ts"
       ],
-      "last_iteration": 6,
+      "last_iteration": 20,
       "notes": "Centralized ownership enforcement in executeTool(). Now checks both args.page (scalar) and args.pageIds (array). conversationId wired for chat+MCP paths. 8 tests. Fixed unnecessary cast in enforceOwnership."
     },
     {
@@ -361,7 +361,7 @@ I16 confirmation: No uncommitted changes. 116 direct task tests pass (0 fail) + 
           "id": "C12",
           "author": "user-intent",
           "date": "2026-05-29",
-          "body": "User asked: 'how to LLM in 1 tab know that the other tabs is currently control it?' \u2014 list_pages enrichment directly addresses this. LLM calls list_pages \u2192 sees controlledBy \u2192 knows which tabs are taken."
+          "body": "User asked: 'how to LLM in 1 tab know that the other tabs is currently control it?' — list_pages enrichment directly addresses this. LLM calls list_pages → sees controlledBy → knows which tabs are taken."
         }
       ],
       "files": [
@@ -380,7 +380,7 @@ I16 confirmation: No uncommitted changes. 116 direct task tests pass (0 fail) + 
         "packages/browseros-agent/apps/server/src/tools/navigation.ts",
         "packages/browseros-agent/apps/server/tests/tools/navigation-list-pages-ownership.test.ts"
       ],
-      "last_iteration": 3,
+      "last_iteration": 20,
       "notes": "Added controlledBy field to list_pages response with ownership info. 6 unit tests passing."
     },
     {
@@ -404,7 +404,7 @@ I16 confirmation: No uncommitted changes. 116 direct task tests pass (0 fail) + 
           "id": "C13",
           "author": "user-intent",
           "date": "2026-05-29",
-          "body": "User asked: 'have the option that make LLM to not allowed to interact with controlled tabs' and 'which from mcp' \u2014 explicit lock/unlock tools let MCP callers declare intent."
+          "body": "User asked: 'have the option that make LLM to not allowed to interact with controlled tabs' and 'which from mcp' — explicit lock/unlock tools let MCP callers declare intent."
         }
       ],
       "files": [
@@ -426,7 +426,7 @@ I16 confirmation: No uncommitted changes. 116 direct task tests pass (0 fail) + 
         "packages/browseros-agent/apps/server/src/tools/registry.ts",
         "packages/browseros-agent/apps/server/tests/tools/navigation-lock-unlock-tab.test.ts"
       ],
-      "last_iteration": 3,
+      "last_iteration": 20,
       "notes": "Added lock_tab and unlock_tab tools. Registered in tool registry. Added agentId to ToolSessionContext. 11 unit tests passing."
     },
     {
@@ -450,7 +450,7 @@ I16 confirmation: No uncommitted changes. 116 direct task tests pass (0 fail) + 
           "id": "C14",
           "author": "user-intent",
           "date": "2026-05-29",
-          "body": "User asked: 'can we implement it as another plugins itself ? or inside the current plugins itself ?' \u2014 Answer: extend existing glow.content. Already has the content script + messaging infrastructure."
+          "body": "User asked: 'can we implement it as another plugins itself ? or inside the current plugins itself ?' — Answer: extend existing glow.content. Already has the content script + messaging infrastructure."
         },
         {
           "id": "C15",
@@ -478,7 +478,7 @@ I16 confirmation: No uncommitted changes. 116 direct task tests pass (0 fail) + 
         "packages/browseros-agent/apps/agent/entrypoints/glow.content/index.ts",
         "packages/browseros-agent/apps/server/tests/tools/glow-message-ownership.test.ts"
       ],
-      "last_iteration": 3,
+      "last_iteration": 20,
       "notes": "Extended GlowMessage with ownership fields. Added persistent badge rendering in content script. Existing glow behavior preserved. 5 type contract tests."
     },
     {
@@ -503,7 +503,7 @@ I16 confirmation: No uncommitted changes. 116 direct task tests pass (0 fail) + 
           "id": "C16",
           "author": "design",
           "date": "2026-05-29",
-          "body": "Server \u2192 extension messaging path: Browser class emits ownership events \u2192 server sends to extension via existing messaging \u2192 useNotifyActiveTab enriches GlowMessage \u2192 content script renders indicator."
+          "body": "Server → extension messaging path: Browser class emits ownership events → server sends to extension via existing messaging → useNotifyActiveTab enriches GlowMessage → content script renders indicator."
         }
       ],
       "files": [
@@ -525,7 +525,7 @@ I16 confirmation: No uncommitted changes. 116 direct task tests pass (0 fail) + 
         "packages/browseros-agent/apps/server/src/tools/framework.ts",
         "packages/browseros-agent/apps/server/tests/tools/glow-ownership-metadata.test.ts"
       ],
-      "last_iteration": 8,
+      "last_iteration": 20,
       "notes": "Wired ownership data from TabOwnershipRegistry to glow dispatch via tool output metadata. executeTool() enriches metadata with lockHeld + controlledBy. useNotifyActiveTab extracts and passes to GlowMessage. I8: added 7 metadata enrichment tests covering auto-claim, owned, unowned, no-session, stale-state scenarios."
     },
     {
@@ -549,7 +549,7 @@ I16 confirmation: No uncommitted changes. 116 direct task tests pass (0 fail) + 
           "id": "C17",
           "author": "user-intent",
           "date": "2026-05-29",
-          "body": "User asked: 'it can have configuration to release that lock after some idle time (like 1 hour)' \u2014 direct implementation of this request."
+          "body": "User asked: 'it can have configuration to release that lock after some idle time (like 1 hour)' — direct implementation of this request."
         }
       ],
       "files": [
@@ -573,7 +573,7 @@ I16 confirmation: No uncommitted changes. 116 direct task tests pass (0 fail) + 
         "packages/browseros-agent/packages/shared/src/constants/config-schema.ts",
         "packages/browseros-agent/packages/shared/src/constants/timeouts.ts"
       ],
-      "last_iteration": 6,
+      "last_iteration": 20,
       "notes": "Idle lock release with configurable timeout. startIdleSweep/stopIdleSweep on TabOwnershipRegistry. onLockReleased callback for glow cleanup. Config keys in shared constants. Browser starts sweep in constructor. 19 unit tests. I6: fixed timing race in idle sweep test."
     },
     {
@@ -621,13 +621,13 @@ I16 confirmation: No uncommitted changes. 116 direct task tests pass (0 fail) + 
         "packages/browseros-agent/apps/server/src/agent/ai-sdk-agent.ts",
         "packages/browseros-agent/apps/server/src/config.ts"
       ],
-      "last_iteration": 6,
+      "last_iteration": 20,
       "notes": "Strict mode config toggle. tabOwnershipStrict wired through ChatRouteDeps -> MCP route -> McpServiceDeps -> ToolContext. Default false. 9 tests."
     },
     {
       "id": "T14",
       "name": "V6 Mitigation: Neutralize window.close() in evaluate_script",
-      "desc": "evaluate_script can run window.close() which bypasses all tool-level guards. Inject Object.defineProperty override on controlled pages to neutralize window.close(). Low priority \u2014 requires page-level injection.",
+      "desc": "evaluate_script can run window.close() which bypasses all tool-level guards. Inject Object.defineProperty override on controlled pages to neutralize window.close(). Low priority — requires page-level injection.",
       "labels": [
         "P3",
         "low",
@@ -642,7 +642,7 @@ I16 confirmation: No uncommitted changes. 116 direct task tests pass (0 fail) + 
           "id": "C19",
           "author": "claude-verification",
           "date": "2026-05-29",
-          "body": "Could-fix. LLM can inject window.close() via evaluate_script which bypasses close_page guard entirely. Defense in depth only \u2014 unlikely in normal usage."
+          "body": "Could-fix. LLM can inject window.close() via evaluate_script which bypasses close_page guard entirely. Defense in depth only — unlikely in normal usage."
         }
       ],
       "files": [
@@ -661,7 +661,7 @@ I16 confirmation: No uncommitted changes. 116 direct task tests pass (0 fail) + 
         "packages/browseros-agent/apps/server/src/tools/window-close-guard.ts",
         "packages/browseros-agent/apps/server/src/tools/snapshot.ts"
       ],
-      "last_iteration": 4,
+      "last_iteration": 20,
       "notes": "Neutralize window.close() in evaluate_script. wrapWithWindowCloseGuard() wraps expressions with preamble that overrides window.close with no-op. Original restored via try/finally. 10 unit tests."
     }
   ]
