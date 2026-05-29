@@ -56,6 +56,11 @@ export function createMcpServer(deps: McpServiceDeps): McpServer {
     },
     observer: deps.observer,
     defaultWindowId: deps.defaultWindowId,
+    // MCP callers get sidepanel-level protections by default.
+    // This ensures guards (last-visible-tab, origin-tab) work for MCP
+    // callers instead of being silently bypassed (ctx.session was undefined).
+    // originPageId is intentionally undefined — MCP callers have no host tab.
+    session: { origin: 'sidepanel' },
   })
 
   // Register Klavis proxy tools (if connected via background init)
