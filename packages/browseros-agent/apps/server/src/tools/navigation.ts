@@ -2,6 +2,11 @@ import { z } from 'zod'
 import { defineTool } from './framework'
 
 const pageParam = z.number().describe('Page ID (from list_pages)')
+const ownershipInfoSchema = z.object({
+  conversationId: z.string(),
+  agentId: z.string().optional(),
+})
+
 const pageInfoSchema = z.object({
   pageId: z.number(),
   targetId: z.string(),
@@ -16,6 +21,7 @@ const pageInfoSchema = z.object({
   windowId: z.number().optional(),
   index: z.number().optional(),
   groupId: z.string().optional(),
+  controlledBy: ownershipInfoSchema.nullable().optional(),
 })
 
 export const get_active_page = defineTool({
@@ -53,11 +59,26 @@ export const list_pages = defineTool({
       return
     }
 
-    const lines = pages.map(
-      (p) => `${p.pageId}. ${p.title} (tab ${p.tabId})\n   ${p.url}`,
-    )
+    // Enrich pages with tab ownership info
+    const ownership = ctx.browser.tabOwnership
+    const enrichedPages = pages.map((p) => {
+      const owner = ownership?.getOwner(p.pageId)
+      return {
+        ...p,
+        controlledBy: owner
+          ? { conversationId: owner.ownerConversationId, agentId: owner.ownerAgentId }
+          : null,
+      }
+    })
+
+    const lines = enrichedPages.map((p) => {
+      const lock = p.controlledBy
+        ? ` 🔒 ${p.controlledBy.conversationId}${p.controlledBy.agentId ? ` (${p.controlledBy.agentId})` : ''}`
+        : ''
+      return `${p.pageId}. ${p.title} (tab ${p.tabId})${lock}\n   ${p.url}`
+    })
     response.text(lines.join('\n\n'))
-    response.data({ pages, count: pages.length })
+    response.data({ pages: enrichedPages, count: enrichedPages.length })
   },
 })
 
