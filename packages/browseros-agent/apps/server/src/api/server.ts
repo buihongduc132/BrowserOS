@@ -201,6 +201,7 @@ export async function createHttpServer(config: HttpServerConfig) {
         onShutdown: () => {
           shutdownOAuth()
           stopKlavisBackground()
+          browser.stopTabOwnershipIdleSweep()
           klavisRef.handle?.close().catch((err) =>
             logger.warn('Failed to close Klavis proxy transport', {
               error: err instanceof Error ? err.message : String(err),
