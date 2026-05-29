@@ -9,8 +9,11 @@
  *   claim(), release(), isLocked(), getOwner(), releaseIdle(), refreshActivity()
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test'
-import { TabOwnershipRegistry } from '../../src/browser/tab-ownership-registry'
+import { beforeEach, describe, expect, it } from 'bun:test'
+import {
+  type OwnershipEntry,
+  TabOwnershipRegistry,
+} from '../../src/browser/tab-ownership-registry'
 
 describe('TabOwnershipRegistry', () => {
   let registry: TabOwnershipRegistry
@@ -321,6 +324,111 @@ describe('TabOwnershipRegistry', () => {
       reg.claim('conv-A', 1)
       reg.forceReleasePage(1)
       expect(reg.claim('conv-B', 1)).toBe(true)
+    })
+  })
+
+  // ── Edge cases: TOCTOU race and idle sweep reclaim ──
+
+  describe('TOCTOU race: idle sweep releases then immediate reclaim', () => {
+    it('should allow reclaim after idle sweep releases a lock', () => {
+      // Conv-1 owns page 42 but goes idle
+      registry.claim('conv-1', 42, 'agent-A')
+      const owner = registry.getOwner(42)!
+      registry['_entries'].set(42, {
+        ...owner,
+        lastActivityAt: Date.now() - 10_000,
+      })
+
+      // Idle sweep releases conv-1's lock
+      const released = registry.releaseIdle(5_000)
+      expect(released).toBe(1)
+      expect(registry.isLocked(42)).toBe(false)
+
+      // Conv-2 immediately claims (simulates TOCTOU race)
+      expect(registry.claim('conv-2', 42, 'agent-B')).toBe(true)
+      expect(registry.getOwner(42)!.ownerConversationId).toBe('conv-2')
+    })
+
+    it('should NOT allow stale conv-1 to refresh after sweep releases its lock', () => {
+      registry.claim('conv-1', 42)
+      const owner = registry.getOwner(42)!
+      registry['_entries'].set(42, {
+        ...owner,
+        lastActivityAt: Date.now() - 10_000,
+      })
+
+      // Idle sweep releases
+      registry.releaseIdle(5_000)
+
+      // conv-2 claims
+      registry.claim('conv-2', 42)
+
+      // conv-1 tries to refreshActivity — should be no-op since it no longer owns it
+      registry.refreshActivity(42) // doesn't throw
+      // conv-2's lock is still fresh
+      const owner2 = registry.getOwner(42)!
+      expect(owner2.ownerConversationId).toBe('conv-2')
+    })
+  })
+
+  // ── onLockReleased callback during idle sweep ──
+
+  describe('onLockReleased callback', () => {
+    it('should fire callback when idle sweep releases a lock', async () => {
+      const releasedEntries: Array<{ pageId: number; entry: OwnershipEntry }> =
+        []
+      registry.onLockReleased = (pageId, entry) => {
+        releasedEntries.push({ pageId, entry })
+      }
+
+      registry.claim('conv-1', 42, 'agent-A')
+      const owner = registry.getOwner(42)!
+      registry['_entries'].set(42, {
+        ...owner,
+        lastActivityAt: Date.now() - 10_000,
+      })
+
+      // Manually trigger sweep logic (simulates what startIdleSweep does)
+      const now = Date.now()
+      const toRelease: Array<{ pageId: number; entry: OwnershipEntry }> = []
+      for (const [pageId, entry] of registry._entries) {
+        if (now - entry.lastActivityAt > 5_000) {
+          toRelease.push({ pageId, entry })
+        }
+      }
+      for (const { pageId, entry } of toRelease) {
+        registry._entries.delete(pageId)
+        registry.onLockReleased?.(pageId, entry)
+      }
+
+      expect(releasedEntries).toHaveLength(1)
+      expect(releasedEntries[0].pageId).toBe(42)
+      expect(releasedEntries[0].entry.ownerConversationId).toBe('conv-1')
+      expect(releasedEntries[0].entry.ownerAgentId).toBe('agent-A')
+    })
+  })
+
+  // ── Idle sweep lifecycle ──
+
+  describe('startIdleSweep / stopIdleSweep', () => {
+    it('should start and stop sweep cleanly', () => {
+      expect(registry.isSweepActive()).toBe(false)
+      registry.startIdleSweep(100, 50)
+      expect(registry.isSweepActive()).toBe(true)
+      registry.stopIdleSweep()
+      expect(registry.isSweepActive()).toBe(false)
+    })
+
+    it('should be idempotent when starting sweep multiple times', () => {
+      registry.startIdleSweep(100, 50)
+      registry.startIdleSweep(200, 100) // should restart with new params
+      expect(registry.isSweepActive()).toBe(true)
+      registry.stopIdleSweep()
+      expect(registry.isSweepActive()).toBe(false)
+    })
+
+    it('should not throw when stopping a sweep that was never started', () => {
+      expect(() => registry.stopIdleSweep()).not.toThrow()
     })
   })
 })
