@@ -2,6 +2,7 @@ import { TOOL_LIMITS } from '@browseros/shared/constants/limits'
 import { z } from 'zod'
 import { defineTool } from './framework'
 import { writeTempToolOutputFile } from './output-file'
+import { wrapWithWindowCloseGuard } from './window-close-guard'
 
 const pageParam = z.number().describe('Page ID (from list_pages)')
 
@@ -217,7 +218,9 @@ export const evaluate_script = defineTool({
     description: z.string().optional(),
   }),
   handler: async (args, ctx, response) => {
-    const result = await ctx.browser.evaluate(args.page, args.expression)
+    // Wrap expression with window.close() guard (defense-in-depth)
+    const guardedExpression = wrapWithWindowCloseGuard(args.expression)
+    const result = await ctx.browser.evaluate(args.page, guardedExpression)
 
     if (result.error) {
       response.error(`Script error: ${result.error}`)
