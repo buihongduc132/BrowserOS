@@ -89,12 +89,12 @@ export const navigate_page = defineTool({
     }
 
     if (
-      ctx.session?.origin === 'newtab' &&
-      ctx.session.originPageId !== undefined &&
+      args.action === 'url' &&
+      ctx.session?.originPageId !== undefined &&
       args.page === ctx.session.originPageId
     ) {
       response.error(
-        'Cannot navigate the origin tab in new-tab mode — this would destroy the chat UI. Use `new_page` to open a background tab instead.',
+        `Cannot navigate the origin tab via URL in ${ctx.session.origin === 'newtab' ? 'new-tab' : 'sidepanel'} mode — this would destroy the chat UI. Use \`new_page\` to open a background tab instead.`,
       )
       return
     }
@@ -292,14 +292,14 @@ export const close_page = defineTool({
       return
     }
 
-    // Newtab origin guard: reject if closing the host tab in new-tab mode.
+    // Origin-tab guard: reject closing the host tab in newtab or sidepanel mode.
+    // This prevents destroying the chat UI.
     if (
-      ctx.session?.origin === 'newtab' &&
-      ctx.session.originPageId !== undefined &&
+      ctx.session?.originPageId !== undefined &&
       args.page === ctx.session.originPageId
     ) {
       response.error(
-        'Cannot close the origin tab in new-tab mode — this would destroy the chat UI.',
+        `Cannot close the origin tab in ${ctx.session.origin === 'newtab' ? 'new-tab' : 'sidepanel'} mode — this would destroy the chat UI.`,
       )
       return
     }
