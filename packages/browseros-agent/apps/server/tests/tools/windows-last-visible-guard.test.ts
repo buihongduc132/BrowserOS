@@ -294,6 +294,27 @@ describe('set_window_visibility last-visible-window guard', () => {
     )
   })
 
+  it('guard blocks even when window contains only data: URL tabs', async () => {
+    // Edge case from plan: data: URLs can destroy content without closing tab.
+    // The guard should still treat the window as visible regardless of tab URLs.
+    const windows = [makeWindow({ windowId: 1, isVisible: true })]
+    const { browser, wasCloseWindowCalled } = createMockBrowser(windows)
+
+    const result = await executeTool(
+      close_window,
+      { windowId: 1 },
+      { browser, directories: { workingDir: process.cwd() } },
+      AbortSignal.timeout(30_000),
+    )
+
+    assert.ok(result.isError, 'Expected error — data: URL window is still visible')
+    assert.ok(
+      textOf(result).includes('Cannot close the last visible window'),
+      `Expected last-visible-window error, got: ${textOf(result)}`,
+    )
+    assert.ok(!wasCloseWindowCalled(), 'closeWindow should NOT have been called')
+  })
+
   it('allows showing a hidden window', async () => {
     const windows = [
       makeWindow({ windowId: 1, isVisible: true }),
