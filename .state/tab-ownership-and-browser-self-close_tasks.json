@@ -3,7 +3,7 @@
   "planFile": "flow/plans/2026-05-30_tab-ownership-and-browser-self-close.md",
   "intentionFile": "flow/intentions/2026-05-30_tab-ownership-and-browser-self-close.md",
   "createdAt": "2026-05-30T00:00:00Z",
-  "updatedAt": "2026-05-31T17:00:00Z",
+  "updatedAt": "2026-05-31T19:00:00Z",
   "status": "complete",
   "tasks": [
     {
@@ -56,6 +56,7 @@ I11 audit (I%5+I%7 ceremony): Fixed verifier findings. Fix1: close_page uses for
 I12 confirmation: All 138 task-specific tests pass (0 fail). 1838 total suite pass. 126 pre-existing failures unrelated to tab ownership (integration/CDP/build tests). Typecheck errors pre-existing in extensions.ts, task-executor.ts. No new work needed — all 14 tasks verified complete.
 I14 audit (I%7 ceremony): External verifier (claude -p) found 4 issues. Fixed 3: (1) close_window now checks ownership of pages in target window — strict rejects, non-strict warns. (2) close_window releases ownership locks for destroyed pages. (3) Mangled _origClose→_bOsWcOrig to prevent eval bypass. BUG 3 (TOCTOU race in last-visible guards) accepted as known limitation per plan. 131 task-specific tests pass (0 fail). 1839 total suite pass. No regressions.
 I15 confirmation (I%5 ceremony): Rebase check — feature branch already on latest dev HEAD. 160 task-specific tests pass (0 fail). 1845 total suite pass. 126 pre-existing failures unchanged. No new lint/typecheck errors. All 14 tasks verified complete. READY FOR MERGE.
+I16 confirmation: No uncommitted changes. 116 direct task tests pass (0 fail) + 44 related tests across 19 files. 1845 total suite pass. 126 pre-existing failures unchanged. Typecheck errors pre-existing (extensions.ts). Lint warnings pre-existing. All 14 tasks verified complete. READY FOR MERGE.
     },
     {
       "id": "T02",
