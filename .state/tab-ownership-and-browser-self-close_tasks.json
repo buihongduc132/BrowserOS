@@ -348,7 +348,7 @@
         "server",
         "navigation"
       ],
-      "status": "pending",
+      "status": "completed",
       "priority": "high",
       "assignee": null,
       "dependencies": [
@@ -371,7 +371,15 @@
         "controlledBy shows conversationId and agentId for locked pages",
         "MCP callers also see ownership info",
         "PageInfo type updated"
-      ]
+      ],
+      "checks_passed": "5/5",
+      "tests_written": 6,
+      "files_modified": [
+        "packages/browseros-agent/apps/server/src/tools/navigation.ts",
+        "packages/browseros-agent/apps/server/tests/tools/navigation-list-pages-ownership.test.ts"
+      ],
+      "last_iteration": 3,
+      "notes": "Added controlledBy field to list_pages response with ownership info. 6 unit tests passing."
     },
     {
       "id": "T09",
@@ -383,7 +391,7 @@
         "server",
         "mcp"
       ],
-      "status": "pending",
+      "status": "completed",
       "priority": "high",
       "assignee": null,
       "dependencies": [
@@ -407,7 +415,17 @@
         "Cannot lock a page already owned by another conversation",
         "Tools appear in MCP tool list",
         "list_pages reflects lock state"
-      ]
+      ],
+      "checks_passed": "5/5",
+      "tests_written": 11,
+      "files_modified": [
+        "packages/browseros-agent/apps/server/src/tools/navigation.ts",
+        "packages/browseros-agent/apps/server/src/tools/framework.ts",
+        "packages/browseros-agent/apps/server/src/tools/registry.ts",
+        "packages/browseros-agent/apps/server/tests/tools/navigation-lock-unlock-tab.test.ts"
+      ],
+      "last_iteration": 3,
+      "notes": "Added lock_tab and unlock_tab tools. Registered in tool registry. Added agentId to ToolSessionContext. 11 unit tests passing."
     },
     {
       "id": "T10",
@@ -419,7 +437,7 @@
         "extension",
         "content-script"
       ],
-      "status": "pending",
+      "status": "completed",
       "priority": "medium",
       "assignee": null,
       "dependencies": [
@@ -450,7 +468,16 @@
         "Stop button still works",
         "Badge updates when ownership changes",
         "Badge disappears when ownership released"
-      ]
+      ],
+      "checks_passed": "6/6",
+      "tests_written": 5,
+      "files_modified": [
+        "packages/browseros-agent/apps/agent/entrypoints/glow.content/GlowMessage.ts",
+        "packages/browseros-agent/apps/agent/entrypoints/glow.content/index.ts",
+        "packages/browseros-agent/apps/server/tests/tools/glow-message-ownership.test.ts"
+      ],
+      "last_iteration": 3,
+      "notes": "Extended GlowMessage with ownership fields. Added persistent badge rendering in content script. Existing glow behavior preserved. 5 type contract tests."
     },
     {
       "id": "T11",
@@ -462,7 +489,7 @@
         "extension",
         "wiring"
       ],
-      "status": "pending",
+      "status": "completed",
       "priority": "medium",
       "assignee": null,
       "dependencies": [
@@ -487,7 +514,15 @@
         "GlowMessage enriched with registry data",
         "MCP callers trigger glow via server messaging",
         "No duplicate glow activations"
-      ]
+      ],
+      "checks_passed": "5/5",
+      "tests_written": 0,
+      "files_modified": [
+        "packages/browseros-agent/apps/server/src/tools/framework.ts",
+        "packages/browseros-agent/apps/agent/entrypoints/sidepanel/index/useNotifyActiveTab.tsx"
+      ],
+      "last_iteration": 3,
+      "notes": "Wired ownership data from TabOwnershipRegistry to glow dispatch via tool output metadata. executeTool() enriches metadata with lockHeld + controlledBy. useNotifyActiveTab extracts and passes to GlowMessage."
     },
     {
       "id": "T12",
