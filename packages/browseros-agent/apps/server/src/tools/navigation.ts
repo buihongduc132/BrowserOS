@@ -282,9 +282,7 @@ export const close_page = defineTool({
     // Applies to ALL session modes (sidepanel, newtab, MCP/undefined).
     const allPages = await ctx.browser.listPages()
     const visiblePages = allPages.filter((p) => !p.isHidden)
-    const remainingVisible = visiblePages.filter(
-      (p) => p.pageId !== args.page,
-    )
+    const remainingVisible = visiblePages.filter((p) => p.pageId !== args.page)
     if (remainingVisible.length === 0) {
       response.error(
         'Cannot close the last visible tab — this would close the browser.',
@@ -305,6 +303,12 @@ export const close_page = defineTool({
     }
 
     await ctx.browser.closePage(args.page)
+
+    // Release ownership after successful close
+    if (ctx.session?.conversationId) {
+      ctx.browser.tabOwnership?.release(ctx.session.conversationId, args.page)
+    }
+
     response.text(`Closed page ${args.page}`)
     response.data({ page: args.page, action: 'close_page' })
     response.includePages()
