@@ -269,6 +269,31 @@ describe('set_window_visibility last-visible-window guard', () => {
     )
   })
 
+  it('close_window does not block on non-existent window ID', async () => {
+    // Edge case: closing a window that doesn't exist in listWindows
+    // should NOT trigger the last-visible-window guard — the nonexistent
+    // window isn't visible so remainingVisible stays > 0.
+    const windows = [makeWindow({ windowId: 1, isVisible: true })]
+    const { browser, wasCloseWindowCalled } = createMockBrowser(windows)
+
+    const result = await executeTool(
+      close_window,
+      { windowId: 999 },
+      { browser, directories: { workingDir: process.cwd() } },
+      AbortSignal.timeout(30_000),
+    )
+
+    assert.ok(
+      !textOf(result).includes('Cannot close the last visible window'),
+      `Last-visible-window guard should NOT trigger for non-existent window`,
+    )
+    // The underlying closeWindow still gets called — let CDP handle the error
+    assert.ok(
+      wasCloseWindowCalled(),
+      'closeWindow should still be called (CDP will reject)',
+    )
+  })
+
   it('allows showing a hidden window', async () => {
     const windows = [
       makeWindow({ windowId: 1, isVisible: true }),
