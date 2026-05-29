@@ -19,6 +19,25 @@ function extractTabId(toolPart: ToolUIPart | null): number | undefined {
   return input?.tabId
 }
 
+interface OwnershipMetadata {
+  lockHeld?: boolean
+  controlledBy?: {
+    conversationId: string
+    agentId?: string
+  }
+}
+
+function extractOwnership(toolPart: ToolUIPart | null): OwnershipMetadata {
+  if (!toolPart) return {}
+
+  const output = (
+    toolPart as ToolUIPart & {
+      output?: { metadata?: OwnershipMetadata }
+    }
+  )?.output
+  return output?.metadata ?? {}
+}
+
 function sendGlow(tabId: number, message: GlowMessage): void {
   chrome.tabs.sendMessage(tabId, message).catch(() => {})
 }
@@ -45,6 +64,7 @@ export const useNotifyActiveTab = ({
 
   const hasToolCalls = !!latestTool
   const toolTabId = extractTabId(latestTool as ToolUIPart | null)
+  const ownership = extractOwnership(latestTool as ToolUIPart | null)
 
   useEffect(() => {
     const isStreaming = status === 'streaming'
@@ -116,6 +136,9 @@ export const useNotifyActiveTab = ({
       sendGlow(targetTabId, {
         conversationId,
         isActive: true,
+        lockHeld: ownership.lockHeld,
+        agentName: ownership.controlledBy?.agentId,
+        controlledBy: ownership.controlledBy,
       })
 
       activeTabIdRef.current = targetTabId

@@ -106,6 +106,22 @@ export async function executeTool(
     if (tabId !== undefined) {
       result.metadata = { ...result.metadata, tabId }
     }
+
+    // Enrich metadata with tab ownership info for glow dispatch
+    const ownership = ctx.browser.tabOwnership
+    if (ownership) {
+      const owner = ownership.getOwner(pageId)
+      if (owner) {
+        result.metadata = {
+          ...result.metadata,
+          lockHeld: true,
+          controlledBy: {
+            conversationId: owner.ownerConversationId,
+            agentId: owner.ownerAgentId,
+          },
+        }
+      }
+    }
   }
 
   return result
