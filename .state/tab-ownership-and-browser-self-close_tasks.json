@@ -3,7 +3,7 @@
   "planFile": "flow/plans/2026-05-30_tab-ownership-and-browser-self-close.md",
   "intentionFile": "flow/intentions/2026-05-30_tab-ownership-and-browser-self-close.md",
   "createdAt": "2026-05-30T00:00:00Z",
-  "updatedAt": "2026-06-01T18:00:00Z",
+  "updatedAt": "2026-06-01T19:00:00Z",
   "status": "complete",
   "tasks": [
     {
@@ -51,8 +51,8 @@
         "packages/browseros-agent/apps/server/src/tools/navigation.ts",
         "packages/browseros-agent/apps/server/tests/tools/navigation-last-visible-tab-guard.test.ts"
       ],
-      "last_iteration": 20,
-      "notes": "I20 ceremony: 118 task-specific tests pass (0 fail). 1847 total suite pass. All 14 tasks verified complete. READY FOR MERGE."
+      "last_iteration": 23,
+      "notes": "I23: added 2 chrome-extension:// edge-case tests. 116 task tests pass total."
     },
     {
       "id": "T02",
