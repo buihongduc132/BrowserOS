@@ -419,15 +419,15 @@
         "list_pages reflects lock state"
       ],
       "checks_passed": "5/5",
-      "tests_written": 11,
+      "tests_written": 15,
       "files_modified": [
         "packages/browseros-agent/apps/server/src/tools/navigation.ts",
         "packages/browseros-agent/apps/server/src/tools/framework.ts",
         "packages/browseros-agent/apps/server/src/tools/registry.ts",
         "packages/browseros-agent/apps/server/tests/tools/navigation-lock-unlock-tab.test.ts"
       ],
-      "last_iteration": 20,
-      "notes": "Added lock_tab and unlock_tab tools. Registered in tool registry. Added agentId to ToolSessionContext. 11 unit tests passing."
+      "last_iteration": 24,
+      "notes": "Added lock_tab and unlock_tab tools. Registered in tool registry. Added agentId to ToolSessionContext. 15 unit tests passing. I24: added 4 multi-MCP-client shared registry edge-case tests."
     },
     {
       "id": "T10",
