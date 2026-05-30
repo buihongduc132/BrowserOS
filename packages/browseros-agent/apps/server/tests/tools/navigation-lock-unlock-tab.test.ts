@@ -188,6 +188,96 @@ describe('unlock_tab tool', () => {
   })
 })
 
+describe('multiple MCP clients sharing registry (edge case)', () => {
+  /**
+   * Edge case: Multiple MCP callers create per-request servers,
+   * but the TabOwnershipRegistry is shared at the Browser class level.
+   * Locks from one MCP session MUST be visible to another.
+   */
+  let mockBrowser: Browser
+  let registry: TabOwnershipRegistry
+  const pages = [
+    makePage({ pageId: 1 }),
+    makePage({ pageId: 2 }),
+    makePage({ pageId: 3 }),
+  ]
+
+  beforeEach(() => {
+    const result = createMockBrowser(pages)
+    mockBrowser = result.browser
+    registry = result.registry
+  })
+
+  it('lock from MCP session A is visible to MCP session B via list_pages', async () => {
+    const ctxA = makeCtx(mockBrowser, {
+      conversationId: 'mcp-session-A',
+      agentId: 'agent-A',
+    })
+    const lockResult = await runTool(lock_tab, ctxA, { page: 1 })
+    expect(lockResult.isError).toBeFalsy()
+
+    const ctxB = makeCtx(mockBrowser, {
+      conversationId: 'mcp-session-B',
+      agentId: 'agent-B',
+    })
+    const response = new ToolResponse()
+    await list_pages.handler({}, ctxB, response)
+    const result = response.toResult()
+    const data = result.structuredContent as {
+      pages: Array<{
+        pageId: number
+        controlledBy: { conversationId: string; agentId: string } | null
+      }>
+    }
+
+    const page1 = data.pages.find((p) => p.pageId === 1)
+    expect(page1?.controlledBy?.conversationId).toBe('mcp-session-A')
+    expect(page1?.controlledBy?.agentId).toBe('agent-A')
+  })
+
+  it('session B cannot lock a page owned by session A', async () => {
+    registry.claim('mcp-session-A', 2, 'agent-A')
+
+    const ctxB = makeCtx(mockBrowser, {
+      conversationId: 'mcp-session-B',
+    })
+    const result = await runTool(lock_tab, ctxB, { page: 2 })
+
+    expect(result.isError).toBeTruthy()
+    expect(registry.getOwner(2)?.ownerConversationId).toBe('mcp-session-A')
+  })
+
+  it('session B can lock a different page than session A', async () => {
+    const ctxA = makeCtx(mockBrowser, {
+      conversationId: 'mcp-session-A',
+    })
+    await runTool(lock_tab, ctxA, { page: 1 })
+
+    const ctxB = makeCtx(mockBrowser, {
+      conversationId: 'mcp-session-B',
+    })
+    const result = await runTool(lock_tab, ctxB, { page: 2 })
+
+    expect(result.isError).toBeFalsy()
+    expect(registry.getOwner(1)?.ownerConversationId).toBe('mcp-session-A')
+    expect(registry.getOwner(2)?.ownerConversationId).toBe('mcp-session-B')
+  })
+
+  it('session A releasing its page does not affect session B lock', async () => {
+    registry.claim('mcp-session-A', 1)
+    registry.claim('mcp-session-B', 2)
+
+    const ctxA = makeCtx(mockBrowser, {
+      conversationId: 'mcp-session-A',
+    })
+    await runTool(unlock_tab, ctxA, { page: 1 })
+
+    expect(registry.isLocked(1)).toBe(false)
+    expect(registry.isLocked(2)).toBe(true)
+    expect(registry.getOwner(2)?.ownerConversationId).toBe('mcp-session-B')
+  })
+})
+
 describe('lock_tab / unlock_tab integration with list_pages', () => {
   let mockBrowser: Browser
   let registry: TabOwnershipRegistry
