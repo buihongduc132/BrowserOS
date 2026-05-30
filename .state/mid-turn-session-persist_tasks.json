@@ -1,0 +1,333 @@
+{
+  "planId": "mid-turn-session-persist",
+  "planFile": "flow/plans/2026-05-29_mid-turn-session-persist.md",
+  "intentionFile": "flow/intentions/2026-05-29_mid-turn-session-persist.md",
+  "createdAt": "2026-05-29T00:00:00Z",
+  "updatedAt": "2026-05-29T00:00:00Z",
+  "status": "draft",
+  "tasks": [
+    {
+      "id": "T01",
+      "name": "P0.1: Add messages table to SQLite schema",
+      "desc": "Create a messages table in the SQLite schema for server-side message persistence. Columns: conversationId, role, parts (JSON), createdAt, metadata. Use WAL mode for non-blocking writes. On startup, rehydrate sessions from DB.",
+      "labels": ["P0", "critical", "server", "database"],
+      "status": "pending",
+      "priority": "critical",
+      "assignee": null,
+      "dependencies": [],
+      "comments": [
+        {
+          "id": "C01",
+          "author": "investigation",
+          "date": "2026-05-29",
+          "body": "Root cause: SessionStore is purely in-memory Map<string, AgentSession>. AgentSession holds messages as UIMessage[] — all lost on process exit. SQLite already exists for metadata but has no messages table."
+        }
+      ],
+      "files": [
+        "packages/browseros-agent/apps/server/src/lib/db/schema/"
+      ],
+      "checks": [
+        "messages table created with conversationId, role, parts, createdAt, metadata columns",
+        "WAL mode enabled for non-blocking writes",
+        "On startup, sessions rehydrated from DB if messages exist",
+        "Schema migration is idempotent (safe to run multiple times)"
+      ]
+    },
+    {
+      "id": "T02",
+      "name": "P0.2: Periodic message flush during execution",
+      "desc": "Add checkpoint mechanism in chat-service.ts that writes partial messages to SQLite at regular intervals — every tool call result or every N tokens. Use debounced writes (batch every 5s, not per-message).",
+      "labels": ["P0", "critical", "server", "chat-service"],
+      "status": "pending",
+      "priority": "critical",
+      "assignee": null,
+      "dependencies": ["T01"],
+      "comments": [
+        {
+          "id": "C02",
+          "author": "investigation",
+          "date": "2026-05-29",
+          "body": "Messages only saved in onFinish callback — if server dies mid-stream, onFinish never fires and no partial response is saved anywhere."
+        }
+      ],
+      "files": [
+        "packages/browseros-agent/apps/server/src/api/services/chat-service.ts"
+      ],
+      "checks": [
+        "Partial messages flushed to SQLite during streaming",
+        "Debounced writes (batch every 5s)",
+        "Flush triggers on tool call results",
+        "Does not block the main streaming path"
+      ]
+    },
+    {
+      "id": "T03",
+      "name": "P0.3: Pre-exit state flush in stop()",
+      "desc": "Before process.exit() in main.ts stop(), iterate all sessions in SessionStore, write messages + metadata to SQLite, record which turns were in-flight. Should take <100ms for typical session counts.",
+      "labels": ["P0", "critical", "server", "lifecycle"],
+      "status": "pending",
+      "priority": "critical",
+      "assignee": null,
+      "dependencies": ["T01"],
+      "comments": [
+        {
+          "id": "C03",
+          "author": "investigation",
+          "date": "2026-05-29",
+          "body": "stop() does immediate process.exit() without flushing any sessions. Comment says it's intentional for port-release speed. Need to add flush before exit."
+        }
+      ],
+      "files": [
+        "packages/browseros-agent/apps/server/src/main.ts",
+        "packages/browseros-agent/apps/server/src/agent/session-store.ts"
+      ],
+      "checks": [
+        "All sessions flushed to SQLite before process.exit()",
+        "In-flight turns recorded for potential resume",
+        "Flush takes <100ms for typical session count (<20 sessions)",
+        "process.exit() still happens after flush (no hang)"
+      ]
+    },
+    {
+      "id": "T04",
+      "name": "P0.4: SIGTERM/SIGINT graceful flush",
+      "desc": "Update SIGTERM/SIGINT handlers in index.ts to flush sessions before calling stop(). Consider process.on('beforeExit') as last-resort safety net. Chromium auto-update gives ~5s window.",
+      "labels": ["P0", "critical", "server", "lifecycle"],
+      "status": "pending",
+      "priority": "critical",
+      "assignee": null,
+      "dependencies": ["T03"],
+      "comments": [
+        {
+          "id": "C04",
+          "author": "investigation",
+          "date": "2026-05-29",
+          "body": "SIGTERM/SIGINT handlers just call stop() which does process.exit(). No beforeExit handler. Chromium auto-update sends SIGTERM with ~5s window."
+        }
+      ],
+      "files": [
+        "packages/browseros-agent/apps/server/src/index.ts"
+      ],
+      "checks": [
+        "SIGTERM handler flushes sessions before exit",
+        "SIGINT handler flushes sessions before exit",
+        "Flush completes within 5s (Chromium auto-update window)",
+        "beforeExit handler as last-resort safety net"
+      ]
+    },
+    {
+      "id": "T05",
+      "name": "P1.5: Save partial messages on abort (server-side)",
+      "desc": "On abort signal in chat-service.ts, save current messages snapshot to SQLite before the abort propagates. Don't discard partial responses.",
+      "labels": ["P1", "high", "server", "chat-service"],
+      "status": "pending",
+      "priority": "high",
+      "assignee": null,
+      "dependencies": ["T01"],
+      "comments": [
+        {
+          "id": "C05",
+          "author": "investigation",
+          "date": "2026-05-29",
+          "body": "When user clicks stop, abort fires but onFinish may not save the partial response. Partial messages with empty parts get filtered out by useEffect."
+        }
+      ],
+      "files": [
+        "packages/browseros-agent/apps/server/src/api/services/chat-service.ts"
+      ],
+      "checks": [
+        "Abort signal handler saves current messages to SQLite",
+        "Partial responses preserved, not discarded",
+        "No blocking of the abort signal propagation"
+      ]
+    },
+    {
+      "id": "T06",
+      "name": "P1.6: Wire getConversationMessages in compaction route",
+      "desc": "Replace the `return null` stub in compaction route with actual lookup from SessionStore. Wire SessionStore to the compaction route in server.ts.",
+      "labels": ["P1", "high", "server", "compaction"],
+      "status": "pending",
+      "priority": "high",
+      "assignee": null,
+      "dependencies": ["T01"],
+      "comments": [
+        {
+          "id": "C06",
+          "author": "investigation",
+          "date": "2026-05-29",
+          "body": "getConversationMessages always returns null — SessionStore is not shared with chat routes. The compaction route cannot access message history."
+        }
+      ],
+      "files": [
+        "packages/browseros-agent/apps/server/src/api/routes/compaction.ts",
+        "packages/browseros-agent/apps/server/src/api/server.ts"
+      ],
+      "checks": [
+        "getConversationMessages returns actual messages from DB/SessionStore",
+        "SessionStore wired to compaction route in server.ts",
+        "Compaction can access full message history"
+      ]
+    },
+    {
+      "id": "T07",
+      "name": "P1.7: Implement compact endpoint",
+      "desc": "Implement the stub POST /assistant/sessions/:id/compact endpoint. Should trigger compaction for the given session and return result.",
+      "labels": ["P1", "high", "server", "compaction"],
+      "status": "pending",
+      "priority": "high",
+      "assignee": null,
+      "dependencies": ["T06"],
+      "comments": [
+        {
+          "id": "C07",
+          "author": "investigation",
+          "date": "2026-05-29",
+          "body": "Endpoint exists but is a stub — just returns { success: true, message: 'Compaction scheduled' } without doing anything."
+        }
+      ],
+      "files": [
+        "packages/browseros-agent/apps/server/src/api/routes/assistant-sessions.ts"
+      ],
+      "checks": [
+        "Compact endpoint triggers actual compaction",
+        "Returns compaction result (summary, token count)",
+        "Handles edge case: session not found",
+        "Handles edge case: session has no messages"
+      ]
+    },
+    {
+      "id": "T08",
+      "name": "P1.8: Save partial messages on abort (client-side)",
+      "desc": "In useChatSession.ts, save current messages on abort before filtering. Don't filter out partial assistant messages — mark them as interrupted instead.",
+      "labels": ["P1", "high", "client", "sidepanel"],
+      "status": "pending",
+      "priority": "high",
+      "assignee": null,
+      "dependencies": [],
+      "comments": [
+        {
+          "id": "C08",
+          "author": "investigation",
+          "date": "2026-05-29",
+          "body": "Client only saves on status='ready'. Abort transitions to ready but partial messages with empty parts get filtered out by useEffect."
+        }
+      ],
+      "files": [
+        "packages/browseros-agent/apps/agent/entrypoints/sidepanel/index/useChatSession.ts"
+      ],
+      "checks": [
+        "Messages saved on abort before filtering",
+        "Partial assistant messages marked as interrupted, not discarded",
+        "conversationStorage updated with partial state"
+      ]
+    },
+    {
+      "id": "T09",
+      "name": "P2.9: Add beforeunload handler in sidepanel",
+      "desc": "Add beforeunload and visibilitychange handlers in sidepanel that synchronously write current messages to chrome.storage.local. Handles panel close, refresh, and Chromium kill.",
+      "labels": ["P2", "medium", "client", "sidepanel"],
+      "status": "pending",
+      "priority": "medium",
+      "assignee": null,
+      "dependencies": [],
+      "comments": [
+        {
+          "id": "C09",
+          "author": "investigation",
+          "date": "2026-05-29",
+          "body": "No beforeunload handler exists. Closing sidepanel mid-stream loses any un-saved messages. chrome.storage.local has 10MB limit per extension."
+        }
+      ],
+      "files": [
+        "packages/browseros-agent/apps/agent/entrypoints/sidepanel/index/useChatSession.ts"
+      ],
+      "checks": [
+        "beforeunload handler writes messages to chrome.storage.local",
+        "visibilitychange handler also triggers save",
+        "Synchronous write (navigator.sendBeacon or localStorage fallback)",
+        "No performance impact on normal operation"
+      ]
+    },
+    {
+      "id": "T10",
+      "name": "P2.10: Persist compaction state across restarts",
+      "desc": "Persist compaction summary text + count alongside messages in DB. Load when rebuilding a session. Prevents context overflow after restart.",
+      "labels": ["P2", "medium", "server", "compaction"],
+      "status": "pending",
+      "priority": "medium",
+      "assignee": null,
+      "dependencies": ["T01"],
+      "comments": [
+        {
+          "id": "C10",
+          "author": "investigation",
+          "date": "2026-05-29",
+          "body": "CompactionState is ephemeral — lives in prepareStep closure. On restart, compaction summary is lost, next turn starts fresh."
+        }
+      ],
+      "files": [
+        "packages/browseros-agent/apps/server/src/agent/compaction.ts"
+      ],
+      "checks": [
+        "Compaction state persisted to DB alongside messages",
+        "State loaded when rebuilding a session",
+        "Handles missing/empty state gracefully"
+      ]
+    },
+    {
+      "id": "T11",
+      "name": "P2.11: Persist turn frames for active sessions",
+      "desc": "Add SQLite backing for turn frames. The ring buffer can still be used for hot-path reads, but should be backed by durable storage.",
+      "labels": ["P2", "medium", "server", "turn-registry"],
+      "status": "pending",
+      "priority": "medium",
+      "assignee": null,
+      "dependencies": ["T01"],
+      "comments": [
+        {
+          "id": "C11",
+          "author": "investigation",
+          "date": "2026-05-29",
+          "body": "TurnRegistry is ring buffer with 5k frames, 5min retain. Older frames silently dropped. On restart all turn history is lost."
+        }
+      ],
+      "files": [
+        "packages/browseros-agent/apps/server/src/lib/agents/active-turn-registry.ts"
+      ],
+      "checks": [
+        "Turn frames persisted to SQLite for active sessions",
+        "Ring buffer still used for hot-path reads",
+        "Frames recoverable after restart",
+        "No performance regression on hot path"
+      ]
+    },
+    {
+      "id": "T12",
+      "name": "P3.12: Session rehydration on startup",
+      "desc": "On server startup, check for existing messages in DB and rehydrate sessions. Must not start serving until DB load completes.",
+      "labels": ["P3", "low", "server", "startup"],
+      "status": "pending",
+      "priority": "low",
+      "assignee": null,
+      "dependencies": ["T01", "T02"],
+      "comments": [
+        {
+          "id": "C12",
+          "author": "investigation",
+          "date": "2026-05-29",
+          "body": "Currently no session rehydration. After restart, all sessions start empty. Client sends previousConversation as injection but server-side state (MCP connections, tool configs) is lost."
+        }
+      ],
+      "files": [
+        "packages/browseros-agent/apps/server/src/agent/session-store.ts",
+        "packages/browseros-agent/apps/server/src/main.ts"
+      ],
+      "checks": [
+        "On startup, sessions rehydrated from DB if messages exist",
+        "Server does not accept requests until rehydration completes",
+        "MCP connections and tool configs are re-initialized",
+        "Handles corrupted/missing session data gracefully"
+      ]
+    }
+  ]
+}
