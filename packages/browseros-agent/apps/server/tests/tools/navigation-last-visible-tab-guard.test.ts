@@ -258,6 +258,45 @@ describe('close_page last-visible-tab guard', () => {
     )
   })
 
+  it('guard allows closing user tab when chrome-extension:// tab is also visible', async () => {
+    // Edge case: chrome-extension:// pages are excluded from list_pages output
+    // but count as visible tabs in the guard. If a chrome-extension:// tab
+    // remains visible, closing the last user tab is allowed because the
+    // browser still has a visible tab (extension page).
+    const pages = [
+      makePage({ pageId: 1, url: 'https://example.com' }),
+      makePage({ pageId: 2, url: 'chrome-extension://abcdef/popup.html' }),
+    ]
+    const { browser, wasClosePageCalled } = createMockBrowser(pages)
+
+    const result = await executeClosePage(browser, 1)
+
+    assert.ok(
+      !result.isError,
+      `Expected success (chrome-extension tab keeps browser alive), got: ${textOf(result)}`,
+    )
+    assert.ok(wasClosePageCalled(), 'closePage should have been called')
+  })
+
+  it('guard blocks closing when only chrome-extension:// tabs remain', async () => {
+    // If ALL visible tabs are chrome-extension:// pages, closing the last
+    // one should still be blocked — these are real tabs and closing all
+    // of them would exit the browser.
+    const pages = [
+      makePage({ pageId: 1, url: 'chrome-extension://abcdef/popup.html' }),
+    ]
+    const { browser, wasClosePageCalled } = createMockBrowser(pages)
+
+    const result = await executeClosePage(browser, 1)
+
+    assert.ok(result.isError, 'Expected error — only chrome-extension tab')
+    assert.ok(
+      textOf(result).includes('Cannot close the last visible tab'),
+      `Expected last-visible-tab error, got: ${textOf(result)}`,
+    )
+    assert.ok(!wasClosePageCalled(), 'closePage should NOT have been called')
+  })
+
   it('newtab guard still works when multiple visible tabs exist', async () => {
     const pages = [makePage({ pageId: 1 }), makePage({ pageId: 2 })]
     const { browser } = createMockBrowser(pages)
