@@ -205,13 +205,6 @@ export const Chat = () => {
     const messageText = customMessageText ? customMessageText : input.trim()
     if (!messageText) return
 
-      // Check built-in commands first
-      if (BUILTIN_COMMAND_NAMES.has(parsed.name)) {
-        const actionType =
-          BUILTIN_ACTION_TYPES[
-            parsed.name as keyof typeof BUILTIN_ACTION_TYPES
-          ] ?? 'message'
-
     // Process slash commands before sending
     if (messageText.startsWith('/')) {
       const maybeResult = processSlashCommand(messageText, {
@@ -407,3 +400,5 @@ export const Chat = () => {
     </>
   )
 }
+
+

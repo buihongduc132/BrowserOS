@@ -14,8 +14,9 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { useAgentServerUrl } from '@/lib/browseros/useBrowserOSProviders'
-import { MEMORY_QUERY_KEY } from '../memory/useMemoryContent'
-import { SOUL_QUERY_KEY } from '../soul/useSoulContent'
+// Query keys for cache invalidation (defined locally until memory/soul modules are merged)
+const MEMORY_QUERY_KEY = 'browseros-memory' as const
+const SOUL_QUERY_KEY = 'browseros-soul' as const
 
 type ResetTarget = 'memory' | 'soul'
 
