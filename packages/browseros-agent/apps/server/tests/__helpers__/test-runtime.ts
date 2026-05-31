@@ -1,5 +1,6 @@
-import { existsSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { createServer } from 'node:net'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { TEST_PORTS } from '@browseros/shared/constants/ports'
 

@@ -137,21 +137,32 @@ describe('new-tab origin navigation guards', () => {
     })
   }, 60_000)
 
-  it('navigate_page works normally in sidepanel mode', async () => {
+  it('navigate_page works normally in sidepanel mode for non-origin tab', async () => {
     await withBrowser(async ({ browser }) => {
+      // Create origin page (sidepanel tab)
+      const originResult = await executeTool(
+        new_page,
+        { url: 'about:blank' },
+        { browser, directories: { workingDir: process.cwd() } },
+        AbortSignal.timeout(30_000),
+      )
+      const originPageId = structuredOf<{ pageId: number }>(originResult).pageId
+
+      // Create a separate page to navigate (not the origin)
       const setupResult = await executeTool(
         new_page,
         { url: 'about:blank' },
         { browser, directories: { workingDir: process.cwd() } },
         AbortSignal.timeout(30_000),
       )
-      const pageId = structuredOf<{ pageId: number }>(setupResult).pageId
+      const targetPageId = structuredOf<{ pageId: number }>(setupResult).pageId
 
+      // Navigate the non-origin page — should succeed
       const result = await executeWithSession(
         { browser },
         navigate_page,
-        { page: pageId, action: 'url', url: 'https://example.com' },
-        { origin: 'sidepanel', originPageId: pageId },
+        { page: targetPageId, action: 'url', url: 'https://example.com' },
+        { origin: 'sidepanel', originPageId: originPageId },
       )
 
       assert.ok(
@@ -162,7 +173,13 @@ describe('new-tab origin navigation guards', () => {
 
       await executeTool(
         close_page,
-        { page: pageId },
+        { page: targetPageId },
+        { browser, directories: { workingDir: process.cwd() } },
+        AbortSignal.timeout(30_000),
+      )
+      await executeTool(
+        close_page,
+        { page: originPageId },
         { browser, directories: { workingDir: process.cwd() } },
         AbortSignal.timeout(30_000),
       )
