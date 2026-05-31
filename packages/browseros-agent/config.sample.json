@@ -11,12 +11,14 @@
     "execution": "./out"
   },
   "flags": {
-    "allow_remote_in_mcp": false
+    "allow_remote_in_mcp": false,
+    "tab_ownership_strict": false
   },
   "instance": {
     "client_id": "test-install-123",
     "install_id": "test-client-456",
     "browseros_version": "",
     "chromium_version": ""
-  }
+  },
+  "_timeouts_note": "Timeouts are configured via env vars only: BROWSEROS_TIMEOUT_TAB_LOCK_IDLE (default 3600000ms) and BROWSEROS_TIMEOUT_TAB_LOCK_SWEEP_INTERVAL (default 60000ms)"
 }

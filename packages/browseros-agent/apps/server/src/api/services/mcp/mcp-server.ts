@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import { randomUUID } from 'node:crypto'
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js'
@@ -74,7 +73,7 @@ export function createMcpServer(deps: McpServiceDeps): McpServer {
       origin: 'sidepanel',
       conversationId: deps.agentId
         ? `mcp-${deps.agentId}`
-        : `mcp-${randomUUID()}`,
+        : `mcp-default`,
       agentId: deps.agentId,
     },
     strictOwnership: deps.strictOwnership ?? false,

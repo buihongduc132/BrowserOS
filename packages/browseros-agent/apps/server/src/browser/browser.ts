@@ -308,6 +308,7 @@ export class Browser {
       if (!seenTargetIds.has(info.targetId)) {
         this.consoleCollector.detach(pageId)
         this.pages.delete(pageId)
+        this.tabOwnership.forceReleasePage(pageId)
       }
     }
 
