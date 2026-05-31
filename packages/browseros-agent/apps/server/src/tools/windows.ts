@@ -117,6 +117,22 @@ export const close_window = defineTool({
       return
     }
 
+    // Origin-tab guard: reject if window contains the origin tab
+    if (ctx.session?.originPageId !== undefined) {
+      const allPages = await ctx.browser.listPages()
+      const originInWindow = allPages.find(
+        (p) =>
+          p.pageId === ctx.session?.originPageId &&
+          p.windowId === args.windowId,
+      )
+      if (originInWindow) {
+        response.error(
+          'Cannot close a window that contains the active tab — this would disrupt the current chat session.',
+        )
+        return
+      }
+    }
+
     // Ownership guard: check if any pages in the target window are owned
     // by a different conversation. In strict mode, reject. Otherwise warn.
     const allPages = await ctx.browser.listPages()

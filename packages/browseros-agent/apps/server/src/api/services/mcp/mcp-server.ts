@@ -66,12 +66,15 @@ export function createMcpServer(deps: McpServiceDeps): McpServer {
     // MCP callers get sidepanel-level protections by default.
     // This ensures guards (last-visible-tab, origin-tab) work for MCP
     // callers instead of being silently bypassed (ctx.session was undefined).
-    // A stable per-connection UUID ensures ownership tracking works:
-    // claim/release/isLocked all require a conversationId.
+    // conversationId is derived from agentId for stability across requests —
+    // stateless POST clients from the same agent share the same identity.
+    // Fallback to random UUID only when no agentId is available.
     // originPageId is intentionally undefined — MCP callers have no host tab.
     session: {
       origin: 'sidepanel',
-      conversationId: `mcp-${randomUUID()}`,
+      conversationId: deps.agentId
+        ? `mcp-${deps.agentId}`
+        : `mcp-${randomUUID()}`,
       agentId: deps.agentId,
     },
     strictOwnership: deps.strictOwnership ?? false,

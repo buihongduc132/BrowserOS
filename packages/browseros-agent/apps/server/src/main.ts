@@ -94,6 +94,7 @@ export class Application {
         codegenServiceUrl: this.config.codegenServiceUrl,
         aiSdkDevtoolsEnabled: this.config.aiSdkDevtoolsEnabled,
         compaction: this.config.compaction,
+        tabOwnershipStrict: this.config.tabOwnershipStrict,
 
         onShutdown: () => this.stop('shutdown-endpoint'),
       })

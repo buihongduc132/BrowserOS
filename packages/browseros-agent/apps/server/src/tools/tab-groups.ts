@@ -171,6 +171,17 @@ export const close_tab_group = defineTool({
     const groups = await ctx.browser.listTabGroups()
     const group = groups.find((g) => g.groupId === args.groupId)
     if (group) {
+      // Origin-tab guard: reject if group contains the origin tab
+      if (
+        ctx.session?.originPageId !== undefined &&
+        group.pageIds.includes(ctx.session.originPageId)
+      ) {
+        response.error(
+          'Cannot close a tab group that contains the active tab — this would disrupt the current chat session.',
+        )
+        return
+      }
+
       const allPages = await ctx.browser.listPages()
       const visiblePages = allPages.filter((p) => !p.isHidden)
       const groupVisiblePages = visiblePages.filter((p) =>

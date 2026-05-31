@@ -283,6 +283,8 @@ function parseConfigFile(filePath?: string): ConfigResult<PartialConfig> {
             ? cfg.instance.chromium_version
             : undefined,
         compaction: cfg.compaction,
+        tabOwnershipStrict:
+          cfg.flags?.tab_ownership_strict === true ? true : undefined,
       }),
     }
   } catch (e: unknown) {
@@ -313,6 +315,8 @@ function parseRuntimeEnv(): PartialConfig {
     instanceClientId: process.env.BROWSEROS_CLIENT_ID,
     aiSdkDevtoolsEnabled:
       process.env.BROWSEROS_AI_SDK_DEVTOOLS === 'true' ? true : undefined,
+    tabOwnershipStrict:
+      process.env.BROWSEROS_TAB_OWNERSHIP_STRICT === 'true' ? true : undefined,
   })
 }
 

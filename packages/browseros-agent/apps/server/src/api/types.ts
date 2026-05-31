@@ -110,6 +110,7 @@ export interface HttpServerConfig {
   codegenServiceUrl?: string
   aiSdkDevtoolsEnabled?: boolean
   compaction?: import('../config').ServerConfig['compaction']
+  tabOwnershipStrict?: boolean
 
   onShutdown?: () => void
 }
