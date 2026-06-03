@@ -185,7 +185,7 @@ export async function updateCommand(
   const description = input.description ?? existing.description
   const content = input.content ?? parsed.content.trim()
   const model = input.model ?? existing.model
-  const enabled = input.enabled ?? (existing.enabled !== false)
+  const enabled = input.enabled ?? existing.enabled !== false
 
   const frontmatter: CommandFrontmatter = {
     description,
