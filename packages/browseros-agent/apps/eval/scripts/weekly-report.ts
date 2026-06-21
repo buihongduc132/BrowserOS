@@ -90,7 +90,7 @@ const client = new S3Client({
 // Step 1: List all manifest.json files in runs/
 console.log('Scanning R2 for eval runs...')
 
-const manifests: ReportManifest[] = []
+const manifests: Manifest[] = []
 let continuationToken: string | undefined
 
 do {
@@ -113,7 +113,13 @@ do {
         new GetObjectCommand({ Bucket: bucket, Key: key }),
       )
       const body = await res.Body?.transformToString()
-      if (body) manifests.push(JSON.parse(body))
+      if (body) {
+        try {
+          manifests.push(JSON.parse(body))
+        } catch {
+          console.warn(`  Invalid manifest at ${key}, skipping`)
+        }
+      }
     } catch {
       console.warn(`  Failed to read ${key}, skipping`)
     }
@@ -130,15 +136,76 @@ if (manifests.length === 0) {
 }
 
 // Step 2: Build run summaries
-const runs: RunSummary[] = buildRunSummaries(manifests)
+const runs: RunSummary[] = manifests
+  .map((m) => {
+    const total = m.tasks.length
+    const completed = m.tasks.filter((t) => t.status === 'completed').length
+    const failed = m.tasks.filter((t) => t.status === 'failed').length
+    const timeout = m.tasks.filter((t) => t.status === 'timeout').length
+
+    let scoredCount = 0
+    let scoreSum = 0
+    for (const task of m.tasks) {
+      if (!task.graderResults) continue
+      for (const name of PASS_FAIL_GRADER_ORDER) {
+        if (task.graderResults[name]) {
+          scoredCount++
+          scoreSum += task.graderResults[name].score ?? 0
+          break
+        }
+      }
+    }
+
+    const avgScore = scoredCount > 0 ? (scoreSum / scoredCount) * 100 : 0
+    const durations = m.tasks
+      .filter((t) => t.durationMs > 0)
+      .map((t) => t.durationMs)
+    const avgDurationMs =
+      durations.length > 0
+        ? durations.reduce((a, b) => a + b, 0) / durations.length
+        : 0
+
+    const date = m.uploadedAt
+      ? `${m.uploadedAt.split('T')[0]} ${m.uploadedAt.split('T')[1]?.slice(0, 5) || ''}`
+      : m.runId.slice(0, 15)
+
+    const model = m.agentConfig?.model || 'unknown'
+    const dataset = m.dataset || m.runId
+    const agentType = m.agentConfig?.type || 'unknown'
+
+    const configName = extractConfigName(m.runId)
+    return {
+      runId: m.runId,
+      configName,
+      date,
+      avgScore,
+      total,
+      completed,
+      failed,
+      timeout,
+      avgDurationMs,
+      model,
+      dataset,
+      agentType,
+    }
+  })
+  .sort((a, b) => a.date.localeCompare(b.date))
 
 // Step 3: Identify unique config groups
+// runId can be "ci-weekly" (old) or "ci-weekly-2026-03-21-1730" (timestamped)
+// Extract config name by stripping the date-time suffix pattern
 function escHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
+}
+
+function extractConfigName(runId: string): string {
+  // "browseros-agent-weekly-2026-03-21-1730" → "browseros-agent-weekly"
+  // "ci-weekly" → "ci-weekly" (no timestamp, old format)
+  return runId.replace(/-\d{4}-\d{2}-\d{2}-\d{4}$/, '')
 }
 
 const configGroups = [...new Set(runs.map((r) => r.configName))]
@@ -273,7 +340,9 @@ const html = `<!DOCTYPE html>
             ? 'Orch-Exec'
             : r.agentType === 'single'
               ? 'Tool Loop'
-              : r.agentType || '—'
+              : r.agentType === 'gemini-computer-use'
+                ? 'Gemini CU'
+                : r.agentType || '—'
         return `<tr data-config="${escHtml(r.runId)}" data-search="${escHtml(`${r.date} ${r.runId} ${r.model} ${r.dataset} ${archLabel}`)}">
       <td>${escHtml(r.date)}</td>
       <td class="mono">${escHtml(r.runId)}</td>
@@ -322,6 +391,7 @@ const html = `<!DOCTYPE html>
     var latest = runs[runs.length - 1];
     var archLabel = latest.agentType === 'orchestrator-executor' ? 'Orchestrator-Executor'
       : latest.agentType === 'single' ? 'Single Agent (Tool Loop)'
+      : latest.agentType === 'gemini-computer-use' ? 'Gemini Computer Use'
       : latest.agentType || 'Unknown';
     var scoreColor = latest.avgScore >= 75 ? '#3fb950' : latest.avgScore >= 40 ? '#f0883e' : '#f85149';
     el.innerHTML =

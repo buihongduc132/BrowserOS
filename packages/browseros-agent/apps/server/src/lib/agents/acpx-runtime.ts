@@ -228,7 +228,7 @@ export class AcpxRuntime implements AgentRuntime {
    * Used by undo to truncate messages in-place.
    */
   async saveSessionRecord(
-    agentId: string,
+    _agentId: string,
     record: AcpSessionRecord,
   ): Promise<void> {
     await this.sessionStore.save(record)
@@ -737,6 +737,16 @@ function createBrowserosAgentRegistry(input: {
           launch.addMacosAdapterEnv
             ? withMacosAcpAdapterEnv(input.commandEnv, input.browserosDir)
             : input.commandEnv,
+        )
+      }
+
+      if (lower.startsWith('custom:')) {
+        const agentId = lower.slice('custom:'.length)
+        const def = input.customAgents.get(agentId)
+        if (!def?.customCommand) return agentName
+        return wrapCommandWithEnv(
+          [def.customCommand, ...(def.customArgs ?? [])].join(' '),
+          input.commandEnv,
         )
       }
 

@@ -17,11 +17,11 @@ import {
   PathOutsideMountsError,
   ResetNotSupportedError,
 } from '../../../../src/lib/container/managed'
-import { ContainerNameInUseError } from '../../../../src/lib/vm/errors'
 import type {
   ContainerInfo,
   ContainerSpec,
 } from '../../../../src/lib/container/types'
+import { ContainerNameInUseError } from '../../../../src/lib/vm/errors'
 
 interface FakeCli {
   inspectContainer: (name: string) => Promise<ContainerInfo | null>

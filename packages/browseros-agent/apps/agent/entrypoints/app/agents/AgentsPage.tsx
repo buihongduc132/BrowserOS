@@ -5,8 +5,8 @@ import { getAgentServerUrl } from '@/lib/browseros/helpers'
 import { useLlmProviders } from '@/lib/llm-providers/useLlmProviders'
 import { AgentList } from './AgentList'
 import { AgentsHeader } from './AgentsHeader'
-import type { HarnessAgent, HarnessAgentAdapter } from './agent-harness-types'
 import { buildAgentApiUrl } from './agent-api-url'
+import type { HarnessAgent, HarnessAgentAdapter } from './agent-harness-types'
 import { createAgentPageActions } from './agents-page-actions'
 import {
   useDefaultAgentName,
@@ -70,8 +70,8 @@ export const AgentsPage: FC = () => {
     error?: string
   } | null>(null)
   const [customProbeLoading, setCustomProbeLoading] = useState(false)
-  const [showTerminal, setShowTerminal] = useState(false)
-  const [cliAuthModalOpen, setCliAuthModalOpen] = useState(false)
+  const [_showTerminal, _setShowTerminal] = useState(false)
+  const [_cliAuthModalOpen, setCliAuthModalOpen] = useState(false)
   const [pageError, setPageError] = useState<string | null>(null)
   const [createError, setCreateError] = useState<string | null>(null)
   const [deletingAgentKey, setDeletingAgentKey] = useState<string | null>(null)
@@ -183,7 +183,8 @@ export const AgentsPage: FC = () => {
         setCreateError(result.error ?? 'Failed to import ACPX agents')
         return
       }
-      const importedCount = result.results?.filter((entry) => entry.imported).length ?? 0
+      const importedCount =
+        result.results?.filter((entry) => entry.imported).length ?? 0
       if (importedCount === 0) {
         setCreateError(
           result.results?.[0]?.reason ?? 'No ACPX agents available to import',
@@ -205,34 +206,33 @@ export const AgentsPage: FC = () => {
     setHarnessReasoningEffort(descriptor?.defaultReasoningEffort ?? '')
   }
 
-  const { handleCreate, handleDelete, handleSetup, runWithPageErrorHandling } =
-    createAgentPageActions({
-      createProviderId,
-      createRuntime,
-      createHermesProviderId,
-      customArgs,
-      customCommand,
-      customLabel,
-      harnessModelId,
-      harnessReasoningEffort,
-      navigate,
-      newName,
-      selectableOpenClawProviders,
-      selectableHermesProviders,
-      setupProviderId,
-      createHarnessAgent: createHarnessAgent.mutateAsync,
-      createOpenClawAgent,
-      deleteHarnessAgent: deleteHarnessAgent.mutateAsync,
-      deleteOpenClawAgent,
-      setCliAuthModalOpen,
-      setCreateError,
-      setCreateOpen,
-      setDeletingAgentKey,
-      setNewName,
-      setPageError,
-      setSetupOpen,
-      setupOpenClaw,
-    })
+  const { handleCreate, handleDelete } = createAgentPageActions({
+    createProviderId,
+    createRuntime,
+    createHermesProviderId,
+    customArgs,
+    customCommand,
+    customLabel,
+    harnessModelId,
+    harnessReasoningEffort,
+    navigate,
+    newName,
+    selectableOpenClawProviders,
+    selectableHermesProviders,
+    setupProviderId,
+    createHarnessAgent: createHarnessAgent.mutateAsync,
+    createOpenClawAgent,
+    deleteHarnessAgent: deleteHarnessAgent.mutateAsync,
+    deleteOpenClawAgent,
+    setCliAuthModalOpen,
+    setCreateError,
+    setCreateOpen,
+    setDeletingAgentKey,
+    setNewName,
+    setPageError,
+    setSetupOpen,
+    setupOpenClaw,
+  })
 
   if (harnessAgentsLoading) {
     return (

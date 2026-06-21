@@ -1,3 +1,5 @@
+import dayjs from 'dayjs'
+import relativeTime from 'dayjs/plugin/relativeTime'
 import {
   Bot,
   CheckIcon,
@@ -13,17 +15,18 @@ import {
 import type { FC } from 'react'
 import { useCallback, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
-import dayjs from 'dayjs'
-import relativeTime from 'dayjs/plugin/relativeTime'
 import { ChatProviderSelector } from '@/components/chat/ChatProviderSelector'
 import type { Provider } from '@/components/chat/chatComponentTypes'
 import { CreditBadge } from '@/components/credits/CreditBadge'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ThemeToggle } from '@/components/elements/theme-toggle'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { Feature } from '@/lib/browseros/capabilities'
 import { useCapabilities } from '@/lib/browseros/useCapabilities'
 import {
-  SIDEPANEL_SESSION_CREATED_EVENT,
   SIDEPANEL_SESSION_DELETED_EVENT,
   SIDEPANEL_SESSION_ID_COPIED_EVENT,
   SIDEPANEL_SESSION_SWITCHED_EVENT,
@@ -34,10 +37,7 @@ import { BrowserOSIcon, ProviderIcon } from '@/lib/llm-providers/providerIcons'
 import type { ProviderType } from '@/lib/llm-providers/types'
 import { track } from '@/lib/metrics/track'
 import { copySessionIdToClipboard } from './CopySessionId'
-import {
-  useAgentSessions,
-  useDeleteAgentSession,
-} from './session-queries'
+import { useAgentSessions, useDeleteAgentSession } from './session-queries'
 
 dayjs.extend(relativeTime)
 
@@ -226,16 +226,14 @@ export const ChatHeader: FC<ChatHeaderProps> = ({
                   onNewConversation()
                   setSessionMenuOpen(false)
                 }}
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-muted"
+                className="flex w-full items-center gap-2 rounded-md px-3 py-2 font-medium text-sm transition-colors hover:bg-muted"
               >
                 <Plus className="h-4 w-4" />
                 New Thread
               </button>
 
               {/* Divider */}
-              {sessions.length > 0 && (
-                <div className="my-1 border-t" />
-              )}
+              {sessions.length > 0 && <div className="my-1 border-t" />}
 
               {/* Recent sessions */}
               <div className="max-h-64 overflow-y-auto">
@@ -260,18 +258,13 @@ export const ChatHeader: FC<ChatHeaderProps> = ({
                           ? dayjs(s.lastMessageAt).fromNow()
                           : dayjs(s.createdAt).fromNow()}
                       </span>
-                      <span
-                        role="button"
-                        tabIndex={0}
+                      <button
+                        type="button"
                         onClick={(e) => handleDeleteSession(e, s.sessionId)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter')
-                            handleDeleteSession(e as unknown as React.MouseEvent, s.sessionId)
-                        }}
-                        className="shrink-0 cursor-pointer p-0.5 opacity-0 transition-opacity group-hover/session:opacity-100 hover:text-destructive"
+                        className="shrink-0 cursor-pointer p-0.5 opacity-0 transition-opacity hover:text-destructive group-hover/session:opacity-100"
                       >
                         <Trash2 className="h-3 w-3" />
-                      </span>
+                      </button>
                     </button>
                   ))
                 )}

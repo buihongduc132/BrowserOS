@@ -14,11 +14,7 @@ import { stream } from 'hono/streaming'
 import { formatUserMessage } from '../../agent/format-message'
 import type { Browser } from '../../browser/browser'
 import { createAcpUIMessageStreamResponse } from '../../lib/agents/acp-ui-message-stream'
-import { createSyntheticCommandStream } from './acp-command-response'
-import { dispatchCommand } from './acp-slash-commands-builtins'
 import type { OpenclawGatewayAccessor } from '../../lib/agents/acpx-runtime'
-import { dispatchCommand } from './acp-slash-commands-builtins'
-import { createSyntheticCommandStream } from './acp-command-response'
 import type {
   ActiveTurnInfo,
   TurnFrame,
@@ -43,20 +39,28 @@ import {
 import {
   type AgentDefinitionWithActivity,
   AgentHarnessService,
-  type EnsureVmRuntimeReady,
+  type GatewayStatusSnapshot,
   HermesProviderConfigInvalidError,
   InvalidAgentUpdateError,
   MessageQueueFullError,
+  type OpenClawProvisioner,
+  OpenClawProvisionerUnavailableError,
+  type ProducedFileEntry,
+  type ProducedFilesRailGroup,
   type QueuedMessage,
   TurnAlreadyActiveError,
   UnknownAgentError,
 } from '../services/agents/agent-harness-service'
+import type { FilePreview } from '../services/openclaw/file-preview'
 import type { Env } from '../types'
 import { resolveBrowserContextPageIds } from '../utils/resolve-browser-context-page-ids'
+import { createSyntheticCommandStream } from './acp-command-response'
+import { dispatchCommand } from './acp-slash-commands-builtins'
 
 type AgentRouteService = {
   listAgents(): Promise<AgentDefinition[]>
   listAgentsWithActivity(): Promise<AgentDefinitionWithActivity[]>
+  getGatewayStatus(): Promise<GatewayStatusSnapshot | null>
   createAgent(input: {
     name: string
     adapter: AgentAdapter
@@ -110,17 +114,49 @@ type AgentRouteService = {
     messageId: string
   }): Promise<boolean>
   listQueuedMessages(agentId: string): Promise<QueuedMessage[]>
+
+  // Files API — Phase 3 of TKT-762.
+  listAgentFiles(
+    agentId: string,
+    options?: { limit?: number },
+  ): Promise<ProducedFilesRailGroup[]>
+  listAgentFilesForTurn(
+    agentId: string,
+    turnId: string,
+  ): Promise<ProducedFileEntry[]>
+  previewProducedFile(fileId: string): Promise<FilePreview | null>
+  resolveProducedFileForDownload(fileId: string): Promise<{
+    absolutePath: string
+    fileName: string
+    mimeType: string
+    size: number
+  } | null>
 }
 
 type AgentRouteDeps = {
   service?: AgentRouteService
   browser?: Pick<Browser, 'resolveTabIds'>
   browserosServerPort?: number
-  resourcesDir?: string
-  /** Optional hook for harness-owned VM/container runtimes. */
-  ensureVmRuntimeReady?: EnsureVmRuntimeReady
+  /**
+   * Required when an `openclaw` adapter agent is in use; harmless when
+   * absent. Forwarded to the AcpxRuntime so it can spawn `openclaw acp`
+   * inside the gateway container.
+   */
+  openclawGateway?: OpenclawGatewayAccessor
+  /**
+   * Optional. Enables the image-attachment carve-out for OpenClaw
+   * Required to dual-create/delete `openclaw` adapter agents on the
+   * gateway side. Without this, openclaw create requests fail with 503.
+   */
+  openclawProvisioner?: OpenClawProvisioner
   /** Optional override; defaults to a fresh in-memory checker. */
   adapterHealth?: AdapterHealthChecker
+  /**
+   * Optional listener attached to the constructed harness. Receives
+   * turn lifecycle events for every running agent. Wired by the server
+   * to feed OpenClaw's ClawSession dashboard from the same stream the
+   * chat panel sees, so no second WS observer is needed.
+   */
   onTurnLifecycle?: import('../services/agents/agent-harness-service').TurnLifecycleListener
 }
 
@@ -234,17 +270,27 @@ export function createAgentRoutes(deps: AgentRouteDeps = {}) {
         const parsed = await parseSidepanelAgentChatBody(c)
         if ('error' in parsed) return c.json({ error: parsed.error }, 400)
 
-      try {
-        const agent = await service.getAgent(agentId)
-        if (!agent) return c.json({ error: 'Unknown agent' }, 404)
+        try {
+          const agent = await service.getAgent(agentId)
+          if (!agent) return c.json({ error: 'Unknown agent' }, 404)
 
-        let browserContext = parsed.browserContext
-        if (deps.browser) {
-          browserContext = await resolveBrowserContextPageIds(
-            deps.browser,
+          let browserContext = parsed.browserContext
+          if (deps.browser) {
+            browserContext = await resolveBrowserContextPageIds(
+              deps.browser,
+              browserContext,
+            )
+          }
+
+          const userContent = formatUserMessage(
+            parsed.message,
             browserContext,
+            parsed.selectedText,
+            parsed.selectedTextSource,
           )
-        }
+          const message = parsed.userSystemPrompt?.trim()
+            ? `${parsed.userSystemPrompt.trim()}\n\n${userContent}`
+            : userContent
 
           // Dispatch ACP slash commands before startTurn
           const cmdResult = await dispatchCommand(parsed.message, {
@@ -377,38 +423,21 @@ export function createAgentRoutes(deps: AgentRouteDeps = {}) {
           })
         } catch (err) {
           if (err instanceof TurnAlreadyActiveError) {
+            // Caller can attach via GET /chat/stream?turnId=… instead.
             return c.json(
               {
                 error: 'Turn already active',
                 turnId: err.turnId,
-                attachUrl: `/agents/${agent.id}/chat/stream?turnId=${err.turnId}`,
+                attachUrl: `/agents/${agentId}/chat/stream?turnId=${err.turnId}`,
               },
               409,
             )
           }
-          throw err
+          return handleAgentRouteError(c, err)
         }
 
-        let didRequestCancel = false
-        const cancelStartedTurn = () => {
-          if (didRequestCancel) return
-          didRequestCancel = true
-          service.cancelTurn({
-            agentId: agent.id,
-            turnId: started.turnId,
-            reason: 'sidepanel stream cancelled',
-          })
-        }
-        if (c.req.raw.signal.aborted) {
-          cancelStartedTurn()
-        } else {
-          c.req.raw.signal.addEventListener('abort', cancelStartedTurn, {
-            once: true,
-          })
-        }
-
-        const events = turnFramesToAgentEvents(started.frames, {
-          onCancel: cancelStartedTurn,
+        return streamTurnFrames(c, started.frames, {
+          turnId: started.turnId,
         })
       })
       .get('/:agentId/chat/active', (c) => {
@@ -488,87 +517,78 @@ export function createAgentRoutes(deps: AgentRouteDeps = {}) {
         }
       })
 
-        return createAcpUIMessageStreamResponse(events, {
-          headers: {
-            'X-Session-Id': 'main',
-            'X-Turn-Id': started.turnId,
-          },
-        })
-      } catch (err) {
-        return handleAgentRouteError(c, err)
-      }
-    })
-    .get('/:agentId', async (c) => {
-      try {
-        const agent = await service.getAgent(c.req.param('agentId'))
-        if (!agent) return c.json({ error: 'Unknown agent' }, 404)
-        return c.json({ agent })
-      } catch (err) {
-        return handleAgentRouteError(c, err)
-      }
-    })
-    .delete('/:agentId', async (c) => {
-      try {
-        return c.json({
-          success: await service.deleteAgent(c.req.param('agentId')),
-        })
-      } catch (err) {
-        return handleAgentRouteError(c, err)
-      }
-    })
-    .patch('/:agentId', async (c) => {
-      const parsed = await parseAgentPatchBody(c)
-      if ('error' in parsed) return c.json({ error: parsed.error }, 400)
-      try {
-        const agent = await service.updateAgent(
-          c.req.param('agentId'),
-          parsed.patch,
-        )
-        if (!agent) return c.json({ error: 'Unknown agent' }, 404)
-        return c.json({ agent })
-      } catch (err) {
-        return handleAgentRouteError(c, err)
-      }
-    })
-    .get('/:agentId/sessions/main/history', async (c) => {
-      try {
-        return c.json(await service.getHistory(c.req.param('agentId')))
-      } catch (err) {
-        return handleAgentRouteError(c, err)
-      }
-    })
-    .post('/:agentId/chat', async (c) => {
-      const agentId = c.req.param('agentId')
-      const parsed = await parseChatBody(c)
-      if ('error' in parsed) return c.json({ error: parsed.error }, 400)
+      // ── Files (TKT-762) ────────────────────────────────────────────
+      //
+      // V1 surfaces files OpenClaw agents produce inside their workspace
+      // dir (`~/.browseros/vm/openclaw/.openclaw/workspace[-<name>]/`)
+      // as outputs, attributed back to the chat turn that produced them
+      // by the per-turn workspace diff in
+      // `agent-harness-service.runDetachedTurn`. Adapter-gated to
+      // openclaw on the service side; for claude / codex these endpoints
+      // simply return empty lists.
+      //
+      // The file-id-scoped endpoints (`/files/:fileId/{preview,download}`)
+      // accept an opaque `fileId` and resolve the on-disk path
+      // server-side, so the client never sees a raw path and traversal
+      // is impossible by construction.
 
-      let started: { turnId: string; frames: ReadableStream<TurnFrame> }
-      try {
-        started = await service.startTurn({
-          agentId,
-          message: parsed.message,
-          attachments: parsed.attachments,
-          cwd: parsed.cwd,
-        })
-      } catch (err) {
-        if (err instanceof TurnAlreadyActiveError) {
-          // Caller can attach via GET /chat/stream?turnId=… instead.
-          return c.json(
-            {
-              error: 'Turn already active',
-              turnId: err.turnId,
-              attachUrl: `/agents/${agentId}/chat/stream?turnId=${err.turnId}`,
-            },
-            409,
+      .get('/:agentId/files', async (c) => {
+        try {
+          const groups = await service.listAgentFiles(
+            c.req.param('agentId'),
+            parseAgentFilesLimit(c.req.query('limit')),
           )
+          return c.json({ groups })
+        } catch (err) {
+          return handleAgentRouteError(c, err)
         }
-        return handleAgentRouteError(c, err)
-      }
-
-      return streamTurnFrames(c, started.frames, {
-        turnId: started.turnId,
       })
+      .get('/:agentId/files/turn/:turnId', async (c) => {
+        try {
+          const files = await service.listAgentFilesForTurn(
+            c.req.param('agentId'),
+            c.req.param('turnId'),
+          )
+          return c.json({ files })
+        } catch (err) {
+          return handleAgentRouteError(c, err)
+        }
+      })
+      .get('/files/:fileId/preview', async (c) => {
+        try {
+          const preview = await service.previewProducedFile(
+            c.req.param('fileId'),
+          )
+          if (!preview || preview.kind === 'missing') {
+            return c.json({ error: 'File not found' }, 404)
+          }
+          return c.json(preview)
+        } catch (err) {
+          return handleAgentRouteError(c, err)
+        }
+      })
+      .get('/files/:fileId/download', async (c) => {
+        try {
+          const resolved = await service.resolveProducedFileForDownload(
+            c.req.param('fileId'),
+          )
+          if (!resolved) return c.json({ error: 'File not found' }, 404)
 
+          // Stream raw bytes via Bun's lazy file handle. Sets
+          // Content-Disposition so browsers save instead of preview.
+          const file = Bun.file(resolved.absolutePath)
+          return new Response(file.stream(), {
+            headers: {
+              'Content-Type': resolved.mimeType,
+              'Content-Length': String(resolved.size),
+              'Content-Disposition': `attachment; ${encodeRfc6266Filename(resolved.fileName)}`,
+              'Cache-Control': 'no-store',
+            },
+          })
+        } catch (err) {
+          return handleAgentRouteError(c, err)
+        }
+      })
   )
 }
 
@@ -762,6 +782,7 @@ async function parseCreateAgentBody(c: Context<Env>): Promise<
   // model validation for those adapters — custom agents use whatever
   // the binary exposes via ACP.
   if (
+    record.adapter !== 'openclaw' &&
     record.adapter !== 'hermes' &&
     record.adapter !== 'custom' &&
     !isSupportedAgentModel(record.adapter, modelId)
@@ -1015,6 +1036,9 @@ function handleAgentRouteError(c: Context<Env>, err: unknown) {
   }
   if (err instanceof MessageQueueFullError) {
     return c.json({ error: err.message }, 429)
+  }
+  if (err instanceof OpenClawProvisionerUnavailableError) {
+    return c.json({ error: err.message }, 503)
   }
   const message = err instanceof Error ? err.message : String(err)
   return c.json({ error: message }, 500)
