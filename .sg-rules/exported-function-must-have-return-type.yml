@@ -1,0 +1,51 @@
+# SOURCE: https://www.typescriptlang.org/tsconfig#strict
+#   "strict: true enables all strict type-checking options. Functions without explicit
+#   return types rely on inference which can silently widen to any."
+# SOURCE: https://typescript-book.com/function-return-type-annotation
+#   "Always annotate return types on exported functions. Inferred return types can
+#   change when implementation changes, silently breaking consumers."
+# SOURCE: https://www.totaltypescript.com/tips/use-explicit-return-types-on-exported-functions
+#   "Exported functions are a public API. Explicit return types prevent accidental
+#   breaking changes when the implementation changes."
+id: exported-function-must-have-return-type
+language: typescript
+message: "Exported function without explicit return type annotation — add return type to lock the public API contract"
+severity: error
+note: |
+  UNSAFE:
+    export function getUser(id: string) {
+      return db.user.findUnique({ where: { id } });
+    }
+    // Return type inferred as Promise<User | null> — can silently change
+  
+  SAFE:
+    export function getUser(id: string): Promise<User | null> {
+      return db.user.findUnique({ where: { id } });
+    }
+    
+    export function createUser(data: UserInput): Promise<User> {
+      return db.user.create({ data });
+    }
+  
+  WHY: Exported functions are public API. Without explicit return types:
+  (1) implementation changes silently alter the return type, breaking consumers,
+  (2) TypeScript won't warn consumers when the return type narrows/widens,
+  (3) refactoring tools can't distinguish intentional vs accidental type changes.
+  This is the single most impactful strict-mode enforcement for library/API code.
+rule:
+  any:
+    - pattern: export function $NAME($$$PARAMS) { $$$BODY }
+    - pattern: export async function $NAME($$$PARAMS) { $$$BODY }
+  not:
+    any:
+      # Safe: has return type annotation
+      - pattern: 'export function $NAME($$$PARAMS): $RETTYPE { $$$BODY }'
+      - pattern: 'export async function $NAME($$$PARAMS): $RETTYPE { $$$BODY }'
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'
