@@ -78,8 +78,13 @@ function readGatewayToken(): string {
   if (!existsSync(HOST_OPENCLAW_JSON)) {
     throw new Error(`openclaw.json not found at ${HOST_OPENCLAW_JSON}`)
   }
-  const cfg = JSON.parse(readFileSync(HOST_OPENCLAW_JSON, 'utf-8')) as {
-    gateway?: { auth?: { token?: string } }
+  let cfg: { gateway?: { auth?: { token?: string } } }
+  try {
+    cfg = JSON.parse(readFileSync(HOST_OPENCLAW_JSON, 'utf-8')) as {
+      gateway?: { auth?: { token?: string } }
+    }
+  } catch {
+    throw new Error(`invalid JSON in ${HOST_OPENCLAW_JSON}`)
   }
   const token = cfg.gateway?.auth?.token
   if (!token) {

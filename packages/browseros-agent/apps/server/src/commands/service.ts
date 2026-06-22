@@ -190,6 +190,7 @@ export async function updateCommand(
 
   const frontmatter: CommandFrontmatter = {
     description,
+    enabled,
   }
   if (model) {
     frontmatter.model = model

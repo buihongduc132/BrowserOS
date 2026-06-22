@@ -68,14 +68,7 @@ export default defineConfig({
       'webNavigation',
       'downloads',
     ],
-    host_permissions: [
-      'http://127.0.0.1/*',
-      'https://suggestqueries.google.com/*',
-      'https://api.bing.com/*',
-      'https://in.search.yahoo.com/*',
-      'https://duckduckgo.com/*',
-      'https://search.brave.com/*',
-    ],
+    host_permissions: ['http://127.0.0.1/*'],
   },
   vite: () => ({
     build: {

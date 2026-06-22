@@ -262,7 +262,7 @@ describe('AGENT_LIMITS structural checks', () => {
     require('../../src/constants/limits.ts') as typeof import('../../src/constants/limits')
 
   it('all AGENT_LIMITS values are positive finite numbers', () => {
-    for (const [key, value] of Object.entries(AGENT_LIMITS)) {
+    for (const [_key, value] of Object.entries(AGENT_LIMITS)) {
       expect(typeof value).toBe('number')
       expect(value).toBeGreaterThan(0)
       expect(Number.isFinite(value)).toBe(true)
@@ -272,7 +272,7 @@ describe('AGENT_LIMITS structural checks', () => {
   it('all TOOL_LIMITS values are positive finite numbers', () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { TOOL_LIMITS } = require('../../src/constants/limits.ts')
-    for (const [key, value] of Object.entries(TOOL_LIMITS)) {
+    for (const [_key, value] of Object.entries(TOOL_LIMITS)) {
       expect(typeof value).toBe('number')
       expect(value).toBeGreaterThan(0)
       expect(Number.isFinite(value)).toBe(true)

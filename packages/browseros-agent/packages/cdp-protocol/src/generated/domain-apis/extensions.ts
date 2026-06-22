@@ -13,12 +13,14 @@ import type {
   LoadUnpackedResult,
   RemoveStorageItemsParams,
   SetStorageItemsParams,
+  TriggerActionParams,
   UninstallParams,
 } from '../domains/extensions'
 
 export interface ExtensionsApi {
   // ── Commands ──
 
+  triggerAction(params: TriggerActionParams): Promise<void>
   loadUnpacked(params: LoadUnpackedParams): Promise<LoadUnpackedResult>
   uninstall(params: UninstallParams): Promise<void>
   getStorageItems(params: GetStorageItemsParams): Promise<GetStorageItemsResult>
@@ -29,7 +31,9 @@ export interface ExtensionsApi {
   // ── BrowserOS extension commands ──
 
   listExtensions(): Promise<ListExtensionsResult>
-  getExtensionInfo(params: GetExtensionInfoParams): Promise<GetExtensionInfoResult>
+  getExtensionInfo(
+    params: GetExtensionInfoParams,
+  ): Promise<GetExtensionInfoResult>
   enableExtension(params: EnableExtensionParams): Promise<void>
   disableExtension(params: DisableExtensionParams): Promise<void>
 }

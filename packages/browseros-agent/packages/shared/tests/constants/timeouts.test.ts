@@ -75,7 +75,7 @@ describe('TIMEOUTS default values', () => {
   })
 
   it('all values are positive numbers', () => {
-    for (const [key, value] of Object.entries(TIMEOUTS)) {
+    for (const [_key, value] of Object.entries(TIMEOUTS)) {
       expect(typeof value).toBe('number')
       expect(value).toBeGreaterThan(0)
       expect(Number.isFinite(value)).toBe(true)

@@ -1,0 +1,12 @@
+id: cross-module-circular-risk
+language: typescript
+rule:
+  pattern: import $$$ from '$SOURCE'
+constraints:
+  SOURCE:
+    regex: "^\\.\\./"
+message: "Relative import from a parent/sibling directory detected. This often leads to circular dependencies between modules. Consider using absolute paths, aliases, or a shared package."
+severity: warning
+note: |
+  NOTE: Simplified from original. Removed `all:/not:/inside:` block — ast-grep cannot
+  match comment guards (`// @safe-cross-import`). Use `.sgignore` to suppress false positives.

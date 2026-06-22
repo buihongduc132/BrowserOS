@@ -37,7 +37,9 @@ packages/browseros/build/tools/
 identity/
 browseros-server.log
 .browseros-prod-resources/bin/browseros_server.vendor
-
-# Fusion task runner
-.fusion/
-.pi/
+.fusion
+.pi
+.llm/
+.ralph-mid-turn/
+.ralph-tab-owner/
+.worktrees/

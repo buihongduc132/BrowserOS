@@ -17,7 +17,6 @@ export const PATHS = {
   CACHE_DIR_NAME: 'cache',
   DB_DIR_NAME: 'db',
   DB_FILE_NAME: 'browseros.sqlite',
-  MEMORY_DIR_NAME: 'memory',
   SESSIONS_DIR_NAME: 'sessions',
   TOOL_OUTPUT_DIR_NAME: 'tool-output',
   SOUL_FILE_NAME: 'SOUL.md',

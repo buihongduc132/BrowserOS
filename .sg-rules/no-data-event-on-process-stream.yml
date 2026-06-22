@@ -1,0 +1,35 @@
+# SOURCE: .on('data') on stdout/stderr accumulates without backpressure.
+# Node.js .on('data') pushes chunks faster than consumer can process if the output
+# is large. Combined with string concatenation, this is the #1 cause of memory leaks
+# in child_process wrappers (see no-unbounded-string-concat for the accumulation side).
+#
+# SOURCE: https://nodejs.org/api/stream.html#stream_event_data
+#   "Adding a 'data' event handler on a stream that has not been explicitly paused
+#    switches the stream to flowing mode."
+# SOURCE: https://nodejs.org/en/learn/asynchronous-work/stream-data-in-nodejs
+#   "Use .on('data') only for small outputs. For large outputs, use pipeline() or
+#    process chunks incrementally."
+#
+# The correct pattern: use readline interface, or process chunks in a Writable stream,
+# or use pipeline() for automatic backpressure management.
+id: no-data-event-on-process-stream
+language: TypeScript
+message: ".on('data') on process stdout/stderr — no backpressure, pairs with unbounded accumulation. Use readline interface or Writable stream for bounded processing."
+severity: warning
+note: |
+  .on('data') on child_process stdout/stderr is the classic unbounded drain pattern.
+  Every chunk triggers a callback that typically does stdout += chunk.
+  
+  For short-lived processes (git rev-parse, which): fine, output is <1KB.
+  For long-lived processes (CLI agents, streaming APIs): output can be 100MB+.
+  
+  Fix:
+    1. For line-by-line processing: use readline.createInterface({ input: proc.stdout })
+    2. For bounded capture: use StreamAccumulator with maxBytes cap
+    3. For piping: use stream.pipeline(proc.stdout, writable)
+rule:
+  pattern: $STREAM.on('data', $HANDLER)
+  inside:
+    any:
+      - pattern: $PROC.stdout
+      - pattern: $PROC.stderr

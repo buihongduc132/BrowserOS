@@ -1642,7 +1642,12 @@ export class OpenClawService {
 
     const configPath = this.getStateConfigPath()
     const content = await readFile(configPath, 'utf-8')
-    const config = JSON.parse(content) as Record<string, unknown>
+    let config: Record<string, unknown>
+    try {
+      config = JSON.parse(content) as Record<string, unknown>
+    } catch {
+      throw new Error('invalid JSON in gateway state config')
+    }
     const models =
       config.models && typeof config.models === 'object'
         ? (config.models as Record<string, unknown>)

@@ -8,8 +8,16 @@
  */
 
 import type { CdpBackend } from './backends/types'
-export type { StorageArea, ExtensionInfo } from '@browseros/cdp-protocol/domains/extensions'
-import type { StorageArea, ExtensionInfo } from '@browseros/cdp-protocol/domains/extensions'
+
+export type {
+  ExtensionInfo,
+  StorageArea,
+} from '@browseros/cdp-protocol/domains/extensions'
+
+import type {
+  ExtensionInfo,
+  StorageArea,
+} from '@browseros/cdp-protocol/domains/extensions'
 
 // BrowserOS first-party extension IDs (from browseros_constants.h)
 const BROWSEROS_EXTENSION_IDS = new Set([
@@ -26,7 +34,9 @@ export function isBrowserOSExtension(id: string): boolean {
 /** Validate that managed storage area is not used for write operations */
 function validateNotManaged(area: StorageArea): void {
   if (area === 'managed') {
-    throw new Error('Storage area "managed" is read-only and cannot be written to')
+    throw new Error(
+      'Storage area "managed" is read-only and cannot be written to',
+    )
   }
 }
 
@@ -59,9 +69,7 @@ export async function uninstallExtension(
   id: string,
 ): Promise<void> {
   if (isBrowserOSExtension(id)) {
-    throw new Error(
-      `Cannot uninstall BrowserOS first-party extension: ${id}`,
-    )
+    throw new Error(`Cannot uninstall BrowserOS first-party extension: ${id}`)
   }
   await cdp.Extensions.uninstall({ id })
 }
@@ -75,7 +83,10 @@ export async function getStorageItems(
   storageArea: StorageArea,
   keys?: string[],
 ): Promise<Record<string, unknown>> {
-  const params: { id: string; storageArea: StorageArea; keys?: string[] } = { id, storageArea }
+  const params: { id: string; storageArea: StorageArea; keys?: string[] } = {
+    id,
+    storageArea,
+  }
   if (keys) {
     params.keys = keys
   }
@@ -121,26 +132,37 @@ export async function clearStorageItems(
 // ── L2 Extension Management: list/getInfo/enable/disable ──
 
 /** List all installed extensions via CDP */
-export async function listExtensions(cdp: CdpBackend): Promise<ExtensionInfo[]> {
+export async function listExtensions(
+  cdp: CdpBackend,
+): Promise<ExtensionInfo[]> {
   const result = await cdp.Extensions.listExtensions()
   return result.extensions
 }
 
 /** Get detailed info for a specific extension */
-export async function getExtensionInfo(cdp: CdpBackend, id: string): Promise<ExtensionInfo> {
+export async function getExtensionInfo(
+  cdp: CdpBackend,
+  id: string,
+): Promise<ExtensionInfo> {
   if (!id) throw new Error('Extension ID is required')
   const result = await cdp.Extensions.getExtensionInfo({ id })
   return result.info
 }
 
 /** Enable a disabled extension */
-export async function enableExtension(cdp: CdpBackend, id: string): Promise<void> {
+export async function enableExtension(
+  cdp: CdpBackend,
+  id: string,
+): Promise<void> {
   if (!id) throw new Error('Extension ID is required')
   await cdp.Extensions.enableExtension({ id })
 }
 
 /** Disable an enabled extension. Rejects first-party BrowserOS extensions. */
-export async function disableExtension(cdp: CdpBackend, id: string): Promise<void> {
+export async function disableExtension(
+  cdp: CdpBackend,
+  id: string,
+): Promise<void> {
   if (!id) throw new Error('Extension ID is required')
   if (isBrowserOSExtension(id)) {
     throw new Error(`Cannot disable BrowserOS first-party extension: ${id}`)

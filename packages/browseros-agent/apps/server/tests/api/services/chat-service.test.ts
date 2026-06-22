@@ -1,4 +1,5 @@
 import { describe, expect, it, mock } from 'bun:test'
+import type { KlavisProxyStatus } from '../../../src/api/services/klavis'
 
 interface MockMessage {
   id: string
@@ -11,7 +12,6 @@ interface MockAgent {
   toolNames: Set<string>
   messages: MockMessage[]
   appendUserMessage(text: string): void
-  updateAclRules(rules: unknown): void
   dispose(): Promise<void>
 }
 
@@ -84,6 +84,18 @@ mock.module('../../../src/lib/logger', () => ({
 
 const { ChatService } = await import('../../../src/api/services/chat-service')
 
+function createKlavisStub(
+  getStatus: () => KlavisProxyStatus = () => ({
+    state: 'stopped',
+  }),
+) {
+  return {
+    getProxyStatus: getStatus,
+    buildAiSdkToolSet: mock(() => ({})),
+    registerMcpTools: mock(() => {}),
+  }
+}
+
 function createSessionStore() {
   const sessions = new Map<string, StoredSession>()
   return {
@@ -116,13 +128,15 @@ function createFakeAgent() {
     toolNames: new Set<string>(),
     messages,
     appendUserMessage(text: string) {
+      // Mirror production's id-per-call: a hardcoded constant would
+      // collide on repeat calls in the same agent instance and corrupt
+      // the id-diff logic the ACP onFinish branch relies on.
       this.messages.push({
-        id: 'user-1',
+        id: crypto.randomUUID(),
         role: 'user',
         parts: [{ type: 'text', text }],
       })
     },
-    updateAclRules: mock(() => {}),
     dispose: mock(async () => {}),
   }
 }
@@ -152,7 +166,7 @@ describe('ChatService scheduled task hidden page lifecycle', () => {
     const sessionStore = createSessionStore()
     const service = new ChatService({
       sessionStore: sessionStore as never,
-      klavisRef: { handle: null },
+      klavis: createKlavisStub() as never,
       browser: browser as never,
       registry: {} as never,
     })
@@ -225,7 +239,7 @@ describe('ChatService scheduled task hidden page lifecycle', () => {
 
     const service = new ChatService({
       sessionStore: sessionStore as never,
-      klavisRef: { handle: null },
+      klavis: createKlavisStub() as never,
       browser: browser as never,
       registry: {} as never,
     })
@@ -256,7 +270,7 @@ describe('ChatService scheduled task hidden page lifecycle', () => {
     const sessionStore = createSessionStore()
     const service = new ChatService({
       sessionStore: sessionStore as never,
-      klavisRef: { handle: null },
+      klavis: createKlavisStub() as never,
       browser: browser as never,
       registry: {} as never,
     })
@@ -362,8 +376,67 @@ describe('ChatService scheduled task hidden page lifecycle', () => {
   })
 })
 
+describe('ChatService browser tool config', () => {
+  it('passes browser session into new and rebuilt agent sessions', async () => {
+    const firstAgent = createFakeAgent()
+    const secondAgent = createFakeAgent()
+    agentToReturn = firstAgent
+    streamResponseHandler = async ({ onFinish, uiMessages }) => {
+      await onFinish({ messages: uiMessages ?? [] })
+      return new Response('ok')
+    }
+
+    let klavisStatus: KlavisProxyStatus = { state: 'connecting' }
+    const browser = {
+      resolveTabIds: mock(
+        async (tabIds: number[]) =>
+          new Map(tabIds.map((tabId) => [tabId, tabId + 100])),
+      ),
+      closePage: mock(async () => {}),
+    }
+    const service = new ChatService({
+      sessionStore: createSessionStore() as never,
+      klavis: createKlavisStub(() => klavisStatus) as never,
+      browser: browser as never,
+      browserSession: { pages: {} } as never,
+    })
+    const createCallsBefore = createAgentSpy.mock.calls.length
+    const request = {
+      conversationId: crypto.randomUUID(),
+      message: 'check integrations',
+      isScheduledTask: false,
+      mode: 'agent',
+      origin: 'sidepanel',
+      browserContext: {
+        activeTab: {
+          id: 3,
+          url: 'https://example.com',
+          title: 'Example',
+        },
+        enabledMcpServers: ['slack'],
+      },
+    } as never
+
+    await service.processMessage(request, new AbortController().signal)
+
+    agentToReturn = secondAgent
+    klavisStatus = { state: 'ready', toolCount: 0 }
+
+    await service.processMessage(
+      { ...request, message: 'check integrations again' },
+      new AbortController().signal,
+    )
+
+    const createCalls = createAgentSpy.mock.calls.slice(createCallsBefore)
+    expect(createCalls).toHaveLength(2)
+    for (const [config] of createCalls) {
+      expect(config).toMatchObject({ browserSession: { pages: {} } })
+    }
+  })
+})
+
 describe('ChatService Klavis session rebuilds', () => {
-  it('rebuilds a managed-app session when the shared Klavis handle appears', async () => {
+  it('rebuilds a managed-app session when Klavis becomes ready', async () => {
     const firstAgent = createFakeAgent()
     const secondAgent = createFakeAgent()
     agentToReturn = firstAgent
@@ -374,7 +447,7 @@ describe('ChatService Klavis session rebuilds', () => {
       return new Response('ok')
     }
 
-    const klavisRef = { handle: null as object | null }
+    let klavisStatus: KlavisProxyStatus = { state: 'connecting' }
     const browser = {
       resolveTabIds: mock(
         async (tabIds: number[]) =>
@@ -385,7 +458,7 @@ describe('ChatService Klavis session rebuilds', () => {
     const sessionStore = createSessionStore()
     const service = new ChatService({
       sessionStore: sessionStore as never,
-      klavisRef: klavisRef as never,
+      klavis: createKlavisStub(() => klavisStatus) as never,
       browser: browser as never,
       registry: {} as never,
     })
@@ -410,7 +483,7 @@ describe('ChatService Klavis session rebuilds', () => {
     await service.processMessage(request, new AbortController().signal)
 
     agentToReturn = secondAgent
-    klavisRef.handle = {}
+    klavisStatus = { state: 'ready', toolCount: 0 }
 
     await service.processMessage(
       { ...request, message: 'check integrations again' },
@@ -419,6 +492,16 @@ describe('ChatService Klavis session rebuilds', () => {
 
     expect(createAgentSpy.mock.calls.length - createCallsBefore).toBe(2)
     expect(firstAgent.dispose).toHaveBeenCalledTimes(1)
+    const firstCreateConfig = createAgentSpy.mock.calls[
+      createCallsBefore
+    ]?.[0] as { outputFileAccess?: unknown } | undefined
+    const secondCreateConfig = createAgentSpy.mock.calls[
+      createCallsBefore + 1
+    ]?.[0] as { outputFileAccess?: unknown } | undefined
+    expect(firstCreateConfig?.outputFileAccess).toBeDefined()
+    expect(secondCreateConfig?.outputFileAccess).toBe(
+      firstCreateConfig?.outputFileAccess,
+    )
 
     // Persisted form stays the raw user text — TKT-774. The Klavis
     // context-change notice and the formatted user envelope go only
@@ -435,8 +518,8 @@ describe('ChatService Klavis session rebuilds', () => {
     expect(promptRebuiltMessage).toContain(
       'Klavis app integration tools are now available for the following connected apps: slack.',
     )
-    expect(promptRebuiltMessage).not.toContain('klavis:pending')
-    expect(promptRebuiltMessage).not.toContain('klavis:connected')
+    expect(promptRebuiltMessage).not.toContain('klavis:connecting')
+    expect(promptRebuiltMessage).not.toContain('klavis:ready')
   })
 
   it('does not rebuild a session with no enabled managed apps when Klavis connects', async () => {
@@ -448,7 +531,7 @@ describe('ChatService Klavis session rebuilds', () => {
       return new Response('ok')
     }
 
-    const klavisRef = { handle: null as object | null }
+    let klavisStatus: KlavisProxyStatus = { state: 'connecting' }
     const browser = {
       resolveTabIds: mock(
         async (tabIds: number[]) =>
@@ -459,7 +542,7 @@ describe('ChatService Klavis session rebuilds', () => {
     const sessionStore = createSessionStore()
     const service = new ChatService({
       sessionStore: sessionStore as never,
-      klavisRef: klavisRef as never,
+      klavis: createKlavisStub(() => klavisStatus) as never,
       browser: browser as never,
       registry: {} as never,
     })
@@ -483,7 +566,7 @@ describe('ChatService Klavis session rebuilds', () => {
     await service.processMessage(request, new AbortController().signal)
 
     agentToReturn = secondAgent
-    klavisRef.handle = {}
+    klavisStatus = { state: 'ready', toolCount: 0 }
 
     await service.processMessage(
       { ...request, message: 'check browser only again' },
@@ -493,5 +576,251 @@ describe('ChatService Klavis session rebuilds', () => {
     expect(createAgentSpy.mock.calls.length - createCallsBefore).toBe(1)
     expect(firstAgent.dispose).not.toHaveBeenCalled()
     expect(firstAgent.messages).toHaveLength(2)
+  })
+})
+
+describe('ChatService ACP provider chat history handling', () => {
+  // ACP-backed providers (claude-code, codex, acp-custom) run against
+  // a persistent acpx session that owns the agent's conversation
+  // memory on disk. Re-feeding the full UIMessage history would double
+  // bookkeeping and trip the AI SDK validator when it walks phantom
+  // tool-<name> parts emitted by acpx-ai-provider under freshly-
+  // generated "acpx-N" ids (acpx#37). The chat-service therefore sends
+  // only the new user message on ACP turns; acpx loads prior turns
+  // from disk transparently. These tests pin that branch.
+
+  function withAcpProvider() {
+    resolveLLMConfigSpy.mockImplementation(async () => ({
+      provider: 'claude-code',
+      model: 'opus',
+      apiKey: 'unused',
+    }))
+  }
+
+  function withLlmProvider() {
+    resolveLLMConfigSpy.mockImplementation(async () => ({
+      provider: 'openai',
+      model: 'gpt-5',
+      apiKey: 'test-key',
+    }))
+  }
+
+  function baseDeps() {
+    const browser = {
+      newPage: mock(async () => 0),
+      listPages: mock(async () => []),
+      closePage: mock(async () => {}),
+      createWindow: mock(async () => ({ windowId: 0 })),
+      closeWindow: mock(async () => {}),
+      resolveTabIds: mock(async () => new Map<number, number>()),
+    }
+    return {
+      browser,
+      klavis: createKlavisStub(),
+      sessionStore: createSessionStore(),
+    }
+  }
+
+  function chatRequest(overrides: Record<string, unknown> = {}) {
+    return {
+      conversationId: crypto.randomUUID(),
+      message: 'hello',
+      isScheduledTask: false,
+      mode: 'agent',
+      origin: 'sidepanel',
+      browserContext: {
+        activeTab: { id: 1, url: 'https://example.com', title: 'Example' },
+      },
+      ...overrides,
+    } as never
+  }
+
+  it('passes only the new user message to streamText for ACP providers', async () => {
+    withAcpProvider()
+    const agent = createFakeAgent()
+    agentToReturn = agent
+    let captured: MockMessage[] | undefined
+    streamResponseHandler = async ({ uiMessages, onFinish }) => {
+      captured = uiMessages
+      await onFinish({ messages: uiMessages ?? [] })
+      return new Response('ok')
+    }
+    const deps = baseDeps()
+    const service = new ChatService({
+      sessionStore: deps.sessionStore as never,
+      klavis: deps.klavis as never,
+      browser: deps.browser as never,
+      registry: {} as never,
+    })
+
+    await service.processMessage(
+      chatRequest({
+        browserContext: {
+          activeTab: { id: 1, url: 'https://example.com', title: 'Example' },
+          enabledMcpServers: ['Slack', 'Google Docs'],
+        },
+      }),
+      new AbortController().signal,
+    )
+
+    expect(captured).toHaveLength(1)
+    expect(captured?.[0]?.role).toBe('user')
+    expect(captured?.[0]?.parts[0]?.type).toBe('text')
+    const createArgs = createAgentSpy.mock.calls.at(-1)?.[0] as {
+      resolvedConfig?: {
+        acpMcpServers?: Array<{
+          type: 'http'
+          headers: Array<{ name: string; value: string }>
+        }>
+      }
+    }
+    expect(
+      createArgs.resolvedConfig?.acpMcpServers?.[0]?.headers.find(
+        (h) => h.name === 'X-BrowserOS-Managed-Mcp-Servers',
+      )?.value,
+    ).toBe('Slack,Google%20Docs')
+  })
+
+  it('still passes the full filtered history for LLM-API providers', async () => {
+    withLlmProvider()
+    const agent = createFakeAgent()
+    // Seed prior turns.
+    agent.messages.push(
+      { id: 'u-0', role: 'user', parts: [{ type: 'text', text: 'hi' }] },
+      {
+        id: 'a-0',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'hello' }],
+      },
+    )
+    agentToReturn = agent
+    let captured: MockMessage[] | undefined
+    streamResponseHandler = async ({ uiMessages, onFinish }) => {
+      captured = uiMessages
+      await onFinish({ messages: uiMessages ?? [] })
+      return new Response('ok')
+    }
+    const deps = baseDeps()
+    const service = new ChatService({
+      sessionStore: deps.sessionStore as never,
+      klavis: deps.klavis as never,
+      browser: deps.browser as never,
+      registry: {} as never,
+    })
+
+    await service.processMessage(chatRequest(), new AbortController().signal)
+
+    expect(captured?.length).toBeGreaterThan(1)
+    expect(captured?.map((m) => m.role)).toContain('assistant')
+  })
+
+  it('does not re-feed phantom acpx-N tool parts to streamText on a follow-up ACP turn', async () => {
+    withAcpProvider()
+    const agent = createFakeAgent()
+    // Simulate a prior turn where acpx-ai-provider's translator left
+    // a phantom tool part behind in session.agent.messages.
+    agent.messages.push(
+      {
+        id: 'u-prior',
+        role: 'user',
+        parts: [{ type: 'text', text: 'list files' }],
+      },
+      {
+        id: 'a-prior',
+        role: 'assistant',
+        parts: [
+          { type: 'text', text: 'I will list them.' },
+          // The phantom shape we worry about: tool part with the
+          // acpx-N toolCallId and no input. With the old code this
+          // would re-enter streamText on the next turn and trip
+          // the AI SDK validator with the 500 the user reported.
+          // The new code never includes this in promptUiMessages.
+          {
+            type: 'tool-mcp.browseros.grep',
+            toolCallId: 'acpx-3',
+            state: 'input-streaming',
+            input: undefined,
+          } as never,
+        ],
+      },
+    )
+    agentToReturn = agent
+    let captured: MockMessage[] | undefined
+    streamResponseHandler = async ({ uiMessages, onFinish }) => {
+      captured = uiMessages
+      await onFinish({ messages: uiMessages ?? [] })
+      return new Response('ok')
+    }
+    const deps = baseDeps()
+    const service = new ChatService({
+      sessionStore: deps.sessionStore as never,
+      klavis: deps.klavis as never,
+      browser: deps.browser as never,
+      registry: {} as never,
+    })
+
+    await service.processMessage(
+      chatRequest({ message: 'what about gaming' }),
+      new AbortController().signal,
+    )
+
+    // Crucial: the phantom part never reaches streamText.
+    const allParts = (captured ?? []).flatMap((m) => m.parts)
+    expect(
+      allParts.some((p) => (p as { type?: string }).type?.startsWith('tool-')),
+    ).toBe(false)
+    expect(captured?.length).toBe(1)
+  })
+
+  it('preserves UI display state by appending the assistant reply to session.agent.messages on an ACP turn', async () => {
+    withAcpProvider()
+    const agent = createFakeAgent()
+    agent.messages.push(
+      {
+        id: 'u-prior',
+        role: 'user',
+        parts: [{ type: 'text', text: 'list files' }],
+      },
+      {
+        id: 'a-prior',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'one, two, three.' }],
+      },
+    )
+    agentToReturn = agent
+    streamResponseHandler = async ({ uiMessages, onFinish }) => {
+      // Simulate the AI SDK reducer yielding the single user msg we
+      // sent + a fresh assistant reply.
+      const assistantMsg = {
+        id: 'a-new',
+        role: 'assistant' as const,
+        parts: [{ type: 'text' as const, text: 'foo, bar, baz.' }],
+      }
+      await onFinish({ messages: [...(uiMessages ?? []), assistantMsg] })
+      return new Response('ok')
+    }
+    const deps = baseDeps()
+    const service = new ChatService({
+      sessionStore: deps.sessionStore as never,
+      klavis: deps.klavis as never,
+      browser: deps.browser as never,
+      registry: {} as never,
+    })
+
+    await service.processMessage(
+      chatRequest({ message: 'now read foo.md' }),
+      new AbortController().signal,
+    )
+
+    // Prior turns survive, the new user msg has raw text, the
+    // assistant reply is appended at the end.
+    expect(agent.messages.map((m) => m.role)).toEqual([
+      'user',
+      'assistant',
+      'user',
+      'assistant',
+    ])
+    expect(agent.messages.at(-1)?.parts[0]?.text).toBe('foo, bar, baz.')
+    expect(agent.messages.at(-2)?.parts[0]?.text).toBe('now read foo.md')
   })
 })
