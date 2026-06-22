@@ -199,8 +199,7 @@ export function useCompactionStatus(conversationId: string | undefined) {
     queryFn: () =>
       fetchCompactionStatus(baseUrl as string, conversationId as string),
     enabled: !!baseUrl && !!conversationId && !urlLoading,
-    refetchInterval: (query) =>
-      query.state.data?.compacting ? 1000 : false,
+    refetchInterval: (query) => (query.state.data?.compacting ? 1000 : false),
   })
 
   return {

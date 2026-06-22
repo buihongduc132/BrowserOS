@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
+import { readFile, realpath, stat } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
 import { logger } from '../lib/logger'
-import { resolve, join } from 'node:path'
-import { stat, readFile, realpath } from 'node:fs/promises'
 
 /**
  * Result of loading an AGENTS.md file from a workspace.
@@ -68,7 +68,10 @@ export class AgentsMdLoader {
 
       // Security check 2: resolved path must still be within the workspace
       const realWorkspace = await realpath(resolvedWorkspace)
-      if (!realFilePath.startsWith(realWorkspace + '/') && realFilePath !== join(realWorkspace, AGENTS_MD_FILENAME)) {
+      if (
+        !realFilePath.startsWith(`${realWorkspace}/`) &&
+        realFilePath !== join(realWorkspace, AGENTS_MD_FILENAME)
+      ) {
         logger.warn('AgentsMdLoader: symlink escape detected', {
           workspace: resolvedWorkspace,
           resolvedPath: realFilePath,

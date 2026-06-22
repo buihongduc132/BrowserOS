@@ -1,6 +1,5 @@
-import { describe, expect, it, beforeEach } from 'bun:test'
+import { beforeEach, describe, expect, it } from 'bun:test'
 import type { UIMessage } from 'ai'
-import { processSlashCommand, clearCommands, getAllCommands, getCommand } from './registry'
 import { registerBuiltinCommands } from './builtins'
 import {
   clearCommands,
@@ -24,27 +23,38 @@ function makeUIMessage(role: 'user' | 'assistant', text: string): UIMessage {
 
 // Helper: processSlashCommand returns SlashCommandResult | Promise<SlashCommandResult>.
 // All builtins are synchronous, but we need to handle the union type.
-function syncResult(r: SlashCommandResult | Promise<SlashCommandResult>): SlashCommandResult {
+function syncResult(
+  r: SlashCommandResult | Promise<SlashCommandResult>,
+): SlashCommandResult {
   if (r instanceof Promise) throw new Error('Unexpected async result in test')
   return r
 }
 
 let resetCalled = false
 let modeSetTo: string | null = null
-let messagesReplaced: UIMessage[] | null = null
+let _messagesReplaced: UIMessage[] | null = null
 
 function makeDeps(overrides?: { messages?: UIMessage[] }) {
   resetCalled = false
   modeSetTo = null
-  messagesReplaced = null
+  _messagesReplaced = null
 
   return {
-    messages: overrides?.messages ?? [makeUIMessage('user', 'hello'), makeUIMessage('assistant', 'hi')],
+    messages: overrides?.messages ?? [
+      makeUIMessage('user', 'hello'),
+      makeUIMessage('assistant', 'hi'),
+    ],
     conversationId: 'test-conv-1',
-    setMessages: (msgs: UIMessage[]) => { messagesReplaced = msgs },
-    resetConversation: () => { resetCalled = true },
+    setMessages: (msgs: UIMessage[]) => {
+      _messagesReplaced = msgs
+    },
+    resetConversation: () => {
+      resetCalled = true
+    },
     mode: 'chat' as const,
-    setMode: (mode: 'chat' | 'agent') => { modeSetTo = mode },
+    setMode: (mode: 'chat' | 'agent') => {
+      modeSetTo = mode
+    },
   }
 }
 
@@ -93,12 +103,16 @@ describe('slash-commands', () => {
     })
 
     it('returns passthrough for double slash (escape)', () => {
-      const result = syncResult(processSlashCommand('//not-a-command', makeDeps()))
+      const result = syncResult(
+        processSlashCommand('//not-a-command', makeDeps()),
+      )
       expect(result).toEqual({ type: 'passthrough', text: '//not-a-command' })
     })
 
     it('returns passthrough for slash followed by space', () => {
-      const result = syncResult(processSlashCommand('/ not-a-command', makeDeps()))
+      const result = syncResult(
+        processSlashCommand('/ not-a-command', makeDeps()),
+      )
       expect(result).toEqual({ type: 'passthrough', text: '/ not-a-command' })
     })
 
@@ -119,10 +133,9 @@ describe('slash-commands', () => {
     })
 
     it('captures single-line args', () => {
-      const result = syncResult(processSlashCommand(
-        '/compact performance issues',
-        makeDeps(),
-      ))
+      const result = syncResult(
+        processSlashCommand('/compact performance issues', makeDeps()),
+      )
       expect(result.type).toBe('prompt')
       if (result.type === 'prompt') {
         expect(result.expandedText).toContain('focusing on: performance issues')
@@ -139,10 +152,9 @@ describe('slash-commands', () => {
     })
 
     it('captures args with special characters', () => {
-      const result = syncResult(processSlashCommand(
-        '/compact @user #tag $money %pct',
-        makeDeps(),
-      ))
+      const result = syncResult(
+        processSlashCommand('/compact @user #tag $money %pct', makeDeps()),
+      )
       expect(result.type).toBe('prompt')
       if (result.type === 'prompt') {
         expect(result.expandedText).toContain('@user #tag $money %pct')
@@ -150,7 +162,9 @@ describe('slash-commands', () => {
     })
 
     it('is case-insensitive for command name', () => {
-      const result = syncResult(processSlashCommand('/COMPACT stuff', makeDeps()))
+      const result = syncResult(
+        processSlashCommand('/COMPACT stuff', makeDeps()),
+      )
       expect(result.type).toBe('prompt')
       if (result.type === 'prompt') {
         expect(result.expandedText).toContain('stuff')
@@ -185,7 +199,9 @@ describe('slash-commands', () => {
     })
 
     it('returns summary prompt with topic', () => {
-      const result = syncResult(processSlashCommand('/compact bugs', makeDeps()))
+      const result = syncResult(
+        processSlashCommand('/compact bugs', makeDeps()),
+      )
       expect(result.type).toBe('prompt')
       if (result.type === 'prompt') {
         expect(result.expandedText).toContain('focusing on: bugs')
@@ -238,7 +254,9 @@ describe('slash-commands', () => {
     })
 
     it('shows current mode for invalid arg', () => {
-      const result = syncResult(processSlashCommand('/mode invalid', makeDeps()))
+      const result = syncResult(
+        processSlashCommand('/mode invalid', makeDeps()),
+      )
       expect(result.type).toBe('prompt')
       if (result.type === 'prompt') {
         expect(result.expandedText).toContain('chat')
@@ -292,12 +310,16 @@ describe('slash-commands', () => {
     it('handles command with hyphen in name', () => {
       // Commands with hyphens should match if registered
       // Since we don't have one built-in, it should passthrough
-      const result = syncResult(processSlashCommand('/my-command arg', makeDeps()))
+      const result = syncResult(
+        processSlashCommand('/my-command arg', makeDeps()),
+      )
       expect(result).toEqual({ type: 'passthrough', text: '/my-command arg' })
     })
 
     it('handles command with underscore in name', () => {
-      const result = syncResult(processSlashCommand('/my_command arg', makeDeps()))
+      const result = syncResult(
+        processSlashCommand('/my_command arg', makeDeps()),
+      )
       expect(result).toEqual({ type: 'passthrough', text: '/my_command arg' })
     })
 

@@ -26,22 +26,8 @@
     {
       "idx": 3,
       "version": "6",
-      "when": 1778594325392,
-      "tag": "0003_eager_sleepwalker",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "6",
-      "when": 1778594797891,
-      "tag": "0004_demonic_lionheart",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "6",
-      "when": 1778805845343,
-      "tag": "0005_marvelous_the_fury",
+      "when": 1781916712443,
+      "tag": "0003_scrub_hermes_credentials",
       "breakpoints": true
     }
   ]

@@ -1,16 +1,7 @@
-import { env } from '@/lib/env'
 import { getBrowserOSAdapter } from './adapter'
-import { Capabilities, Feature } from './capabilities'
 import { BROWSEROS_PREFS } from './prefs'
 
-export class AgentPortError extends Error {
-  constructor() {
-    super('Agent server port not configured.')
-    this.name = 'AgentPortError'
-  }
-}
-
-export class McpPortError extends Error {
+class McpPortError extends Error {
   constructor() {
     super('MCP server port not configured.')
     this.name = 'McpPortError'
@@ -18,41 +9,12 @@ export class McpPortError extends Error {
 }
 
 /**
- * @public
+ * Returns the local BrowserOS server base URL for chat and agent APIs.
+ * BrowserOS publishes this through the unified MCP/server-port preference.
  */
 export async function getAgentServerUrl(): Promise<string> {
-  if (env.VITE_BROWSEROS_SERVER_PORT) {
-    return `http://127.0.0.1:${env.VITE_BROWSEROS_SERVER_PORT}`
-  }
-
-  const supportsUnifiedPort = await Capabilities.supports(
-    Feature.UNIFIED_PORT_SUPPORT,
-  )
-  if (supportsUnifiedPort) {
-    const port = await getMcpPort()
-    return `http://127.0.0.1:${port}`
-  }
-  const port = await getAgentPort()
+  const port = await getMcpPort()
   return `http://127.0.0.1:${port}`
-}
-
-async function getAgentPort(): Promise<number> {
-  if (env.VITE_BROWSEROS_SERVER_PORT) {
-    return env.VITE_BROWSEROS_SERVER_PORT
-  }
-
-  try {
-    const adapter = getBrowserOSAdapter()
-    const pref = await adapter.getPref(BROWSEROS_PREFS.AGENT_PORT)
-
-    if (pref?.value && typeof pref.value === 'number') {
-      return pref.value
-    }
-  } catch {
-    // BrowserOS API not available
-  }
-
-  throw new AgentPortError()
 }
 
 async function getMcpPort(): Promise<number> {
@@ -70,24 +32,13 @@ async function getMcpPort(): Promise<number> {
   throw new McpPortError()
 }
 
-/**
- * @public
- */
+/** Returns the MCP proxy endpoint for local server connections. */
 export async function getMcpServerUrl(): Promise<string> {
-  if (env.VITE_BROWSEROS_SERVER_PORT) {
-    return `http://127.0.0.1:${env.VITE_BROWSEROS_SERVER_PORT}/mcp`
-  }
-
-  const supportsProxy = await Capabilities.supports(Feature.PROXY_SUPPORT)
-  if (supportsProxy) {
-    const port = await getProxyPort()
-    return `http://127.0.0.1:${port}/mcp`
-  }
-  const port = await getMcpPort()
+  const port = await getProxyPort()
   return `http://127.0.0.1:${port}/mcp`
 }
 
-export class ProxyPortError extends Error {
+class ProxyPortError extends Error {
   constructor() {
     super('Proxy server port not configured.')
     this.name = 'ProxyPortError'
@@ -109,27 +60,8 @@ export async function getProxyPort(): Promise<number> {
   throw new ProxyPortError()
 }
 
-/**
- * @public
- */
-export async function getProxyServerUrl(): Promise<string> {
-  const port = await getProxyPort()
-  return `http://127.0.0.1:${port}`
-}
-
-/**
- * @public
- */
+/** Returns the MCP proxy health-check endpoint. */
 export async function getHealthCheckUrl(): Promise<string> {
-  if (env.VITE_BROWSEROS_SERVER_PORT) {
-    return `http://127.0.0.1:${env.VITE_BROWSEROS_SERVER_PORT}/health`
-  }
-
-  const supportsProxy = await Capabilities.supports(Feature.PROXY_SUPPORT)
-  if (supportsProxy) {
-    const port = await getProxyPort()
-    return `http://127.0.0.1:${port}/health`
-  }
-  const port = await getMcpPort()
+  const port = await getProxyPort()
   return `http://127.0.0.1:${port}/health`
 }

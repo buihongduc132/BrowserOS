@@ -10,8 +10,8 @@
  * process.env is read at import time with the overridden value.
  */
 
-import path from 'node:path'
 import { describe, expect, it } from 'bun:test'
+import path from 'node:path'
 
 import { spawnWithEnv } from './test-utils'
 
@@ -26,7 +26,9 @@ const TIMEOUTS_MODULE_PATH = JSON.stringify(
 
 describe('TIMEOUTS default values', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { TIMEOUTS } = require('../../src/constants/timeouts.ts') as { TIMEOUTS: Record<string, number> }
+  const { TIMEOUTS } = require('../../src/constants/timeouts.ts') as {
+    TIMEOUTS: Record<string, number>
+  }
 
   it('has all expected timeout keys with correct default values', () => {
     // Agent/Tool execution
@@ -73,7 +75,7 @@ describe('TIMEOUTS default values', () => {
   })
 
   it('all values are positive numbers', () => {
-    for (const [key, value] of Object.entries(TIMEOUTS)) {
+    for (const [_key, value] of Object.entries(TIMEOUTS)) {
       expect(typeof value).toBe('number')
       expect(value).toBeGreaterThan(0)
       expect(Number.isFinite(value)).toBe(true)
@@ -224,10 +226,15 @@ describe('TIMEOUTS edge-case env handling', () => {
 
 describe('KLAVIS_PROXY_RETRY_BACKOFF_MS', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { KLAVIS_PROXY_RETRY_BACKOFF_MS } = require('../../src/constants/timeouts.ts') as { KLAVIS_PROXY_RETRY_BACKOFF_MS: readonly number[] }
+  const { KLAVIS_PROXY_RETRY_BACKOFF_MS } =
+    require('../../src/constants/timeouts.ts') as {
+      KLAVIS_PROXY_RETRY_BACKOFF_MS: readonly number[]
+    }
 
   it('exports the correct retry backoff array', () => {
-    expect(KLAVIS_PROXY_RETRY_BACKOFF_MS).toEqual([5_000, 10_000, 20_000, 40_000, 60_000])
+    expect(KLAVIS_PROXY_RETRY_BACKOFF_MS).toEqual([
+      5_000, 10_000, 20_000, 40_000, 60_000,
+    ])
   })
 
   it('is a tuple of 5 elements', () => {
@@ -236,7 +243,9 @@ describe('KLAVIS_PROXY_RETRY_BACKOFF_MS', () => {
 
   it('values are in ascending order', () => {
     for (let i = 1; i < KLAVIS_PROXY_RETRY_BACKOFF_MS.length; i++) {
-      expect(KLAVIS_PROXY_RETRY_BACKOFF_MS[i]).toBeGreaterThan(KLAVIS_PROXY_RETRY_BACKOFF_MS[i - 1])
+      expect(KLAVIS_PROXY_RETRY_BACKOFF_MS[i]).toBeGreaterThan(
+        KLAVIS_PROXY_RETRY_BACKOFF_MS[i - 1],
+      )
     }
   })
 })

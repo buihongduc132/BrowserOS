@@ -5,6 +5,7 @@ import os
 import sys
 import subprocess
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
 from ...common.module import CommandModule, ValidationError
@@ -34,6 +35,68 @@ def get_browseros_server_binary_info(component_path: Path) -> Optional[Dict[str,
     if spec.entitlements:
         info["entitlements"] = spec.entitlements
     return info
+
+
+SERVER_RESOURCES_SOURCE_REL = Path("chrome/browser/browseros/server/resources")
+SERVER_RESOURCES_BUNDLE_REL = Path(
+    "Contents/Resources/BrowserOSServer/default/resources"
+)
+# Finder droppings in the staged tree must not fail the nightly sign.
+SERVER_RESOURCES_JUNK_FILES = {".DS_Store"}
+
+
+def verify_server_resources_bundle(app_path: Path, chromium_src: Path) -> List[str]:
+    """Check the app bundle ships exactly what the build staged for the server.
+
+    Guards against signing/packaging a stale or incomplete bundle (a leftover
+    out/Default_universal app once shipped for two weeks unnoticed): every file
+    staged under chrome/browser/browseros/server/resources must exist in the
+    bundle with executable bits intact. Returns problem strings; empty = OK.
+    Bundle-only extras and a missing source tree (sign-only flows) just warn.
+
+    Deliberately compares paths + exec bits only, never content/size: universal
+    bundles hold lipo-fat binaries whose bytes differ from the thin staged
+    tree, so same-name content staleness is out of this guard's reach.
+    """
+    source_root = chromium_src / SERVER_RESOURCES_SOURCE_REL
+    bundle_root = app_path / SERVER_RESOURCES_BUNDLE_REL
+
+    if not source_root.is_dir():
+        log_warning(
+            f"Staged server resources not found at {source_root} - "
+            "skipping bundle verification"
+        )
+        return []
+
+    problems: List[str] = []
+    staged = set()
+    for source_file in sorted(source_root.rglob("*")):
+        if not source_file.is_file() or source_file.name in SERVER_RESOURCES_JUNK_FILES:
+            continue
+        rel = source_file.relative_to(source_root)
+        staged.add(rel)
+        bundle_file = bundle_root / rel
+        if not bundle_file.is_file():
+            problems.append(f"missing from app bundle: {rel.as_posix()}")
+            continue
+        if os.access(source_file, os.X_OK) and not os.access(bundle_file, os.X_OK):
+            problems.append(f"lost executable bit in app bundle: {rel.as_posix()}")
+
+    if bundle_root.is_dir():
+        for bundle_file in sorted(bundle_root.rglob("*")):
+            if (
+                not bundle_file.is_file()
+                or bundle_file.name in SERVER_RESOURCES_JUNK_FILES
+            ):
+                continue
+            rel = bundle_file.relative_to(bundle_root)
+            if rel not in staged:
+                log_warning(
+                    f"App bundle has server file not in staged resources "
+                    f"(stale?): {rel.as_posix()}"
+                )
+
+    return problems
 
 
 def run_command(
@@ -101,13 +164,22 @@ class MacOSSignModule(CommandModule):
         app_path = ctx.get_app_path()
         env_ok, env_vars = check_environment(ctx.env)
 
+        self._verify_server_resources(app_path, ctx)
         self._clear_extended_attributes(app_path)
         self._sign_all_components(app_path, env_vars["certificate_name"], ctx)
-        self._verify_signature(app_path)
+        self._verify_signature(app_path, ctx)
         self._notarize(app_path, env_vars, ctx)
 
         ctx.artifact_registry.add("signed_app", app_path)
         log_success("Application signed and notarized successfully")
+
+    def _verify_server_resources(self, app_path: Path, ctx: Context) -> None:
+        problems = verify_server_resources_bundle(app_path, ctx.chromium_src)
+        if problems:
+            raise RuntimeError(
+                "App bundle does not match staged server resources "
+                "(signing a stale build?):\n  " + "\n  ".join(problems)
+            )
 
     def _clear_extended_attributes(self, app_path: Path) -> None:
         log_info("🧹 Clearing extended attributes...")
@@ -117,8 +189,8 @@ class MacOSSignModule(CommandModule):
         if not sign_all_components(app_path, certificate_name, ctx.root_dir, ctx):
             raise RuntimeError("Failed to sign all components")
 
-    def _verify_signature(self, app_path: Path) -> None:
-        if not verify_signature(app_path):
+    def _verify_signature(self, app_path: Path, ctx: Optional[Context] = None) -> None:
+        if not verify_signature(app_path, ctx):
             raise RuntimeError("Signature verification failed")
 
     def _notarize(self, app_path: Path, env_vars: Dict[str, str], ctx: Context) -> None:
@@ -279,7 +351,12 @@ def find_components_to_sign(
     browseros_server_dir = join_paths(app_path, "Contents", "Resources", "BrowserOSServer")
     if browseros_server_dir.exists():
         for item in browseros_server_dir.rglob("*"):
-            if item.is_file() and not item.suffix and os.access(item, os.X_OK):
+            if (
+                item.is_file()
+                and not item.suffix
+                and os.access(item, os.X_OK)
+                and get_browseros_server_binary_info(item) is not None
+            ):
                 components["executables"].append(item)
 
     return components
@@ -367,14 +444,57 @@ def get_signing_options(component_path: Path) -> str:
     return "runtime"
 
 
-def sign_component(
+def _run_probe(cmd: List[str]) -> subprocess.CompletedProcess:
+    """Run a read-only Mach-O inspection quietly (no build-log streaming)."""
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True)
+    except OSError as e:
+        log_warning(f"Mach-O probe failed to run ({cmd[0]}): {e}")
+        return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
+
+
+def get_macho_archs(path: Path) -> List[str]:
+    """Architectures lipo reports for a file; empty when it is not Mach-O."""
+    result = _run_probe(["lipo", "-archs", str(path)])
+    if result.returncode != 0:
+        return []
+    return result.stdout.split()
+
+
+def slice_has_embedded_info_plist(path: Path, arch: str) -> bool:
+    """True if the given slice carries a __TEXT,__info_plist section."""
+    result = _run_probe(["otool", "-arch", arch, "-l", str(path)])
+    return result.returncode == 0 and "sectname __info_plist" in result.stdout
+
+
+def find_asymmetric_info_plist_archs(path: Path) -> List[str]:
+    """Archs of a fat file whose slices disagree on an embedded Info.plist.
+
+    codesign, signing a fat file, binds the file-level Info.plist into every
+    slice's CodeDirectory — a slice without the section then never validates
+    and Apple's notary service rejects it (the upstream claude binary ships
+    the section on arm64 only). Empty result = thin, symmetric, or not Mach-O.
+    """
+    # Symlinks excluded (matches the Go port's Lstat): os.replace would
+    # silently turn a bundle symlink into a regular file.
+    if path.is_symlink() or not path.is_file():
+        return []
+    archs = get_macho_archs(path)
+    if len(archs) < 2:
+        return []
+    with_plist = sum(1 for arch in archs if slice_has_embedded_info_plist(path, arch))
+    if with_plist in (0, len(archs)):
+        return []
+    return archs
+
+
+def _codesign_cmd(
     component_path: Path,
     certificate_name: str,
     identifier: Optional[str] = None,
     options: Optional[str] = None,
     entitlements: Optional[Path] = None,
-) -> bool:
-    """Sign a single component"""
+) -> List[str]:
     cmd = ["codesign", "--sign", certificate_name, "--force", "--timestamp"]
 
     if identifier:
@@ -387,9 +507,75 @@ def sign_component(
         cmd.extend(["--entitlements", str(entitlements)])
 
     cmd.append(str(component_path))
+    return cmd
+
+
+def sign_fat_component_per_slice(
+    component_path: Path,
+    certificate_name: str,
+    archs: List[str],
+    identifier: Optional[str] = None,
+    options: Optional[str] = None,
+    entitlements: Optional[Path] = None,
+) -> bool:
+    """Sign each slice as a thin file and lipo them back together."""
+    try:
+        with tempfile.TemporaryDirectory(dir=component_path.parent) as tmp:
+            tmp_dir = Path(tmp)
+            thin_paths = []
+            for arch in archs:
+                thin = tmp_dir / f"{component_path.name}.{arch}"
+                run_command(
+                    ["lipo", str(component_path), "-thin", arch, "-output", str(thin)]
+                )
+                run_command(
+                    _codesign_cmd(
+                        thin, certificate_name, identifier, options, entitlements
+                    )
+                )
+                thin_paths.append(thin)
+
+            fat = tmp_dir / f"{component_path.name}.fat"
+            run_command(
+                ["lipo", "-create", *[str(p) for p in thin_paths], "-output", str(fat)]
+            )
+            shutil.copymode(component_path, fat)
+            os.replace(fat, component_path)
+        return True
+    except Exception as e:
+        log_error(f"Failed to sign {component_path} per-slice: {e}")
+        return False
+
+
+def sign_component(
+    component_path: Path,
+    certificate_name: str,
+    identifier: Optional[str] = None,
+    options: Optional[str] = None,
+    entitlements: Optional[Path] = None,
+) -> bool:
+    """Sign a single component"""
+    asymmetric_archs = find_asymmetric_info_plist_archs(component_path)
+    if asymmetric_archs:
+        log_warning(
+            f"{component_path.name}: slices disagree on embedded Info.plist "
+            f"({', '.join(asymmetric_archs)}) — signing per-slice"
+        )
+        return sign_fat_component_per_slice(
+            component_path,
+            certificate_name,
+            asymmetric_archs,
+            identifier,
+            options,
+            entitlements,
+        )
 
     try:
-        run_command(cmd)
+        run_command(
+            _codesign_cmd(
+                component_path, certificate_name, identifier, options, entitlements
+            )
+        )
         return True
     except Exception as e:
         log_error(f"Failed to sign {component_path}: {e}")
@@ -599,7 +785,7 @@ def sign_all_components(
     return True
 
 
-def verify_signature(app_path: Path) -> bool:
+def verify_signature(app_path: Path, ctx: Optional[Context] = None) -> bool:
     """Verify application signature"""
     log_info("\n🔍 Verifying application signature integrity...")
 
@@ -611,6 +797,22 @@ def verify_signature(app_path: Path) -> bool:
     if result.returncode != 0:
         log_error("Signature verification failed!")
         return False
+
+    # --deep seals plain executables under Resources/ as files without
+    # validating their own signatures (Apple's notary does, per slice) —
+    # verify each file-type component directly so a bad slice fails here
+    # instead of after a multi-minute notarization round-trip. Helpers,
+    # frameworks, and XPC services are proper sub-bundles --deep already
+    # recurses into.
+    components = find_components_to_sign(app_path, ctx)
+    for component in components["executables"] + components["dylibs"]:
+        result = run_command(
+            ["codesign", "--verify", "--verbose=2", str(component)],
+            check=False,
+        )
+        if result.returncode != 0:
+            log_error(f"Component signature verification failed: {component}")
+            return False
 
     log_success("Signature verification passed")
     return True
@@ -779,6 +981,16 @@ def sign_app(ctx: Context, create_dmg: bool = True) -> bool:
         log_error(f"App not found at: {app_path}")
         return False
 
+    problems = verify_server_resources_bundle(app_path, ctx.chromium_src)
+    if problems:
+        log_error(
+            "App bundle does not match staged server resources "
+            "(signing a stale build?):"
+        )
+        for problem in problems:
+            log_error(f"  {problem}")
+        return False
+
     try:
         # Clear extended attributes
         log_info("🧹 Clearing extended attributes...")
@@ -791,7 +1003,7 @@ def sign_app(ctx: Context, create_dmg: bool = True) -> bool:
             return False
 
         # Verify signature
-        if not verify_signature(app_path):
+        if not verify_signature(app_path, ctx):
             return False
 
         # Notarize app

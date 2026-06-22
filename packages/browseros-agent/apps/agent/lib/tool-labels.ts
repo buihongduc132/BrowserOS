@@ -45,9 +45,8 @@ const VERB_OVERRIDES: Record<string, string> = {
   press_key: 'Pressed key',
   upload_file: 'Uploaded file',
 
-  // Console / scripts
+  // Scripts
   evaluate_script: 'Ran script',
-  get_console_logs: 'Read console logs',
 
   // History / bookmarks
   search_history: 'Searched history',
@@ -278,8 +277,8 @@ function canonicalName(rawName: string): string {
 function humanizeToolName(rawName: string): string {
   const stripped = canonicalName(rawName)
   const words = stripped.split(/[_-]/).filter((w) => w.length > 0)
-  if (words.length === 0) return rawName
-  const first = words[0]!
+  const first = words[0]
+  if (!first) return rawName
   return [
     first.charAt(0).toUpperCase() + first.slice(1),
     ...words.slice(1),

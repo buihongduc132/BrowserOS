@@ -1,5 +1,5 @@
-import type { SlashCommand, SlashCommandResult } from './types'
 import { getAllCommands, registerCommand } from './registry'
+import type { SlashCommand, SlashCommandResult } from './types'
 
 // ---------------------------------------------------------------------------
 // /new — Reset conversation
@@ -48,7 +48,8 @@ const helpCommand: SlashCommand = {
   execute() {
     const commands = getAllCommands()
     const lines = commands.map(
-      (cmd) => `**/${cmd.name}** — ${cmd.description}\n  Usage: \`${cmd.usage}\``,
+      (cmd) =>
+        `**/${cmd.name}** — ${cmd.description}\n  Usage: \`${cmd.usage}\``,
     )
     const helpText = [
       '## Available Commands',
@@ -138,4 +139,11 @@ export function registerBuiltinCommands(): void {
 }
 
 /** Re-export for convenience */
-export { newCommand, compactCommand, helpCommand, modeCommand, forkCommand, undoCommand }
+export {
+  compactCommand,
+  forkCommand,
+  helpCommand,
+  modeCommand,
+  newCommand,
+  undoCommand,
+}

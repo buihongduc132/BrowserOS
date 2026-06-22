@@ -10,9 +10,9 @@
  */
 
 import {
-  registerAcpCommand,
   type AcpCommandContext,
   type AcpCommandResult,
+  registerAcpCommand,
 } from './acp-slash-commands'
 
 // Re-export dispatchCommand for convenient import by route handler
@@ -27,8 +27,7 @@ registerAcpCommand({
   async execute(_ctx: AcpCommandContext): Promise<AcpCommandResult> {
     return {
       type: 'handled',
-      response:
-        'Session has been reset. Starting with a fresh context.',
+      response: 'Session has been reset. Starting with a fresh context.',
     }
   },
 })
@@ -59,9 +58,7 @@ registerAcpCommand({
     // Import here to avoid circular deps at module init
     const { getAllAcpCommands } = await import('./acp-slash-commands')
     const cmds = getAllAcpCommands()
-    const lines = cmds.map(
-      (cmd) => `  **/${cmd.name}** — ${cmd.description}`,
-    )
+    const lines = cmds.map((cmd) => `  **/${cmd.name}** — ${cmd.description}`)
     return {
       type: 'handled',
       response: `Available commands:\n${lines.join('\n')}`,

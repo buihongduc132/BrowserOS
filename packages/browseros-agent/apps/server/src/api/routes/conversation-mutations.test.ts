@@ -41,10 +41,10 @@ describe('findTurnStart', () => {
 
   it('finds the correct turn start in multi-turn conversation', () => {
     const msgs = [
-      userMsg('u1', 'hello'),   // 0
-      agentMsg('hi'),           // 1
+      userMsg('u1', 'hello'), // 0
+      agentMsg('hi'), // 1
       userMsg('u2', 'how are'), // 2
-      agentMsg('good'),         // 3
+      agentMsg('good'), // 3
     ]
     expect(findTurnStart(msgs, 2)).toBe(2)
     expect(findTurnStart(msgs, 3)).toBe(2)
@@ -52,11 +52,11 @@ describe('findTurnStart', () => {
 
   it('skips Resume markers', () => {
     const msgs = [
-      userMsg('u1', 'hello'),   // 0
-      agentMsg('hi'),           // 1
-      RESUME,                   // 2
-      userMsg('u2', 'again'),   // 3
-      agentMsg('ok'),           // 4
+      userMsg('u1', 'hello'), // 0
+      agentMsg('hi'), // 1
+      RESUME, // 2
+      userMsg('u2', 'again'), // 3
+      agentMsg('ok'), // 4
     ]
     expect(findTurnStart(msgs, 3)).toBe(3)
     expect(findTurnStart(msgs, 4)).toBe(3)
@@ -77,27 +77,27 @@ describe('findTurnEnd', () => {
 
   it('includes agent reply in turn', () => {
     const msgs = [
-      userMsg('u1', 'hello'),   // 0
-      agentMsg('hi'),           // 1
+      userMsg('u1', 'hello'), // 0
+      agentMsg('hi'), // 1
     ]
     expect(findTurnEnd(msgs, 0)).toBe(1)
   })
 
   it('stops before next user message', () => {
     const msgs = [
-      userMsg('u1', 'hello'),   // 0
-      agentMsg('hi'),           // 1
-      agentMsg('more'),         // 2
-      userMsg('u2', 'next'),    // 3
+      userMsg('u1', 'hello'), // 0
+      agentMsg('hi'), // 1
+      agentMsg('more'), // 2
+      userMsg('u2', 'next'), // 3
     ]
     expect(findTurnEnd(msgs, 0)).toBe(2)
   })
 
   it('skips Resume markers within turn', () => {
     const msgs = [
-      userMsg('u1', 'hello'),   // 0
-      RESUME,                   // 1
-      agentMsg('hi'),           // 2
+      userMsg('u1', 'hello'), // 0
+      RESUME, // 1
+      agentMsg('hi'), // 2
     ]
     expect(findTurnEnd(msgs, 0)).toBe(2)
   })
@@ -108,10 +108,10 @@ describe('findTurnEnd', () => {
 describe('truncateMessages', () => {
   it('removes a turn from the end', () => {
     const msgs = [
-      userMsg('u1', 'hello'),   // 0
-      agentMsg('hi'),           // 1
-      userMsg('u2', 'remove'),  // 2
-      agentMsg('bye'),          // 3
+      userMsg('u1', 'hello'), // 0
+      agentMsg('hi'), // 1
+      userMsg('u2', 'remove'), // 2
+      agentMsg('bye'), // 3
     ]
     const result = truncateMessages(msgs, 2)
     expect(result).toHaveLength(2)
@@ -119,20 +119,17 @@ describe('truncateMessages', () => {
   })
 
   it('removes all messages when undoing first turn', () => {
-    const msgs = [
-      userMsg('u1', 'hello'),
-      agentMsg('hi'),
-    ]
+    const msgs = [userMsg('u1', 'hello'), agentMsg('hi')]
     const result = truncateMessages(msgs, 0)
     expect(result).toHaveLength(0)
   })
 
   it('undoes from agent message by finding its turn start', () => {
     const msgs = [
-      userMsg('u1', 'keep'),    // 0
-      agentMsg('yes'),          // 1
-      userMsg('u2', 'remove'),  // 2
-      agentMsg('bye'),          // 3
+      userMsg('u1', 'keep'), // 0
+      agentMsg('yes'), // 1
+      userMsg('u2', 'remove'), // 2
+      agentMsg('bye'), // 3
     ]
     const result = truncateMessages(msgs, 3)
     expect(result).toHaveLength(2)
@@ -147,12 +144,12 @@ describe('truncateMessages', () => {
 
   it('preserves earlier turns when undoing middle turn', () => {
     const msgs = [
-      userMsg('u1', 'a'),    // 0
-      agentMsg('b'),         // 1
-      userMsg('u2', 'c'),    // 2
-      agentMsg('d'),         // 3
-      userMsg('u3', 'e'),    // 4
-      agentMsg('f'),         // 5
+      userMsg('u1', 'a'), // 0
+      agentMsg('b'), // 1
+      userMsg('u2', 'c'), // 2
+      agentMsg('d'), // 3
+      userMsg('u3', 'e'), // 4
+      agentMsg('f'), // 5
     ]
     const result = truncateMessages(msgs, 2)
     expect(result).toHaveLength(2)
@@ -165,10 +162,10 @@ describe('truncateMessages', () => {
 describe('copyMessagesUpTo', () => {
   it('copies up to and including the turn', () => {
     const msgs = [
-      userMsg('u1', 'hello'),   // 0
-      agentMsg('hi'),           // 1
-      userMsg('u2', 'fork'),    // 2
-      agentMsg('here'),         // 3
+      userMsg('u1', 'hello'), // 0
+      agentMsg('hi'), // 1
+      userMsg('u2', 'fork'), // 2
+      agentMsg('here'), // 3
     ]
     const result = copyMessagesUpTo(msgs, 2)
     expect(result).toHaveLength(4) // both turns included
@@ -176,10 +173,10 @@ describe('copyMessagesUpTo', () => {
 
   it('copies only first turn when forking at index 0', () => {
     const msgs = [
-      userMsg('u1', 'hello'),   // 0
-      agentMsg('hi'),           // 1
-      userMsg('u2', 'next'),    // 2
-      agentMsg('ok'),           // 3
+      userMsg('u1', 'hello'), // 0
+      agentMsg('hi'), // 1
+      userMsg('u2', 'next'), // 2
+      agentMsg('ok'), // 3
     ]
     const result = copyMessagesUpTo(msgs, 0)
     expect(result).toHaveLength(2)
@@ -187,8 +184,8 @@ describe('copyMessagesUpTo', () => {
 
   it('includes agent reply in copied turn', () => {
     const msgs = [
-      userMsg('u1', 'hello'),   // 0
-      agentMsg('hi'),           // 1
+      userMsg('u1', 'hello'), // 0
+      agentMsg('hi'), // 1
     ]
     const result = copyMessagesUpTo(msgs, 0)
     expect(result).toHaveLength(2)
@@ -197,10 +194,10 @@ describe('copyMessagesUpTo', () => {
 
   it('handles forking from agent message index', () => {
     const msgs = [
-      userMsg('u1', 'a'),    // 0
-      agentMsg('b'),         // 1
-      userMsg('u2', 'c'),    // 2
-      agentMsg('d'),         // 3
+      userMsg('u1', 'a'), // 0
+      agentMsg('b'), // 1
+      userMsg('u2', 'c'), // 2
+      agentMsg('d'), // 3
     ]
     const result = copyMessagesUpTo(msgs, 1)
     // findTurnStart(msgs, 1) = 0, findTurnEnd(msgs, 0) = 1

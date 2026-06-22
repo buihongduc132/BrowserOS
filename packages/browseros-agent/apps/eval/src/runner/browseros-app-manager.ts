@@ -1,8 +1,7 @@
 /**
  * BrowserOS App Manager
  *
- * Manages BrowserOS lifecycle for eval workers.
- * Mirrors scripts/dev/start.ts --manual mode with per-worker isolation:
+ * Manages BrowserOS lifecycle for eval workers, with per-worker isolation:
  *
  *   1. Kill ports
  *   2. Launch Chrome directly with per-worker user-data-dir and ports
@@ -126,9 +125,9 @@ export class BrowserOSAppManager {
   }
 
   /**
-   * Launch Chrome + Server — mirrors start.ts --manual mode.
+   * Launch Chrome + Server.
    *
-   * Chrome flags match startManualBrowser() in scripts/dev/start.ts:
+   * Chrome flags:
    *   --no-first-run, --no-default-browser-check, --use-mock-keychain
    *   --disable-browseros-server  (we run our own server)
    *   --disable-browseros-extensions  (we load them explicitly if needed)
@@ -194,7 +193,6 @@ export class BrowserOSAppManager {
       BROWSEROS_CDP_PORT: String(cdp),
       BROWSEROS_SERVER_PORT: String(server),
       BROWSEROS_EXTENSION_PORT: String(extension),
-      VITE_BROWSEROS_SERVER_PORT: String(server),
     }
 
     // Capture both stdout and stderr to a per-worker file so we can
@@ -366,7 +364,12 @@ export class BrowserOSAppManager {
       )
       return
     }
-    const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'))
+    let manifest: Record<string, unknown>
+    try {
+      manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'))
+    } catch {
+      return
+    }
     manifest.nopecha = { ...manifest.nopecha, key: apiKey }
     writeFileSync(manifestPath, JSON.stringify(manifest, null, 2))
     console.log('[BROWSEROS] NopeCHA API key patched')

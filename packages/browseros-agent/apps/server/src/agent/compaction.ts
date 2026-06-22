@@ -32,7 +32,6 @@ import type { CompactionStrategyConfig } from './types'
 
 export {
   type CompactionState,
-  type ComputedConfig,
   computeConfig,
   estimateTokens,
   estimateTokensForThreshold,

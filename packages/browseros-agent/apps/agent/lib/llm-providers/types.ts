@@ -1,7 +1,4 @@
-/**
- * Backend-aligned provider types (matches AIProvider enum in backend)
- * @public
- */
+/** AI settings provider config types. Most API-backed values match backend AIProvider. */
 export type ProviderType =
   | 'anthropic'
   | 'openai'
@@ -17,21 +14,16 @@ export type ProviderType =
   | 'chatgpt-pro'
   | 'github-copilot'
   | 'qwen-code'
-  | 'minimax'
+  | 'codex'
+  | 'claude-code'
+  | 'acp-custom'
+  | 'remote-hermes'
 
-/** A single model entry within a provider */
-export interface ModelEntry {
-  /** Model identifier */
-  id: string
-  /** Context window in tokens (0 = unknown) */
-  contextLength: number
-  /** Whether this specific model supports images */
-  supportsImages?: boolean
-  /** Source of this model entry */
-  source: 'static' | 'fetched' | 'manual'
-  /** When this entry was last refreshed (fetched models) */
-  fetchedAt?: number
-}
+// Mirror of @browseros/shared/constants/hermes REMOTE_HERMES_PROVIDER_TYPE.
+// Re-declared locally because the agent UI is a WXT/Vite extension and
+// doesn't take a runtime dep on the shared package — keeping a single
+// string literal here avoids scattering 'remote-hermes' across components.
+export const REMOTE_HERMES_PROVIDER_TYPE = 'remote-hermes' as const
 
 /**
  * LLM Provider configuration
@@ -48,13 +40,6 @@ export interface LlmProviderConfig {
   baseUrl?: string
   /** Model identifier */
   modelId: string
-  /** All models available for this provider */
-  models?: ModelEntry[]
-  /** Cached /models response for offline use */
-  fetchedModels?: {
-    fetchedAt: number
-    ids: string[]
-  }
   /** API key (encrypted and stored locally) */
   apiKey?: string
   /** Whether this provider supports image inputs */
@@ -83,8 +68,16 @@ export interface LlmProviderConfig {
   sessionToken?: string
 
   // ChatGPT Pro (Codex) fields
-  reasoningEffort?: 'none' | 'low' | 'medium' | 'high'
+  reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
   reasoningSummary?: 'auto' | 'concise' | 'detailed'
+
+  // ACP-backed providers (claude-code, codex, acp-custom). agent id
+  // resolves through acpx's registry; command is only set for
+  // acp-custom; workspace is the fixed-path cwd picked at provider-
+  // create time.
+  acpAgentId?: string
+  acpCommand?: string
+  acpFixedWorkspacePath?: string
 }
 
 /**

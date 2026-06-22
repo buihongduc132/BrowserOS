@@ -5,13 +5,12 @@ import {
   Gemini,
   Kimi,
   LmStudio,
-  Minimax,
   Ollama,
   OpenAI,
   OpenRouter,
   Qwen,
 } from '@lobehub/icons'
-import { Bot, Github } from 'lucide-react'
+import { Bot, Github, Sparkles } from 'lucide-react'
 import type { FC, SVGProps } from 'react'
 import ProductLogoSvg from '@/assets/product_logo.svg'
 import type { ProviderType } from './types'
@@ -37,10 +36,13 @@ const providerIconMap: Record<ProviderType, IconComponent | null> = {
   'chatgpt-pro': OpenAI,
   'github-copilot': Github,
   'qwen-code': Qwen,
-  minimax: Minimax,
+  codex: OpenAI,
+  'claude-code': Anthropic,
+  'acp-custom': null,
+  'remote-hermes': Sparkles,
 }
 
-interface ProviderIconProps {
+export interface ProviderIconProps {
   type: ProviderType
   size?: number
   className?: string

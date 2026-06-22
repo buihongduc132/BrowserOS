@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Tests for the shared server-binary sign table."""
 
-import plistlib
 import unittest
 from pathlib import Path
 
@@ -29,27 +28,33 @@ class MacosServerBinariesTest(unittest.TestCase):
             self.assertTrue(plist.exists(), f"{stem}: entitlements {plist} missing")
 
     def test_macos_sign_spec_for_resolves_by_stem(self):
-        spec = macos_sign_spec_for(Path("/x/limactl"))
+        spec = macos_sign_spec_for(Path("/x/codex"))
         assert spec is not None
-        self.assertEqual(spec.identifier_suffix, "limactl")
+        self.assertEqual(spec.identifier_suffix, "codex")
         self.assertIsNone(macos_sign_spec_for(Path("/x/not_a_known_binary")))
 
-    def test_limactl_uses_vz_entitlement(self):
-        spec = macos_sign_spec_for(Path("/x/limactl"))
-        assert spec is not None
-        self.assertEqual(spec.entitlements, "lima-vz-entitlements.plist")
+    def test_agent_cli_entries_use_plain_hardened_runtime(self):
+        for binary in ["codex"]:
+            spec = macos_sign_spec_for(Path(f"/x/{binary}"))
+            assert spec is not None
+            self.assertEqual(spec.identifier_suffix, binary)
+            self.assertEqual(spec.options, "runtime")
+            self.assertIsNone(spec.entitlements)
+        self.assertIsNone(macos_sign_spec_for(Path("/x/claude")))
 
-        entitlements_name = spec.entitlements
-        assert entitlements_name is not None
-        entitlements = plistlib.loads((ENTITLEMENTS_DIR / entitlements_name).read_bytes())
-        self.assertIs(entitlements.get("com.apple.security.virtualization"), True)
-
-    def test_matches_lima_bundle_layout(self):
+    def test_lima_is_not_registered_for_signing(self):
         keys = set(MACOS_SERVER_BINARIES.keys())
-        self.assertIn("limactl", keys)
-        forbidden = {"podman", "gvproxy", "vfkit", "krunkit", "podman-mac-helper"}
+        forbidden = {
+            "limactl",
+            "podman",
+            "gvproxy",
+            "vfkit",
+            "krunkit",
+            "podman-mac-helper",
+        }
         leftover = forbidden & keys
-        self.assertFalse(leftover, f"podman-era entries still present: {leftover}")
+        self.assertFalse(leftover, f"stale VM entries still present: {leftover}")
+        self.assertIsNone(macos_sign_spec_for(Path("/x/third_party/lima/bin/limactl")))
 
 
 class WindowsServerBinariesTest(unittest.TestCase):
@@ -65,6 +70,9 @@ class WindowsServerBinariesTest(unittest.TestCase):
                 f"{rel} outside expected layout",
             )
 
+    def test_windows_includes_agent_cli_entries(self):
+        self.assertIn("third_party/codex.exe", WINDOWS_SERVER_BINARIES)
+
     def test_expected_windows_binary_paths_joins_root(self):
         root = Path("/tmp/fake/resources/bin")
         resolved = expected_windows_binary_paths(root)
@@ -79,6 +87,7 @@ class WindowsServerBinariesTest(unittest.TestCase):
             "third_party/podman/win-sshproxy.exe",
             "third_party/bun.exe",
             "third_party/rg.exe",
+            "third_party/claude.exe",
         }
         leftover = forbidden & set(WINDOWS_SERVER_BINARIES)
         self.assertFalse(leftover, f"stale entries still present: {leftover}")

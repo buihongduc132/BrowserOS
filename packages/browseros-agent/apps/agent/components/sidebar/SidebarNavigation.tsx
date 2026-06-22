@@ -7,11 +7,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { Feature } from '@/lib/browseros/capabilities'
-import { useCapabilities } from '@/lib/browseros/useCapabilities'
 import { cn } from '@/lib/utils'
 
-interface SidebarNavigationProps {
+export interface SidebarNavigationProps {
   expanded?: boolean
 }
 
@@ -19,7 +17,6 @@ type NavItem = {
   name: string
   to: string
   icon: typeof Home
-  feature?: Feature
 }
 
 const primaryNavItems: NavItem[] = [
@@ -28,7 +25,6 @@ const primaryNavItems: NavItem[] = [
     name: 'Connect Apps',
     to: '/connect-apps',
     icon: PlugZap,
-    feature: Feature.MANAGED_MCP_SUPPORT,
   },
   { name: 'Scheduled Tasks', to: '/scheduled', icon: CalendarClock },
   { name: 'Agents', to: '/agents', icon: Cpu },
@@ -51,17 +47,12 @@ export const SidebarNavigation: FC<SidebarNavigationProps> = ({
   expanded = true,
 }) => {
   const location = useLocation()
-  const { supports } = useCapabilities()
-
-  const filteredItems = primaryNavItems.filter(
-    (item) => !item.feature || supports(item.feature),
-  )
 
   return (
     <TooltipProvider delayDuration={0}>
       <div className="flex-1 overflow-y-auto overflow-x-hidden p-2">
         <nav className="space-y-1">
-          {filteredItems.map((item) => {
+          {primaryNavItems.map((item) => {
             const Icon = item.icon
             const isActive = isNavItemActive(item, location.pathname)
 
