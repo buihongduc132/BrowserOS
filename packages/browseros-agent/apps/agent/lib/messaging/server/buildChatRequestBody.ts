@@ -1,13 +1,5 @@
-import type { AclRule } from '@browseros/shared/types/acl'
-import type { ChatMode } from '@/entrypoints/sidepanel/index/chatTypes'
 import type { LlmProviderConfig } from '@/lib/llm-providers/types'
-import type { ToolApprovalConfig } from '@/lib/tool-approvals/types'
-
-export interface ApprovalResponseData {
-  approvalId: string
-  approved: boolean
-  reason?: string
-}
+import type { ChatMode } from '@/modules/chat/chat-types'
 
 export interface ChatHistoryEntry {
   role: 'user' | 'assistant'
@@ -33,7 +25,7 @@ export interface ChatRequestBrowserContext {
   }[]
 }
 
-interface ChatRequestBodyParams {
+export interface ChatRequestBodyParams {
   conversationId: string
   provider: LlmProviderConfig
   message?: string
@@ -41,27 +33,16 @@ interface ChatRequestBodyParams {
   browserContext?: ChatRequestBrowserContext
   userSystemPrompt?: string
   userWorkingDir?: string
+  userWorkspaces?: Array<{ id: string; path: string; name: string }>
   supportsImages?: boolean
   previousConversation?: ChatHistoryEntry[] | string
   declinedApps?: string[]
-  aclRules?: AclRule[]
   selectedText?: string
   selectedTextSource?: {
     url: string
     title: string
   }
-  toolApprovalConfig?: ToolApprovalConfig
-  toolApprovalResponses?: ApprovalResponseData[]
   isScheduledTask?: boolean
-}
-
-export const toRequestToolApprovalConfig = (
-  approvalConfig?: ToolApprovalConfig,
-): ToolApprovalConfig | undefined => {
-  if (!approvalConfig) return undefined
-  return Object.values(approvalConfig.categories).some(Boolean)
-    ? approvalConfig
-    : undefined
 }
 
 export const buildChatRequestBody = ({
@@ -72,18 +53,17 @@ export const buildChatRequestBody = ({
   browserContext,
   userSystemPrompt,
   userWorkingDir,
+  userWorkspaces,
   supportsImages,
   previousConversation,
   declinedApps,
-  aclRules,
   selectedText,
   selectedTextSource,
-  toolApprovalConfig,
-  toolApprovalResponses,
   isScheduledTask,
 }: ChatRequestBodyParams) => ({
   message,
   provider: provider.type,
+  providerId: provider.id,
   providerType: provider.type,
   providerName: provider.name,
   apiKey: provider.apiKey,
@@ -100,16 +80,21 @@ export const buildChatRequestBody = ({
   sessionToken: provider.sessionToken,
   reasoningEffort: provider.reasoningEffort,
   reasoningSummary: provider.reasoningSummary,
+  // ACP-backed providers (claude-code, codex, acp-custom) need their
+  // own fields to reach the server; otherwise every provider config of
+  // a given type would share one workspace and the user-supplied
+  // workspace path would be silently dropped.
+  acpAgentId: provider.acpAgentId,
+  acpCommand: provider.acpCommand,
+  acpFixedWorkspacePath: provider.acpFixedWorkspacePath,
   browserContext,
   userSystemPrompt,
   userWorkingDir,
+  userWorkspaces,
   supportsImages: supportsImages ?? provider.supportsImages,
   previousConversation,
   declinedApps: declinedApps?.length ? declinedApps : undefined,
-  aclRules: aclRules?.length ? aclRules : undefined,
   selectedText,
   selectedTextSource,
-  toolApprovalConfig: toRequestToolApprovalConfig(toolApprovalConfig),
-  toolApprovalResponses,
   isScheduledTask,
 })

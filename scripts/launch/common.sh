@@ -9,6 +9,34 @@
 # This ensures PID files survive reboots predictably and are
 # co-located with the profile data they protect.
 
+# ── Chromium sandbox detection ──
+# Ubuntu 24.04+ sets kernel.apparmor_restrict_unprivileged_userns=1
+# which blocks Chromium's built-in sandbox. We detect this and
+# add --no-sandbox only when needed. The "real" fix is:
+#   sudo sh -c 'echo kernel.apparmor_restrict_unprivileged_userns=0 > /etc/sysctl.d/99-allow-chromium-sandbox.conf && sysctl --system'
+_chromium_needs_no_sandbox() {
+  # Check if AppArmor userns restriction is active
+  local val
+  val=$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null) || val="0"
+  if [ "$val" = "1" ]; then
+    return 0  # needs --no-sandbox
+  fi
+  # Check if unprivileged userns is disabled
+  val=$(cat /proc/sys/kernel/unprivileged_userns_clone 2>/dev/null) || val="1"
+  if [ "$val" = "0" ]; then
+    return 0  # needs --no-sandbox
+  fi
+  return 1  # sandbox works fine
+}
+
+# Returns "--no-sandbox" if needed, empty string otherwise.
+# Use like: browser_args="$(_sandbox_flag) --other-args"
+_sandbox_flag() {
+  if _chromium_needs_no_sandbox; then
+    echo "--no-sandbox"
+  fi
+}
+
 # ── Directory constants ──
 DEV_PROFILE="${HOME}/.browseros-dev-chrome"
 DEV_BOS_DIR="${HOME}/.browseros-dev"
@@ -21,10 +49,18 @@ DEV_SERVER_PID="${DEV_BOS_DIR}/server.pid"
 PROD_BROWSER_PID="${PROD_BOS_DIR}/browser.pid"
 PROD_SERVER_PID="${PROD_BOS_DIR}/server.pid"
 
-# ── Default ports ──
-DEV_CDP_PORT="${BROWSEROS_CDP_PORT:-9010}"
-DEV_SERVER_PORT="${BROWSEROS_SERVER_PORT:-9110}"
-DEV_EXTENSION_PORT="${BROWSEROS_EXTENSION_PORT:-9305}"
+# ── Dev ports (override with BROWSEROS_DEV_CDP_PORT etc.) ──
+# Dev uses +10 offset from prod defaults to allow side-by-side operation.
+DEV_CDP_PORT="${BROWSEROS_DEV_CDP_PORT:-9010}"
+DEV_SERVER_PORT="${BROWSEROS_DEV_SERVER_PORT:-9115}"
+DEV_EXTENSION_PORT="${BROWSEROS_DEV_EXTENSION_PORT:-9305}"
+
+# ── Prod ports (override with BROWSEROS_CDP_PORT etc.) ──
+PROD_CDP_PORT="${BROWSEROS_CDP_PORT:-9104}"
+PROD_SERVER_PORT="${BROWSEROS_SERVER_PORT:-9110}"
+PROD_EXTENSION_PORT="${BROWSEROS_EXTENSION_PORT:-9300}"
+# proxy_port always equals server_port (unified port model since v0.39)
+PROD_PROXY_PORT="$PROD_SERVER_PORT"
 
 # ── Verify a PID is alive AND matches expected process ──
 # Usage: verify_pid <pid> <expected_cmdline_substring>
@@ -122,6 +158,104 @@ kill_by_pidfile() {
 
   rm -f "$pid_file"
   return 0
+}
+
+# ── Kill an entire process tree (parent + all descendants) ──
+# Usage: kill_tree <pid> [signal]
+# Uses /proc to walk the process tree recursively, then waits for cleanup.
+kill_tree() {
+  local pid="$1"
+  local sig="${2:-TERM}"
+
+  if ! kill -0 "$pid" 2>/dev/null; then
+    return 0
+  fi
+
+  # Try process-group kill first (most reliable for Chromium)
+  # Read PGID from /proc/$pid/stat (field 5)
+  local pgid
+  pgid=$(awk '{print $5}' "/proc/${pid}/stat" 2>/dev/null) || pgid=""
+  if [ -n "$pgid" ] && [ "$pgid" != "$pid" ]; then
+    kill -s "$sig" -- "-$pgid" 2>/dev/null || true
+  fi
+
+  # Also collect descendants via BFS as fallback (catches children in different groups)
+  local all_pids=("$pid")
+  local queue=("$pid")
+  local idx=0
+  while [ $idx -lt ${#queue[@]} ]; do
+    local ppid="${queue[$idx]}"
+    idx=$((idx + 1))
+    local children
+    children=$(ps --ppid "$ppid" -o pid= 2>/dev/null) || true
+    if [ -n "$children" ]; then
+      local child
+      for child in $children; do
+        case " ${all_pids[*]} " in
+          *" $child "*) continue ;;  # already tracked
+        esac
+        all_pids+=("$child")
+        queue+=("$child")
+      done
+    fi
+  done
+
+  # Send signal to all PIDs in tree
+  local p
+  for p in "${all_pids[@]}"; do
+    kill -s "$sig" "$p" 2>/dev/null || true
+  done
+
+  # Wait up to 5s for all to die
+  local attempt
+  for attempt in $(seq 1 10); do
+    local alive=0
+    for p in "${all_pids[@]}"; do
+      kill -0 "$p" 2>/dev/null && alive=1 && break
+    done
+    [ "$alive" -eq 0 ] && break
+    sleep 0.5
+  done
+
+  # SIGKILL any survivors
+  for p in "${all_pids[@]}"; do
+    if kill -0 "$p" 2>/dev/null; then
+      kill -9 "$p" 2>/dev/null || true
+    fi
+  done
+  sleep 0.3
+}
+
+# ── Kill any process listening on a port (orphan fallback) ──
+# Usage: kill_port_orphan <port> [expected_cmdline_substring]
+# Uses ss to find the PID, then kills it. Skips if PID matches expected substring
+# (to avoid killing a process from a different instance).
+# If no expected substring given, kills anything on that port.
+kill_port_orphan() {
+  local port="$1"
+  local expected="${2:-}"
+
+  # Find PIDs listening on this port
+  local pids
+  pids=$(ss -tlnp "sport = :$port" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | sort -u) || true
+
+  if [[ -z "$pids" ]]; then
+    return 0  # Nothing on this port
+  fi
+
+  for pid in $pids; do
+    if [[ -n "$expected" ]]; then
+      local cmdline
+      cmdline=$(cat "/proc/${pid}/cmdline" 2>/dev/null | tr '\0' ' ') || continue
+      case "$cmdline" in
+        *"$expected"*) ;;  # matches — proceed to kill
+        *) continue ;;      # doesn't match — skip
+      esac
+    fi
+
+    echo "[orphan] Killing PID $pid on port $port (no PID file match)"
+    kill_tree "$pid"
+  done
 }
 
 # ── Clean stale Chromium singleton locks (safe: call only after verifying no process) ──

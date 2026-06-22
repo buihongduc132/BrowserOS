@@ -6,8 +6,14 @@ export type StorageArea = 'session' | 'local' | 'sync' | 'managed'
 
 // ══ Commands ══
 
+export interface TriggerActionParams {
+  id: string
+  targetId: string
+}
+
 export interface LoadUnpackedParams {
   path: string
+  enableInIncognito?: boolean
 }
 
 export interface LoadUnpackedResult {
@@ -43,4 +49,39 @@ export interface SetStorageItemsParams {
   id: string
   storageArea: StorageArea
   values: Record<string, unknown>
+}
+
+// ── BrowserOS extension commands ──
+
+export type ExtensionState = 'enabled' | 'disabled' | 'installed'
+
+export interface ExtensionInfo {
+  id: string
+  name: string
+  version: string
+  description: string
+  path: string
+  state: ExtensionState
+  isBrowserOS: boolean
+  canModify: boolean
+}
+
+export interface ListExtensionsResult {
+  extensions: ExtensionInfo[]
+}
+
+export interface GetExtensionInfoParams {
+  id: string
+}
+
+export interface GetExtensionInfoResult {
+  info: ExtensionInfo
+}
+
+export interface EnableExtensionParams {
+  id: string
+}
+
+export interface DisableExtensionParams {
+  id: string
 }

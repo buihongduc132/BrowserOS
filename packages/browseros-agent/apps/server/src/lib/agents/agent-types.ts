@@ -4,9 +4,12 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-export type AgentAdapter = 'claude' | 'codex' | 'openclaw' | 'hermes' | 'custom'
+export type AgentAdapter = 'claude' | 'codex'
 
 export type AgentPermissionMode = 'approve-all'
+
+export const MAIN_AGENT_SESSION_ID = 'main'
+export type AgentSessionId = string
 
 export interface AgentDefinition {
   id: string
@@ -20,12 +23,6 @@ export interface AgentDefinition {
   updatedAt: number
   /** Pinned agents float to the top of the rail. Defaulted on read for legacy records. */
   pinned?: boolean
-  /** Command to launch the ACP binary. Required when adapter='custom'. */
-  customCommand?: string
-  /** Arguments passed to the custom ACP binary. */
-  customArgs?: string[]
-  /** Human-facing display name (spaces, emojis ok). Falls back to `name` when unset. */
-  customLabel?: string
 }
 
 export interface AgentAdapterDescriptor {
@@ -64,7 +61,7 @@ export interface AgentHistoryToolCall {
 export interface AgentHistoryEntry {
   id: string
   agentId: string
-  sessionId: 'main'
+  sessionId: AgentSessionId
   role: 'user' | 'assistant'
   text: string
   createdAt: number

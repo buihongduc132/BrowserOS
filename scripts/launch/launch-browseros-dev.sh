@@ -1,17 +1,13 @@
 #!/usr/bin/env bash
 # launch-browseros-dev.sh — GUI launcher for BrowserOS Dev instance
 # Called by browseros-dev.desktop Exec line.
-# Ensures singleton guard, port checks, and data preservation.
+# Delegates to the Go CLI via mise.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+source "${SCRIPT_DIR}/../../../scripts/gpu-flags.sh"
 
-# Source shared functions
-source "${SCRIPT_DIR}/common.sh"
-
-PID_FILE="${DEV_BOS_DIR}/browser.pid"
-LOCK_FILE="${DEV_BOS_DIR}/browser.lock"
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
 # ── Ensure mise is available ──
 if ! command -v mise &>/dev/null; then
@@ -20,13 +16,5 @@ if ! command -v mise &>/dev/null; then
   exit 1
 fi
 
-# ── Check if already running ──
-if is_browser_running "$PID_FILE"; then
-  notify-send "BrowserOS Dev" "Already running. Use kill-dev to stop first." -i dialog-warning 2>/dev/null || true
-  echo "[INFO] BrowserOS Dev already running." >&2
-  exit 0
-fi
-
-# ── Launch via mise (ensures build + singleton guard) ──
 cd "$REPO_ROOT"
 exec mise run browseros:start-dev

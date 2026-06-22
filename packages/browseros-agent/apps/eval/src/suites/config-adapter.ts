@@ -3,7 +3,7 @@ import { type EvalConfig, EvalConfigSchema } from '../types'
 import { type EvalVariant, resolveVariant } from './resolve-variant'
 import type { EvalSuite } from './schema'
 
-type Env = Record<string, string | undefined>
+export type Env = Record<string, string | undefined>
 
 export interface AdaptEvalConfigOptions {
   env?: Env
@@ -66,7 +66,12 @@ export async function adaptEvalConfigFile(
   options: AdaptEvalConfigOptions = {},
 ): Promise<AdaptedEvalConfig> {
   const absolute = resolve(configPath)
-  const raw = JSON.parse(await Bun.file(absolute).text())
+  let raw: unknown
+  try {
+    raw = JSON.parse(await Bun.file(absolute).text())
+  } catch {
+    throw new Error(`Invalid JSON in config: ${absolute}`)
+  }
   const evalConfig = EvalConfigSchema.parse(raw)
   const id = basename(absolute, '.json')
   const backend = executorBackend(evalConfig)

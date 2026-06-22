@@ -9,7 +9,7 @@ import { rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { eq } from 'drizzle-orm'
-import { DbAgentStore } from '../../../src/lib/agents/db-agent-store'
+import { DbAgentStore } from '../../../src/lib/agents/storage/db-agent-store'
 import { closeDb, initializeDb } from '../../../src/lib/db'
 import { agentDefinitions } from '../../../src/lib/db/schema'
 
@@ -78,17 +78,13 @@ describe('DbAgentStore', () => {
     expect(new Set(listed.map((agent) => agent.id)).size).toBe(created.length)
   })
 
-  it('persists OpenClaw adapter config with the agent record', async () => {
+  it('does not persist adapter config for built-in agents', async () => {
     const { db, store } = createStoreWithDb()
 
     const agent = await store.create({
-      name: 'OpenClaw bot',
-      adapter: 'openclaw',
-      providerType: 'openai-compatible',
-      providerName: 'Kimi',
-      baseUrl: 'https://api.fireworks.ai/inference/v1',
-      apiKey: 'test-key',
-      supportsImages: true,
+      name: 'Codex bot',
+      adapter: 'codex',
+      modelId: 'gpt-5.5',
     })
 
     const row = db
@@ -97,89 +93,64 @@ describe('DbAgentStore', () => {
       .where(eq(agentDefinitions.id, agent.id))
       .get()
 
-    expect(JSON.parse(row?.adapterConfigJson ?? '{}')).toEqual({
-      providerType: 'openai-compatible',
-      providerName: 'Kimi',
-      baseUrl: 'https://api.fireworks.ai/inference/v1',
-      apiKey: 'test-key',
-      supportsImages: true,
-    })
+    expect(row?.adapterConfigJson).toBeNull()
   })
 
-  it('upserts gateway-owned OpenClaw records idempotently', async () => {
+  it('upserts existing records idempotently', async () => {
     const store = createStore()
 
     const first = await store.upsertExisting({
-      id: 'oc-existing',
-      name: 'Gateway agent',
-      adapter: 'openclaw',
+      id: 'agent-existing',
+      name: 'Imported agent',
+      adapter: 'codex',
       modelId: 'openrouter/anthropic/claude-sonnet-4.5',
     })
     const second = await store.upsertExisting({
-      id: 'oc-existing',
-      name: 'Changed gateway name',
-      adapter: 'openclaw',
+      id: 'agent-existing',
+      name: 'Changed imported name',
+      adapter: 'codex',
     })
 
     expect(second).toEqual(first)
     expect(await store.list()).toEqual([first])
   })
 
-  it('roundtrips customCommand/customArgs/customLabel through serialize/deserialize', async () => {
+  it('ignores stale rows with unsupported adapter ids', async () => {
     const { db, store } = createStoreWithDb()
+    db.insert(agentDefinitions)
+      .values([
+        {
+          id: 'stale-agent',
+          name: 'Stale agent',
+          adapter: 'removed-adapter' as never,
+          modelId: 'default',
+          reasoningEffort: 'medium',
+          permissionMode: 'approve-all',
+          sessionKey: 'agent:stale-agent:main',
+          pinned: false,
+          adapterConfigJson: null,
+          createdAt: 1000,
+          updatedAt: 1000,
+        },
+        {
+          id: 'legacy-hermes-agent',
+          name: 'Legacy Hermes agent',
+          adapter: 'hermes' as never,
+          modelId: 'default',
+          reasoningEffort: 'medium',
+          permissionMode: 'approve-all',
+          sessionKey: 'agent:legacy-hermes-agent:main',
+          pinned: false,
+          adapterConfigJson: null,
+          createdAt: 1000,
+          updatedAt: 1000,
+        },
+      ])
+      .run()
 
-    const agent = await store.create({
-      name: 'my-custom-agent',
-      adapter: 'custom',
-      customCommand: './bin/my-acp-server',
-      customArgs: ['acp', '--verbose'],
-      customLabel: 'My Custom Agent 🚀',
-    })
-
-    // Verify the returned object has custom fields
-    expect(agent).toMatchObject({
-      name: 'my-custom-agent',
-      adapter: 'custom',
-      customCommand: './bin/my-acp-server',
-      customArgs: ['acp', '--verbose'],
-      customLabel: 'My Custom Agent 🚀',
-    })
-
-    // Verify persisted in adapterConfigJson
-    const row = db
-      .select()
-      .from(agentDefinitions)
-      .where(eq(agentDefinitions.id, agent.id))
-      .get()
-    expect(JSON.parse(row?.adapterConfigJson ?? '{}')).toMatchObject({
-      customCommand: './bin/my-acp-server',
-      customArgs: ['acp', '--verbose'],
-      customLabel: 'My Custom Agent 🚀',
-    })
-
-    // Verify get() roundtrips
-    const reloaded = await store.get(agent.id)
-    expect(reloaded).toMatchObject({
-      customCommand: './bin/my-acp-server',
-      customArgs: ['acp', '--verbose'],
-      customLabel: 'My Custom Agent 🚀',
-    })
-  })
-
-  it('handles custom agent without optional custom fields', async () => {
-    const store = createStore()
-
-    const agent = await store.create({
-      name: 'minimal-custom',
-      adapter: 'custom',
-      customCommand: 'gemini',
-    })
-
-    expect(agent).toMatchObject({
-      customCommand: 'gemini',
-    })
-    expect(agent.customArgs).toBeUndefined()
-    expect(agent.customLabel).toBeUndefined()
+    expect(await store.get('stale-agent')).toBeNull()
+    expect(await store.get('legacy-hermes-agent')).toBeNull()
+    expect(await store.list()).toEqual([])
   })
 
   function createStore(): DbAgentStore {

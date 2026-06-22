@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { configStore } from '@browseros/shared/constants/config-store'
 
 const fixtureRules = [
   {
@@ -20,6 +21,7 @@ const fixtureRules = [
 
 describe('GlobalAclPolicyService', () => {
   let rootDir: string
+  let originalBrowserosDir: string | undefined
   let service: {
     setRules(rules: typeof fixtureRules): Promise<unknown>
     getRules(): unknown
@@ -29,15 +31,19 @@ describe('GlobalAclPolicyService', () => {
 
   beforeEach(async () => {
     rootDir = await mkdtemp(join(tmpdir(), 'browseros-acl-test-'))
-    mock.module('../../../src/lib/browseros-dir', () => ({
-      getBrowserosDir: () => rootDir,
-    }))
+    originalBrowserosDir = process.env.BROWSEROS_DIR
+    process.env.BROWSEROS_DIR = rootDir
     const mod = await import('../../../src/api/services/acl/global-acl-policy')
     service = new mod.GlobalAclPolicyService()
   })
 
   afterEach(async () => {
-    mock.restore()
+    configStore.reset()
+    if (originalBrowserosDir === undefined) {
+      delete process.env.BROWSEROS_DIR
+    } else {
+      process.env.BROWSEROS_DIR = originalBrowserosDir
+    }
     await rm(rootDir, { recursive: true, force: true })
   })
 

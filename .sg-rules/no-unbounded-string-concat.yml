@@ -1,0 +1,28 @@
+# SOURCE: Memory leak pattern — unbounded string accumulation in streaming contexts
+# Case study: ralph.ts accumulated 239MB+ via stdoutText += chunk over multi-day runs.
+# Fix: StreamAccumulator with rolling buffer (2MB tail), incremental error extraction.
+#
+# Pattern: <var> += chunk/data inside stream handlers or loops.
+# This is O(n) memory with no upper bound. Long-running processes can exhaust heap.
+#
+# SOURCE: https://nodejs.org/en/learn/asynchronous-work/stream-data-in-nodejs
+#   "Avoid accumulating stream data into a single string — use streaming transforms."
+# SOURCE: https://rules.sonarsource.com/typescript/RSPEC-6442/
+#   SonarQube S6442: "String concatenation in loops should be avoided for large data."
+id: no-unbounded-string-concat
+language: TypeScript
+message: "Unbounded string accumulation ($VAR += ...) — potential memory leak in long-running processes. Use rolling buffer or StreamAccumulator with a cap."
+severity: warning
+note: |
+  `let x = ""; ... x += chunk` inside stream/child_process handlers accumulates without bound.
+  A process streaming 500K chunks at ~500 bytes each reaches ~239MB.
+  
+  Fix patterns:
+    1. Rolling buffer: keep last N bytes, discard prefix
+    2. StreamAccumulator class: cap + incremental error extraction
+    3. Write to file instead of memory for large outputs
+  
+  False positives: numeric accumulators (totalDurationMs += x) are safe — this is a hint, not error.
+  True positive signals: variable name contains stdout/stderr/output/buffer/text/chunk/data.
+rule:
+  pattern: $VAR += $CHUNK

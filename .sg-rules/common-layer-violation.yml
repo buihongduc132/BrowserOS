@@ -1,0 +1,13 @@
+id: common-layer-violation
+language: typescript
+rule:
+  pattern: import { $$$ } from "$SOURCE"
+constraints:
+  SOURCE:
+    regex: "(@plannotator/server|@plannotator/ui|src/framework|src/repositories|../framework|../repositories)"
+message: "Layer violation: Common utilities should not import from Framework or Repositories. This is a primary cause of circular dependencies."
+severity: error
+note: |
+  NOTE: Removed `inside:` matcher — ast-grep cannot match file paths.
+  This rule now catches ALL imports from restricted paths regardless of file location.
+  Project-specific narrowing should use `.sgignore` or repo-level rule overrides.

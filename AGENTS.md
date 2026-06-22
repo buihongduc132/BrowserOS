@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **BrowserOS** (21529 symbols, 43555 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **BrowserOS** (24593 symbols, 49329 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -73,9 +73,29 @@ BrowserOS uses a Go-based CLI (`browseros-dev`) for local dev lifecycle, invoked
 | Variable | Default | Description |
 |----------|---------|------------|
 | `BROWSEROS_APP_PATH` | `~/Downloads/alta/BrowserOS.AppImage` | Path to BrowserOS AppImage |
-| `BROWSEROS_CDP_PORT` | `9000` (prod) / `9005` (dev) | Chrome DevTools Protocol port |
-| `BROWSEROS_SERVER_PORT` | `9100` (prod) / `9105` (dev) | Unified server HTTP port |
-| `BROWSEROS_EXTENSION_PORT` | `9300` (prod) / `9305` (dev) | Extension port (deprecated, no-op) |
+| `BROWSEROS_FORCE_KILL_PROD` | unset | Set to `1` to bypass prod kill guard |
+
+### Port Allocation (FIXED — scripts/ports.sh)
+
+**Single source of truth:** `scripts/ports.sh` — edit ONLY there.
+
+| Instance | CDP | Server | Extension | Profile |
+|----------|-----|--------|-----------|----------|
+| **PROD** | 9105 | 9200 | 9300 | `~/.config/browser-os` |
+| **DEV** | 9010 | 9011 | 9012 | `~/.browseros-dev-chrome` |
+
+PROD ports are pre-seeded into `~/.config/browser-os/.browseros/server_config.json`.
+If drift is detected on start-prod, it auto-corrects.
+
+### PROD Kill Guard
+
+`mise run browseros:kill-prod` REFUSES to kill prod if the health endpoint
+returns `{"status":"ok"}` or `"cdpConnected":true`. This protects active user sessions.
+
+Override (only if you REALLY need to):
+```
+BROWSEROS_FORCE_KILL_PROD=1 mise run browseros:kill-prod
+```
 
 ### Desktop Entries
 
@@ -85,6 +105,32 @@ BrowserOS uses a Go-based CLI (`browseros-dev`) for local dev lifecycle, invoked
 | `browseros-dev.desktop` | BrowserOS (Dev) | `browseros-dev` (β badge overlay) | Dev instance w/ custom profile + ports |
 
 Installed via `scripts/setup-desktop-entries.sh`. Dev icon gets green **β** badge via PIL overlay.
+
+---
+
+## Dev Launch — Architecture
+
+> Full details: `flow/findings/dev-launch-stability.md`
+
+Dev launch is handled by the **upstream Go CLI** (`packages/browseros-agent/tools/dev/browseros-dev`).
+It was adapted for Linux with ~30 lines of changes (F10). Previous F1-F9 issues were all caused
+by bash scripts that reinvented the Go CLI — now removed.
+
+| Command | What it does |
+|---------|-------------|
+| `mise run browseros:start-dev` | `browseros-dev watch --manual` (static build) |
+| `mise run browseros:kill-dev` | `browseros-dev cleanup --yes` |
+| `mise run browseros:dev watch` | HMR mode (live reload) |
+| `mise run browseros:dev watch --new` | Random ports + fresh profile |
+| `mise run browseros:dev cleanup` | Kill processes, clear ports |
+| `mise run browseros:dev reset` | Cleanup + delete profile |
+
+The Go CLI handles: port reservation, CDP waiting, health checks, process supervision,
+singleton locks (flock), cleanup. No bash state management needed.
+
+Key findings (F1-F10) documented in `flow/findings/dev-launch-stability.md`.
+
+> **GPU crash fix + `--class` taskbar isolation:** `flow/findings/gpu-crash-nvidia-vulkan-fix.md`
 
 ---
 

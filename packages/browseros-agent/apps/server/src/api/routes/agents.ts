@@ -13,81 +13,59 @@ import { type Context, Hono } from 'hono'
 import { stream } from 'hono/streaming'
 import { formatUserMessage } from '../../agent/format-message'
 import type { Browser } from '../../browser/browser'
-import { createAcpUIMessageStreamResponse } from '../../lib/agents/acp-ui-message-stream'
-import type { OpenclawGatewayAccessor } from '../../lib/agents/acpx-runtime'
-import type {
-  ActiveTurnInfo,
-  TurnFrame,
-} from '../../lib/agents/active-turn-registry'
-import { AdapterHealthChecker } from '../../lib/agents/adapter-health'
+import { createAcpUIMessageStreamResponse } from '../../lib/agents/acp/ui-message-stream'
 import {
   AGENT_ADAPTER_CATALOG,
   isAgentAdapter,
   isSupportedAgentModel,
   isSupportedReasoningEffort,
-} from '../../lib/agents/agent-catalog'
-import type {
-  AgentAdapter,
-  AgentDefinition,
-} from '../../lib/agents/agent-types'
-import type { AgentHistoryPage, AgentStreamEvent } from '../../lib/agents/types'
+} from '../../lib/agents/adapters/catalog'
+import { AdapterHealthChecker } from '../../lib/agents/adapters/health'
 import {
-  importAgentsFromAcpx,
-  probeCustomAgent,
-  readAcpxConfig,
-} from '../services/agents/acpx-config-sync'
+  type AgentAdapter,
+  type AgentDefinition,
+  type AgentSessionId,
+  MAIN_AGENT_SESSION_ID,
+} from '../../lib/agents/agent-types'
+import type {
+  ActiveTurnInfo,
+  TurnFrame,
+} from '../../lib/agents/turns/active-turn-registry'
+import type { AgentHistoryPage, AgentStreamEvent } from '../../lib/agents/types'
 import {
   type AgentDefinitionWithActivity,
   AgentHarnessService,
-  type GatewayStatusSnapshot,
-  HermesProviderConfigInvalidError,
   InvalidAgentUpdateError,
   MessageQueueFullError,
-  type OpenClawProvisioner,
-  OpenClawProvisionerUnavailableError,
-  type ProducedFileEntry,
-  type ProducedFilesRailGroup,
   type QueuedMessage,
   TurnAlreadyActiveError,
   UnknownAgentError,
 } from '../services/agents/agent-harness-service'
-import type { FilePreview } from '../services/openclaw/file-preview'
 import type { Env } from '../types'
 import { resolveBrowserContextPageIds } from '../utils/resolve-browser-context-page-ids'
 
 type AgentRouteService = {
   listAgents(): Promise<AgentDefinition[]>
   listAgentsWithActivity(): Promise<AgentDefinitionWithActivity[]>
-  getGatewayStatus(): Promise<GatewayStatusSnapshot | null>
   createAgent(input: {
     name: string
     adapter: AgentAdapter
     modelId?: string
     reasoningEffort?: string
-    providerType?: string
-    providerName?: string
-    baseUrl?: string
-    apiKey?: string
-    supportsImages?: boolean
-    customCommand?: string
-    customArgs?: string[]
-    customLabel?: string
   }): Promise<AgentDefinition>
   getAgent(agentId: string): Promise<AgentDefinition | null>
   deleteAgent(agentId: string): Promise<boolean>
   updateAgent(
     agentId: string,
-    patch: {
-      name?: string
-      pinned?: boolean
-      customCommand?: string
-      customArgs?: string[]
-      customLabel?: string
-    },
+    patch: { name?: string; pinned?: boolean },
   ): Promise<AgentDefinition | null>
-  getHistory(agentId: string): Promise<AgentHistoryPage>
+  getHistory(
+    agentId: string,
+    sessionId?: AgentSessionId,
+  ): Promise<AgentHistoryPage>
   startTurn(input: {
     agentId: string
+    sessionId?: AgentSessionId
     message: string
     attachments?: ReadonlyArray<{ mediaType: string; data: string }>
     cwd?: string
@@ -96,14 +74,19 @@ type AgentRouteService = {
     turnId: string
     lastSeq?: number
   }): ReadableStream<TurnFrame> | null
-  getActiveTurn(agentId: string, sessionId?: 'main'): ActiveTurnInfo | null
+  getActiveTurn(
+    agentId: string,
+    sessionId?: AgentSessionId,
+  ): ActiveTurnInfo | null
   cancelTurn(input: {
     agentId: string
+    sessionId?: AgentSessionId
     turnId?: string
     reason?: string
   }): boolean
   enqueueMessage(input: {
     agentId: string
+    sessionId?: AgentSessionId
     message: string
     attachments?: ReadonlyArray<{ mediaType: string; data: string }>
   }): Promise<QueuedMessage>
@@ -112,54 +95,21 @@ type AgentRouteService = {
     messageId: string
   }): Promise<boolean>
   listQueuedMessages(agentId: string): Promise<QueuedMessage[]>
-
-  // Files API — Phase 3 of TKT-762.
-  listAgentFiles(
-    agentId: string,
-    options?: { limit?: number },
-  ): Promise<ProducedFilesRailGroup[]>
-  listAgentFilesForTurn(
-    agentId: string,
-    turnId: string,
-  ): Promise<ProducedFileEntry[]>
-  previewProducedFile(fileId: string): Promise<FilePreview | null>
-  resolveProducedFileForDownload(fileId: string): Promise<{
-    absolutePath: string
-    fileName: string
-    mimeType: string
-    size: number
-  } | null>
 }
 
 type AgentRouteDeps = {
   service?: AgentRouteService
   browser?: Pick<Browser, 'resolveTabIds'>
   browserosServerPort?: number
-  /**
-   * Required when an `openclaw` adapter agent is in use; harmless when
-   * absent. Forwarded to the AcpxRuntime so it can spawn `openclaw acp`
-   * inside the gateway container.
-   */
-  openclawGateway?: OpenclawGatewayAccessor
-  /**
-   * Optional. Enables the image-attachment carve-out for OpenClaw
-   * Required to dual-create/delete `openclaw` adapter agents on the
-   * gateway side. Without this, openclaw create requests fail with 503.
-   */
-  openclawProvisioner?: OpenClawProvisioner
+  resourcesDir?: string
   /** Optional override; defaults to a fresh in-memory checker. */
-  adapterHealth?: AdapterHealthChecker
-  /**
-   * Optional listener attached to the constructed harness. Receives
-   * turn lifecycle events for every running agent. Wired by the server
-   * to feed OpenClaw's ClawSession dashboard from the same stream the
-   * chat panel sees, so no second WS observer is needed.
-   */
+  adapterHealth?: Pick<AdapterHealthChecker, 'getHealth'>
   onTurnLifecycle?: import('../services/agents/agent-harness-service').TurnLifecycleListener
 }
 
 type SidepanelAgentChatRequest = {
   conversationId: string
+  agentSessionId: AgentSessionId
   message: string
   browserContext?: BrowserContext
   selectedText?: string
@@ -173,421 +123,311 @@ export function createAgentRoutes(deps: AgentRouteDeps = {}) {
     deps.service ??
     new AgentHarnessService({
       browserosServerPort: deps.browserosServerPort,
-      openclawGateway: deps.openclawGateway,
-      openclawProvisioner: deps.openclawProvisioner,
+      resourcesDir: deps.resourcesDir,
     })
   if (deps.onTurnLifecycle && service instanceof AgentHarnessService) {
     service.onTurnLifecycle(deps.onTurnLifecycle)
   }
   // One checker per route mount. Cached probes refresh every 5min;
   // tests can swap in an alternate via deps if needed.
-  const adapterHealth = deps.adapterHealth ?? new AdapterHealthChecker()
+  const adapterHealth =
+    deps.adapterHealth ??
+    new AdapterHealthChecker({
+      hostDetectionOptions: { resourcesDir: deps.resourcesDir },
+    })
 
-  return (
-    new Hono<Env>()
-      .get('/adapters', async (c) => {
-        const adapters = await Promise.all(
-          AGENT_ADAPTER_CATALOG.map(async (descriptor) => ({
-            ...descriptor,
-            health: await adapterHealth.getHealth(descriptor.id),
-          })),
-        )
-        return c.json({ adapters })
-      })
-      .get('/', async (c) => {
-        // Single round-trip the agents page consumes: enriched agents
-        // (status + lastUsedAt) plus the gateway lifecycle snapshot the
-        // GatewayStatusBar / GatewayStateCards / ControlPlaneAlert used
-        // to fetch from `/claw/status`. Lets the page poll one endpoint.
-        const [agents, gateway] = await Promise.all([
-          service.listAgentsWithActivity(),
-          service.getGatewayStatus(),
-        ])
-        return c.json({ agents, gateway })
-      })
-      .post('/', async (c) => {
-        const parsed = await parseCreateAgentBody(c)
-        if ('error' in parsed) return c.json({ error: parsed.error }, 400)
-        try {
-          return c.json({ agent: await service.createAgent(parsed) })
-        } catch (err) {
-          return handleAgentRouteError(c, err)
-        }
-      })
-      .post('/probe-custom', async (c) => {
-        const body = await c.req.json().catch(() => ({}))
-        const { command, args = [] } = body as {
-          command?: string
-          args?: string[]
-        }
-        if (!command) return c.json({ error: 'command required' }, 400)
-        const result = await probeCustomAgent(command, args)
-        return c.json(result)
-      })
-      .post('/import-acpx', async (c) => {
-        const { acpxDir } = (await c.req.json().catch(() => ({}))) as {
-          acpxDir?: string
-        }
-        const config = readAcpxConfig(acpxDir)
-        if (!config)
-          return c.json({
-            results: [],
-            discovered: 0,
-            error: 'No acpx config found',
-          })
-        const existing = await service.listAgents()
-        const results = importAgentsFromAcpx(config, existing)
-        for (const r of results.filter((r) => r.imported)) {
-          const entry = config.agents[r.name]
-          if (!entry) continue
-          await service.createAgent({
-            name: r.name,
-            adapter: 'custom',
-            customCommand: entry.command,
-            customArgs: entry.args,
-            customLabel: r.name,
-          })
-        }
-        return c.json({
-          results,
-          discovered: Object.keys(config.agents).length,
-        })
-      })
-      .post('/:agentId/sidepanel/chat', async (c) => {
-        const agentId = c.req.param('agentId')
-        const parsed = await parseSidepanelAgentChatBody(c)
-        if ('error' in parsed) return c.json({ error: parsed.error }, 400)
+  return new Hono<Env>()
+    .get('/adapters', async (c) => {
+      const adapters = await Promise.all(
+        AGENT_ADAPTER_CATALOG.map(async (descriptor) => ({
+          ...descriptor,
+          health: await adapterHealth.getHealth(descriptor.id),
+        })),
+      )
+      return c.json({ adapters })
+    })
+    .get('/', async (c) => {
+      const agents = await service.listAgentsWithActivity()
+      return c.json({ agents })
+    })
+    .post('/', async (c) => {
+      const parsed = await parseCreateAgentBody(c)
+      if ('error' in parsed) return c.json({ error: parsed.error }, 400)
+      try {
+        return c.json({ agent: await service.createAgent(parsed) })
+      } catch (err) {
+        return handleAgentRouteError(c, err)
+      }
+    })
+    .post('/:agentId/sidepanel/chat', async (c) => {
+      const agentId = c.req.param('agentId')
+      const parsed = await parseSidepanelAgentChatBody(c)
+      if ('error' in parsed) return c.json({ error: parsed.error }, 400)
 
-        try {
-          const agent = await service.getAgent(agentId)
-          if (!agent) return c.json({ error: 'Unknown agent' }, 404)
+      try {
+        const agent = await service.getAgent(agentId)
+        if (!agent) return c.json({ error: 'Unknown agent' }, 404)
 
-          let browserContext = parsed.browserContext
-          if (deps.browser) {
-            browserContext = await resolveBrowserContextPageIds(
-              deps.browser,
-              browserContext,
-            )
-          }
-
-          const userContent = formatUserMessage(
-            parsed.message,
+        let browserContext = parsed.browserContext
+        if (deps.browser) {
+          browserContext = await resolveBrowserContextPageIds(
+            deps.browser,
             browserContext,
-            parsed.selectedText,
-            parsed.selectedTextSource,
           )
-          const message = parsed.userSystemPrompt?.trim()
-            ? `${parsed.userSystemPrompt.trim()}\n\n${userContent}`
-            : userContent
+        }
 
-          let started: { turnId: string; frames: ReadableStream<TurnFrame> }
-          try {
-            started = await service.startTurn({
-              agentId: agent.id,
-              message,
-              cwd: parsed.userWorkingDir,
-            })
-          } catch (err) {
-            if (err instanceof TurnAlreadyActiveError) {
-              return c.json(
-                {
-                  error: 'Turn already active',
-                  turnId: err.turnId,
-                  attachUrl: `/agents/${agent.id}/chat/stream?turnId=${err.turnId}`,
-                },
-                409,
-              )
-            }
-            throw err
-          }
-
-          let didRequestCancel = false
-          const cancelStartedTurn = () => {
-            if (didRequestCancel) return
-            didRequestCancel = true
-            service.cancelTurn({
-              agentId: agent.id,
-              turnId: started.turnId,
-              reason: 'sidepanel stream cancelled',
-            })
-          }
-          if (c.req.raw.signal.aborted) {
-            cancelStartedTurn()
-          } else {
-            c.req.raw.signal.addEventListener('abort', cancelStartedTurn, {
-              once: true,
-            })
-          }
-
-          const events = turnFramesToAgentEvents(started.frames, {
-            onCancel: cancelStartedTurn,
-          })
-
-          return createAcpUIMessageStreamResponse(events, {
-            headers: {
-              'X-Session-Id': 'main',
-              'X-Turn-Id': started.turnId,
-            },
-          })
-        } catch (err) {
-          return handleAgentRouteError(c, err)
-        }
-      })
-      .get('/:agentId', async (c) => {
-        try {
-          const agent = await service.getAgent(c.req.param('agentId'))
-          if (!agent) return c.json({ error: 'Unknown agent' }, 404)
-          return c.json({ agent })
-        } catch (err) {
-          return handleAgentRouteError(c, err)
-        }
-      })
-      .delete('/:agentId', async (c) => {
-        try {
-          return c.json({
-            success: await service.deleteAgent(c.req.param('agentId')),
-          })
-        } catch (err) {
-          return handleAgentRouteError(c, err)
-        }
-      })
-      .patch('/:agentId', async (c) => {
-        const parsed = await parseAgentPatchBody(c)
-        if ('error' in parsed) return c.json({ error: parsed.error }, 400)
-        try {
-          const agent = await service.updateAgent(
-            c.req.param('agentId'),
-            parsed.patch,
-          )
-          if (!agent) return c.json({ error: 'Unknown agent' }, 404)
-          return c.json({ agent })
-        } catch (err) {
-          return handleAgentRouteError(c, err)
-        }
-      })
-      .get('/:agentId/sessions/main/history', async (c) => {
-        try {
-          return c.json(await service.getHistory(c.req.param('agentId')))
-        } catch (err) {
-          return handleAgentRouteError(c, err)
-        }
-      })
-      .post('/:agentId/chat', async (c) => {
-        const agentId = c.req.param('agentId')
-        const parsed = await parseChatBody(c)
-        if ('error' in parsed) return c.json({ error: parsed.error }, 400)
+        const userContent = formatUserMessage(
+          parsed.message,
+          browserContext,
+          parsed.selectedText,
+          parsed.selectedTextSource,
+        )
+        const message = parsed.userSystemPrompt?.trim()
+          ? `${parsed.userSystemPrompt.trim()}\n\n${userContent}`
+          : userContent
 
         let started: { turnId: string; frames: ReadableStream<TurnFrame> }
         try {
           started = await service.startTurn({
-            agentId,
-            message: parsed.message,
-            attachments: parsed.attachments,
-            cwd: parsed.cwd,
+            agentId: agent.id,
+            sessionId: parsed.agentSessionId,
+            message,
+            cwd: parsed.userWorkingDir,
           })
         } catch (err) {
           if (err instanceof TurnAlreadyActiveError) {
-            // Caller can attach via GET /chat/stream?turnId=… instead.
             return c.json(
               {
                 error: 'Turn already active',
                 turnId: err.turnId,
-                attachUrl: `/agents/${agentId}/chat/stream?turnId=${err.turnId}`,
+                attachUrl: buildChatStreamAttachUrl({
+                  agentId: agent.id,
+                  sessionId: parsed.agentSessionId,
+                  turnId: err.turnId,
+                }),
               },
               409,
             )
           }
-          return handleAgentRouteError(c, err)
+          throw err
         }
 
-        return streamTurnFrames(c, started.frames, {
-          turnId: started.turnId,
+        let didRequestCancel = false
+        const cancelStartedTurn = () => {
+          if (didRequestCancel) return
+          didRequestCancel = true
+          service.cancelTurn({
+            agentId: agent.id,
+            sessionId: parsed.agentSessionId,
+            turnId: started.turnId,
+            reason: 'sidepanel stream cancelled',
+          })
+        }
+        if (c.req.raw.signal.aborted) {
+          cancelStartedTurn()
+        } else {
+          c.req.raw.signal.addEventListener('abort', cancelStartedTurn, {
+            once: true,
+          })
+        }
+
+        const events = turnFramesToAgentEvents(started.frames, {
+          onCancel: cancelStartedTurn,
         })
-      })
-      .get('/:agentId/chat/active', (c) => {
-        const agentId = c.req.param('agentId')
-        const info = service.getActiveTurn(agentId, 'main')
-        return c.json({ active: info })
-      })
-      .get('/:agentId/chat/stream', (c) => {
-        const agentId = c.req.param('agentId')
-        const url = new URL(c.req.url)
-        const queryTurnId = url.searchParams.get('turnId')?.trim() || undefined
-        const turnId =
-          queryTurnId ?? service.getActiveTurn(agentId, 'main')?.turnId
-        if (!turnId) {
-          return c.json({ error: 'No active turn for this agent' }, 404)
-        }
-        const lastEventId =
-          c.req.header('Last-Event-ID') ??
-          url.searchParams.get('lastSeq') ??
-          undefined
-        const lastSeq = parseLastSeq(lastEventId)
-        const frames = service.attachTurn({ turnId, lastSeq })
-        if (!frames) {
-          return c.json({ error: 'Unknown turn' }, 404)
-        }
-        return streamTurnFrames(c, frames, { turnId })
-      })
-      .post('/:agentId/chat/cancel', async (c) => {
-        const agentId = c.req.param('agentId')
-        const body = await readJsonBody(c)
-        const turnId =
-          'value' in body && typeof body.value.turnId === 'string'
-            ? body.value.turnId.trim() || undefined
-            : undefined
-        const reason =
-          'value' in body && typeof body.value.reason === 'string'
-            ? body.value.reason
-            : undefined
-        const cancelled = service.cancelTurn({ agentId, turnId, reason })
-        return c.json({ cancelled })
-      })
-      .get('/:agentId/queue', async (c) => {
-        try {
-          const queue = await service.listQueuedMessages(c.req.param('agentId'))
-          return c.json({ queue })
-        } catch (err) {
-          return handleAgentRouteError(c, err)
-        }
-      })
-      .post('/:agentId/queue', async (c) => {
-        const parsed = await parseEnqueueBody(c)
-        if ('error' in parsed) return c.json({ error: parsed.error }, 400)
-        try {
-          const queued = await service.enqueueMessage({
-            agentId: c.req.param('agentId'),
-            message: parsed.message,
-            attachments: parsed.attachments,
-          })
-          return c.json({ queued })
-        } catch (err) {
-          return handleAgentRouteError(c, err)
-        }
-      })
-      .delete('/:agentId/queue/:messageId', async (c) => {
-        try {
-          const removed = await service.removeQueuedMessage({
-            agentId: c.req.param('agentId'),
-            messageId: c.req.param('messageId'),
-          })
-          if (!removed)
-            return c.json({ error: 'Queued message not found' }, 404)
-          return c.json({ removed })
-        } catch (err) {
-          return handleAgentRouteError(c, err)
-        }
-      })
 
-      // ── Files (TKT-762) ────────────────────────────────────────────
-      //
-      // V1 surfaces files OpenClaw agents produce inside their workspace
-      // dir (`~/.browseros/vm/openclaw/.openclaw/workspace[-<name>]/`)
-      // as outputs, attributed back to the chat turn that produced them
-      // by the per-turn workspace diff in
-      // `agent-harness-service.runDetachedTurn`. Adapter-gated to
-      // openclaw on the service side; for claude / codex these endpoints
-      // simply return empty lists.
-      //
-      // The file-id-scoped endpoints (`/files/:fileId/{preview,download}`)
-      // accept an opaque `fileId` and resolve the on-disk path
-      // server-side, so the client never sees a raw path and traversal
-      // is impossible by construction.
+        return createAcpUIMessageStreamResponse(events, {
+          headers: {
+            'X-Session-Id': parsed.agentSessionId,
+            'X-Turn-Id': started.turnId,
+          },
+        })
+      } catch (err) {
+        return handleAgentRouteError(c, err)
+      }
+    })
+    .get('/:agentId', async (c) => {
+      try {
+        const agent = await service.getAgent(c.req.param('agentId'))
+        if (!agent) return c.json({ error: 'Unknown agent' }, 404)
+        return c.json({ agent })
+      } catch (err) {
+        return handleAgentRouteError(c, err)
+      }
+    })
+    .delete('/:agentId', async (c) => {
+      try {
+        return c.json({
+          success: await service.deleteAgent(c.req.param('agentId')),
+        })
+      } catch (err) {
+        return handleAgentRouteError(c, err)
+      }
+    })
+    .patch('/:agentId', async (c) => {
+      const parsed = await parseAgentPatchBody(c)
+      if ('error' in parsed) return c.json({ error: parsed.error }, 400)
+      try {
+        const agent = await service.updateAgent(
+          c.req.param('agentId'),
+          parsed.patch,
+        )
+        if (!agent) return c.json({ error: 'Unknown agent' }, 404)
+        return c.json({ agent })
+      } catch (err) {
+        return handleAgentRouteError(c, err)
+      }
+    })
+    .get('/:agentId/sessions/:sessionId/history', async (c) => {
+      const sessionId = c.req.param('sessionId')
+      if (!isAgentSessionId(sessionId)) {
+        return c.json({ error: 'sessionId must be "main" or a UUID' }, 400)
+      }
+      try {
+        return c.json(
+          await service.getHistory(c.req.param('agentId'), sessionId),
+        )
+      } catch (err) {
+        return handleAgentRouteError(c, err)
+      }
+    })
+    .post('/:agentId/chat', async (c) => {
+      const agentId = c.req.param('agentId')
+      const parsed = await parseChatBody(c)
+      if ('error' in parsed) return c.json({ error: parsed.error }, 400)
 
-      .get('/:agentId/files', async (c) => {
-        try {
-          const groups = await service.listAgentFiles(
-            c.req.param('agentId'),
-            parseAgentFilesLimit(c.req.query('limit')),
-          )
-          return c.json({ groups })
-        } catch (err) {
-          return handleAgentRouteError(c, err)
-        }
+      return startChatTurnResponse(c, service, {
+        agentId,
+        sessionId: MAIN_AGENT_SESSION_ID,
+        parsed,
       })
-      .get('/:agentId/files/turn/:turnId', async (c) => {
-        try {
-          const files = await service.listAgentFilesForTurn(
-            c.req.param('agentId'),
-            c.req.param('turnId'),
-          )
-          return c.json({ files })
-        } catch (err) {
-          return handleAgentRouteError(c, err)
-        }
+    })
+    .post('/:agentId/sessions/:sessionId/chat', async (c) => {
+      const sessionId = parseSessionIdParam(c)
+      if ('error' in sessionId) return c.json({ error: sessionId.error }, 400)
+      const parsed = await parseChatBody(c)
+      if ('error' in parsed) return c.json({ error: parsed.error }, 400)
+
+      return startChatTurnResponse(c, service, {
+        agentId: c.req.param('agentId'),
+        sessionId: sessionId.value,
+        parsed,
       })
-      .get('/files/:fileId/preview', async (c) => {
-        try {
-          const preview = await service.previewProducedFile(
-            c.req.param('fileId'),
-          )
-          if (!preview || preview.kind === 'missing') {
-            return c.json({ error: 'File not found' }, 404)
-          }
-          return c.json(preview)
-        } catch (err) {
-          return handleAgentRouteError(c, err)
-        }
+    })
+    .get('/:agentId/chat/active', (c) => {
+      const agentId = c.req.param('agentId')
+      const info = service.getActiveTurn(agentId, MAIN_AGENT_SESSION_ID)
+      return c.json({ active: info })
+    })
+    .get('/:agentId/sessions/:sessionId/chat/active', (c) => {
+      const sessionId = parseSessionIdParam(c)
+      if ('error' in sessionId) return c.json({ error: sessionId.error }, 400)
+      const info = service.getActiveTurn(
+        c.req.param('agentId'),
+        sessionId.value,
+      )
+      return c.json({ active: info })
+    })
+    .get('/:agentId/chat/stream', (c) => {
+      const agentId = c.req.param('agentId')
+      return streamExistingTurn(c, service, {
+        agentId,
+        sessionId: MAIN_AGENT_SESSION_ID,
       })
-      .get('/files/:fileId/download', async (c) => {
-        try {
-          const resolved = await service.resolveProducedFileForDownload(
-            c.req.param('fileId'),
-          )
-          if (!resolved) return c.json({ error: 'File not found' }, 404)
-
-          // Stream raw bytes via Bun's lazy file handle. Sets
-          // Content-Disposition so browsers save instead of preview.
-          const file = Bun.file(resolved.absolutePath)
-          return new Response(file.stream(), {
-            headers: {
-              'Content-Type': resolved.mimeType,
-              'Content-Length': String(resolved.size),
-              'Content-Disposition': `attachment; ${encodeRfc6266Filename(resolved.fileName)}`,
-              'Cache-Control': 'no-store',
-            },
-          })
-        } catch (err) {
-          return handleAgentRouteError(c, err)
-        }
+    })
+    .get('/:agentId/sessions/:sessionId/chat/stream', (c) => {
+      const sessionId = parseSessionIdParam(c)
+      if ('error' in sessionId) return c.json({ error: sessionId.error }, 400)
+      return streamExistingTurn(c, service, {
+        agentId: c.req.param('agentId'),
+        sessionId: sessionId.value,
       })
-  )
-}
-
-/** Hard cap on `?limit=` for /agents/:id/files — guards against
- *  a caller-supplied huge value forcing a per-agent table scan. */
-const MAX_FILES_LIMIT = 500
-
-/**
- * Parse + clamp the `limit` query for /agents/:id/files. Returns
- * `undefined` when the param is absent or unparseable so the
- * service falls back to its own default.
- */
-function parseAgentFilesLimit(
-  raw: string | undefined,
-): { limit: number } | undefined {
-  if (!raw) return undefined
-  const parsed = Number.parseInt(raw, 10)
-  if (!Number.isFinite(parsed)) return undefined
-  return { limit: Math.min(Math.max(1, parsed), MAX_FILES_LIMIT) }
-}
-
-/**
- * RFC 6266 / RFC 5987 filename attributes for `Content-Disposition`.
- * Returns the `filename="..."` attribute (always) plus a
- * percent-encoded `filename*=UTF-8''…` attribute when the name
- * contains non-ASCII characters, so browsers download with the
- * original name even on stricter HTTP clients.
- */
-function encodeRfc6266Filename(filename: string): string {
-  // Strip CRLFs and quotes (header injection guard).
-  const safe = filename.replace(/["\r\n]/g, '_')
-  // Detect non-ASCII; emit the RFC 5987 fallback attribute when
-  // present. `encodeURIComponent` is the standard browser-safe
-  // percent-encoder for this purpose.
-  const hasNonAscii = /[^ -~]/.test(safe)
-  if (!hasNonAscii) return `filename="${safe}"`
-  return `filename="${safe}"; filename*=UTF-8''${encodeURIComponent(safe)}`
+    })
+    .post('/:agentId/chat/cancel', async (c) => {
+      const agentId = c.req.param('agentId')
+      const body = await readJsonBody(c)
+      const turnId =
+        'value' in body && typeof body.value.turnId === 'string'
+          ? body.value.turnId.trim() || undefined
+          : undefined
+      const reason =
+        'value' in body && typeof body.value.reason === 'string'
+          ? body.value.reason
+          : undefined
+      const cancelled = service.cancelTurn({ agentId, turnId, reason })
+      return c.json({ cancelled })
+    })
+    .post('/:agentId/sessions/:sessionId/chat/cancel', async (c) => {
+      const sessionId = parseSessionIdParam(c)
+      if ('error' in sessionId) return c.json({ error: sessionId.error }, 400)
+      const body = await readJsonBody(c)
+      const turnId =
+        'value' in body && typeof body.value.turnId === 'string'
+          ? body.value.turnId.trim() || undefined
+          : undefined
+      const reason =
+        'value' in body && typeof body.value.reason === 'string'
+          ? body.value.reason
+          : undefined
+      const cancelled = service.cancelTurn({
+        agentId: c.req.param('agentId'),
+        sessionId: sessionId.value,
+        turnId,
+        reason,
+      })
+      return c.json({ cancelled })
+    })
+    .get('/:agentId/queue', async (c) => {
+      try {
+        const queue = await service.listQueuedMessages(c.req.param('agentId'))
+        return c.json({ queue })
+      } catch (err) {
+        return handleAgentRouteError(c, err)
+      }
+    })
+    .post('/:agentId/queue', async (c) => {
+      const parsed = await parseEnqueueBody(c)
+      if ('error' in parsed) return c.json({ error: parsed.error }, 400)
+      try {
+        const queued = await service.enqueueMessage({
+          agentId: c.req.param('agentId'),
+          sessionId: parsed.sessionId,
+          message: parsed.message,
+          attachments: parsed.attachments,
+        })
+        return c.json({ queued })
+      } catch (err) {
+        return handleAgentRouteError(c, err)
+      }
+    })
+    .post('/:agentId/sessions/:sessionId/queue', async (c) => {
+      const sessionId = parseSessionIdParam(c)
+      if ('error' in sessionId) return c.json({ error: sessionId.error }, 400)
+      const parsed = await parseEnqueueBody(c)
+      if ('error' in parsed) return c.json({ error: parsed.error }, 400)
+      try {
+        const queued = await service.enqueueMessage({
+          agentId: c.req.param('agentId'),
+          sessionId: sessionId.value,
+          message: parsed.message,
+          attachments: parsed.attachments,
+        })
+        return c.json({ queued })
+      } catch (err) {
+        return handleAgentRouteError(c, err)
+      }
+    })
+    .delete('/:agentId/queue/:messageId', async (c) => {
+      try {
+        const removed = await service.removeQueuedMessage({
+          agentId: c.req.param('agentId'),
+          messageId: c.req.param('messageId'),
+        })
+        if (!removed) return c.json({ error: 'Queued message not found' }, 404)
+        return c.json({ removed })
+      } catch (err) {
+        return handleAgentRouteError(c, err)
+      }
+    })
 }
 
 function turnFramesToAgentEvents(
@@ -635,6 +475,101 @@ function turnFramesToAgentEvents(
   })
 }
 
+type ParsedChatBody = {
+  message: string
+  attachments: InboundImageAttachment[]
+  cwd?: string
+}
+
+async function startChatTurnResponse(
+  c: Context<Env>,
+  service: AgentRouteService,
+  input: {
+    agentId: string
+    sessionId: AgentSessionId
+    parsed: ParsedChatBody
+  },
+) {
+  let started: { turnId: string; frames: ReadableStream<TurnFrame> }
+  try {
+    started = await service.startTurn({
+      agentId: input.agentId,
+      sessionId: input.sessionId,
+      message: input.parsed.message,
+      attachments: input.parsed.attachments,
+      cwd: input.parsed.cwd,
+    })
+  } catch (err) {
+    if (err instanceof TurnAlreadyActiveError) {
+      return c.json(
+        {
+          error: 'Turn already active',
+          turnId: err.turnId,
+          attachUrl: buildChatStreamAttachUrl({
+            agentId: input.agentId,
+            sessionId: input.sessionId,
+            turnId: err.turnId,
+          }),
+        },
+        409,
+      )
+    }
+    return handleAgentRouteError(c, err)
+  }
+
+  return streamTurnFrames(c, started.frames, {
+    sessionId: input.sessionId,
+    turnId: started.turnId,
+  })
+}
+
+/**
+ * Builds the stream URL clients attach to after a 409, keeping the legacy
+ * main-session route while using scoped routes for sidepanel conversations.
+ */
+function buildChatStreamAttachUrl(input: {
+  agentId: string
+  sessionId: AgentSessionId
+  turnId: string
+}): string {
+  const agentId = encodeURIComponent(input.agentId)
+  const turnId = encodeURIComponent(input.turnId)
+  if (input.sessionId === MAIN_AGENT_SESSION_ID) {
+    return `/agents/${agentId}/chat/stream?turnId=${turnId}`
+  }
+  return `/agents/${agentId}/sessions/${encodeURIComponent(input.sessionId)}/chat/stream?turnId=${turnId}`
+}
+
+function streamExistingTurn(
+  c: Context<Env>,
+  service: AgentRouteService,
+  input: {
+    agentId: string
+    sessionId: AgentSessionId
+  },
+) {
+  const url = new URL(c.req.url)
+  const queryTurnId = url.searchParams.get('turnId')?.trim() || undefined
+  const turnId =
+    queryTurnId ?? service.getActiveTurn(input.agentId, input.sessionId)?.turnId
+  if (!turnId) {
+    return c.json({ error: 'No active turn for this agent session' }, 404)
+  }
+  const lastEventId =
+    c.req.header('Last-Event-ID') ??
+    url.searchParams.get('lastSeq') ??
+    undefined
+  const lastSeq = parseLastSeq(lastEventId)
+  const frames = service.attachTurn({ turnId, lastSeq })
+  if (!frames) {
+    return c.json({ error: 'Unknown turn' }, 404)
+  }
+  return streamTurnFrames(c, frames, {
+    sessionId: input.sessionId,
+    turnId,
+  })
+}
+
 /**
  * Pipe a TurnFrame stream as Server-Sent Events. Each frame becomes:
  *
@@ -648,11 +583,11 @@ function turnFramesToAgentEvents(
 function streamTurnFrames(
   c: Context<Env>,
   frames: ReadableStream<TurnFrame>,
-  options: { turnId: string },
+  options: { sessionId: AgentSessionId; turnId: string },
 ) {
   c.header('Content-Type', 'text/event-stream')
   c.header('Cache-Control', 'no-cache')
-  c.header('X-Session-Id', 'main')
+  c.header('X-Session-Id', options.sessionId)
   c.header('X-Turn-Id', options.turnId)
 
   return stream(c, async (s) => {
@@ -697,14 +632,6 @@ async function parseCreateAgentBody(c: Context<Env>): Promise<
       adapter: AgentAdapter
       modelId?: string
       reasoningEffort?: string
-      providerType?: string
-      providerName?: string
-      baseUrl?: string
-      apiKey?: string
-      supportsImages?: boolean
-      customCommand?: string
-      customArgs?: string[]
-      customLabel?: string
     }
   | { error: string }
 > {
@@ -722,14 +649,6 @@ async function parseCreateAgentBody(c: Context<Env>): Promise<
     return { error: 'Invalid adapter' }
   }
 
-  // Custom adapter requires customCommand
-  if (
-    record.adapter === 'custom' &&
-    (typeof record.customCommand !== 'string' || !record.customCommand.trim())
-  ) {
-    return { error: 'customCommand is required for custom adapter' }
-  }
-
   const modelId =
     typeof record.modelId === 'string' && record.modelId.trim()
       ? record.modelId.trim()
@@ -739,45 +658,18 @@ async function parseCreateAgentBody(c: Context<Env>): Promise<
       ? record.reasoningEffort.trim()
       : undefined
 
-  // OpenClaw, Hermes, and custom adapters resolve their model from
-  // per-agent config rather than from the harness catalog. Skip catalog
-  // model validation for those adapters — custom agents use whatever
-  // the binary exposes via ACP.
-  if (
-    record.adapter !== 'openclaw' &&
-    record.adapter !== 'hermes' &&
-    record.adapter !== 'custom' &&
-    !isSupportedAgentModel(record.adapter, modelId)
-  ) {
+  if (!isSupportedAgentModel(record.adapter, modelId)) {
     return { error: 'Invalid modelId' }
   }
   if (!isSupportedReasoningEffort(record.adapter, reasoningEffort)) {
     return { error: 'Invalid reasoningEffort' }
   }
 
-  // Extract custom fields (only relevant for adapter='custom')
-  const customCommand = readOptionalTrimmedString(record, 'customCommand')
-  const customLabel = readOptionalTrimmedString(record, 'customLabel')
-  const customArgs = Array.isArray(record.customArgs)
-    ? record.customArgs.filter((a: unknown) => typeof a === 'string')
-    : undefined
-
   return {
     name,
     adapter: record.adapter,
     modelId,
     reasoningEffort,
-    providerType: readOptionalTrimmedString(record, 'providerType'),
-    providerName: readOptionalTrimmedString(record, 'providerName'),
-    baseUrl: readOptionalTrimmedString(record, 'baseUrl'),
-    apiKey: readOptionalTrimmedString(record, 'apiKey'),
-    supportsImages:
-      typeof record.supportsImages === 'boolean'
-        ? record.supportsImages
-        : undefined,
-    ...(customCommand ? { customCommand } : {}),
-    ...(customArgs?.length ? { customArgs } : {}),
-    ...(customLabel ? { customLabel } : {}),
   }
 }
 
@@ -787,7 +679,7 @@ async function parseCreateAgentBody(c: Context<Env>): Promise<
  * harness strips the prefix and hands raw base64 to acpx, which builds
  * the ACP `image` content block.
  */
-export interface InboundImageAttachment {
+interface InboundImageAttachment {
   mediaType: string
   data: string
 }
@@ -816,33 +708,45 @@ const ALLOWED_IMAGE_MEDIA_TYPES = new Set([
  * message text size so a runaway client can't fill the queue file
  * with multi-megabyte payloads.
  */
-async function parseEnqueueBody(
-  c: Context<Env>,
-): Promise<
-  { message: string; attachments: InboundImageAttachment[] } | { error: string }
+async function parseEnqueueBody(c: Context<Env>): Promise<
+  | {
+      sessionId?: AgentSessionId
+      message: string
+      attachments: InboundImageAttachment[]
+    }
+  | { error: string }
 > {
-  const parsed = await parseChatBody(c)
+  const body = await readJsonBody(c)
+  if ('error' in body) return body
+  const parsed = parseChatBodyRecord(body.value)
   if ('error' in parsed) return parsed
   if (parsed.message.length > AGENT_HARNESS_LIMITS.QUEUE_MESSAGE_MAX_BYTES) {
     return {
       error: `Message exceeds ${AGENT_HARNESS_LIMITS.QUEUE_MESSAGE_MAX_BYTES} bytes`,
     }
   }
-  return parsed
+  const sessionId = readOptionalTrimmedString(body.value, 'sessionId')
+  if (sessionId && !isAgentSessionId(sessionId)) {
+    return { error: 'sessionId must be "main" or a UUID' }
+  }
+  return { ...parsed, sessionId }
 }
 
 async function parseChatBody(
   c: Context<Env>,
-): Promise<
-  | { message: string; attachments: InboundImageAttachment[]; cwd?: string }
-  | { error: string }
-> {
+): Promise<ParsedChatBody | { error: string }> {
   const body = await readJsonBody(c)
   if ('error' in body) return body
+  return parseChatBodyRecord(body.value)
+}
+
+function parseChatBodyRecord(
+  record: Record<string, unknown>,
+): ParsedChatBody | { error: string } {
   const message =
-    typeof body.value.message === 'string' ? body.value.message.trim() : ''
-  const attachmentsRaw = Array.isArray(body.value.attachments)
-    ? body.value.attachments
+    typeof record.message === 'string' ? record.message.trim() : ''
+  const attachmentsRaw = Array.isArray(record.attachments)
+    ? record.attachments
     : []
   if (attachmentsRaw.length > MAX_CHAT_ATTACHMENTS) {
     return {
@@ -888,8 +792,8 @@ async function parseChatBody(
     message,
     attachments,
     cwd:
-      readOptionalTrimmedString(body.value, 'cwd') ??
-      readOptionalTrimmedString(body.value, 'userWorkingDir'),
+      readOptionalTrimmedString(record, 'cwd') ??
+      readOptionalTrimmedString(record, 'userWorkingDir'),
   }
 }
 
@@ -905,6 +809,12 @@ async function parseSidepanelAgentChatBody(
     return { error: 'conversationId must be a UUID' }
   }
 
+  const agentSessionId =
+    readOptionalTrimmedString(record, 'agentSessionId') ?? conversationId
+  if (!isAgentSessionId(agentSessionId)) {
+    return { error: 'agentSessionId must be "main" or a UUID' }
+  }
+
   const message = readOptionalTrimmedString(record, 'message')
   if (!message) return { error: 'Message is required' }
 
@@ -917,6 +827,7 @@ async function parseSidepanelAgentChatBody(
 
   return {
     conversationId,
+    agentSessionId,
     message,
     browserContext: browserContext.value,
     selectedText,
@@ -970,6 +881,19 @@ function isUuid(value: string): boolean {
   )
 }
 
+function isAgentSessionId(value: string): value is AgentSessionId {
+  return value === MAIN_AGENT_SESSION_ID || isUuid(value)
+}
+
+function parseSessionIdParam(
+  c: Context<Env>,
+): { value: AgentSessionId } | { error: string } {
+  const sessionId = c.req.param('sessionId')
+  return isAgentSessionId(sessionId)
+    ? { value: sessionId }
+    : { error: 'sessionId must be "main" or a UUID' }
+}
+
 async function readJsonBody(
   c: Context<Env>,
 ): Promise<{ value: Record<string, unknown> } | { error: string }> {
@@ -993,14 +917,8 @@ function handleAgentRouteError(c: Context<Env>, err: unknown) {
   if (err instanceof InvalidAgentUpdateError) {
     return c.json({ error: err.message }, 400)
   }
-  if (err instanceof HermesProviderConfigInvalidError) {
-    return c.json({ error: err.message }, 400)
-  }
   if (err instanceof MessageQueueFullError) {
     return c.json({ error: err.message }, 429)
-  }
-  if (err instanceof OpenClawProvisionerUnavailableError) {
-    return c.json({ error: err.message }, 503)
   }
   const message = err instanceof Error ? err.message : String(err)
   return c.json({ error: message }, 500)

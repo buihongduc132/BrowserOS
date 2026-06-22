@@ -27,13 +27,10 @@ describe('AgisdkStateDiffGrader artifacts', () => {
 
     internals.fetchFinishState = async () => ({ cart: [{ name: 'Soup' }] })
     internals.runPythonEvaluator = async () => ({
-      output: {
-        reward: 0,
-        pass: false,
-        message: 'Missing entree',
-        per_criterion: [{ passed: false, detail: 'entree missing' }],
-      },
-      stderr: 'criterion log',
+      reward: 0,
+      pass: false,
+      message: 'Missing entree',
+      per_criterion: [{ passed: false, detail: 'entree missing' }],
     })
 
     const input: GraderInput = {

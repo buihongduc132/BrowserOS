@@ -1,0 +1,4 @@
+# ast-grep ignores its own rule files
+.sg-rules/
+.sg-sha
+sg-reports/

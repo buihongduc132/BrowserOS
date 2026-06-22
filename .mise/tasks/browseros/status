@@ -1,42 +1,58 @@
 #!/usr/bin/env bash
-set -euo pipefail
-REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-[[ -d "${REPO_ROOT}/packages/browseros-agent" ]] || REPO_ROOT="$(pwd)"
+set -uo pipefail
+# status — Show BrowserOS instance status
+# Uses ports from ../../../scripts/ports.sh — single source of truth.
 
-source "${REPO_ROOT}/scripts/launch/common.sh"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/../../../scripts/ports.sh"
 
-BROWSER_STATUS="STOPPED"
-SERVER_STATUS="STOPPED"
-BROWSER_PID_STR="-"
-SERVER_PID_STR="-"
+echo "=== Port Manifest (../../../scripts/ports.sh) ==="
+echo "  PROD:  CDP=$PROD_CDP_PORT  Server=$PROD_SERVER_PORT  Extension=$PROD_EXTENSION_PORT"
+echo "  DEV:   CDP=$DEV_CDP_PORT  Server=$DEV_SERVER_PORT  Extension=$DEV_EXTENSION_PORT"
 
-if is_browser_running "$DEV_BROWSER_PID"; then
-  BROWSER_STATUS="RUNNING"
-  BROWSER_PID_STR=$(cat "$DEV_BROWSER_PID")
-fi
-
-if [[ -f "$DEV_SERVER_PID" ]]; then
-  PID=$(cat "$DEV_SERVER_PID")
-  if verify_pid "$PID" "@browseros/server" || verify_pid "$PID" "bun"; then
-    SERVER_STATUS="RUNNING"
-    SERVER_PID_STR="$PID"
+echo ""
+echo "=== PROD Ports ==="
+for port_name in "CDP:$PROD_CDP_PORT" "Server:$PROD_SERVER_PORT" "Extension:$PROD_EXTENSION_PORT"; do
+  label="${port_name%%:*}"
+  port="${port_name##*:}"
+  if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
+    echo "  $label :$port — IN USE"
+  else
+    echo "  $label :$port — free"
   fi
+done
+
+echo ""
+echo "=== DEV Ports ==="
+for port_name in "CDP:$DEV_CDP_PORT" "Server:$DEV_SERVER_PORT" "Extension:$DEV_EXTENSION_PORT"; do
+  label="${port_name%%:*}"
+  port="${port_name##*:}"
+  if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
+    echo "  $label :$port — IN USE"
+  else
+    echo "  $label :$port — free"
+  fi
+done
+
+echo ""
+echo "=== PROD Health ==="
+prod_health=$(curl -sf "http://localhost:$PROD_SERVER_PORT/health" 2>/dev/null || echo "")
+if [ -n "$prod_health" ]; then
+  echo "  $prod_health"
+else
+  echo "  Not running"
 fi
 
-# Port status
-CDP_STATUS="free"
-SERVER_PORT_STATUS="free"
-port_in_use "$DEV_CDP_PORT" && CDP_STATUS="in use"
-port_in_use "$DEV_SERVER_PORT" && SERVER_PORT_STATUS="in use"
+echo ""
+echo "=== DEV Health ==="
+dev_health=$(curl -sf "http://localhost:$DEV_SERVER_PORT/health" 2>/dev/null || echo "")
+if [ -n "$dev_health" ]; then
+  echo "  $dev_health"
+else
+  echo "  Not running"
+fi
 
-echo "┌─────────────────────────────────────────────────┐"
-echo "│ BrowserOS Dev Status                            │"
-echo "├─────────────────────────────────────────────────┤"
-echo "│ Browser:  ${BROWSER_STATUS}  PID: ${BROWSER_PID_STR}"
-echo "│ Server:   ${SERVER_STATUS}  PID: ${SERVER_PID_STR}"
-echo "│ CDP port: ${DEV_CDP_PORT} (${CDP_STATUS})"
-echo "│ Srv port: ${DEV_SERVER_PORT} (${SERVER_PORT_STATUS})"
-echo "│ Profile:  ${DEV_PROFILE}"
-echo "│ Config:   ${DEV_BOS_DIR}"
-echo "│ Pidfiles: ${DEV_BOS_DIR}/"
-echo "└─────────────────────────────────────────────────┘"
+echo ""
+echo "=== Running BrowserOS processes ==="
+ps aux | grep -E 'BrowserOS|browseros-dev|browseros_server' | grep -v grep | wc -l
+echo "  processes total"

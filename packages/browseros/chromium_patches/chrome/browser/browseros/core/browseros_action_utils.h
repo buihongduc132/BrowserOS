@@ -1,9 +1,9 @@
 diff --git a/chrome/browser/browseros/core/browseros_action_utils.h b/chrome/browser/browseros/core/browseros_action_utils.h
 new file mode 100644
-index 0000000000000..0adfaa4a8ac83
+index 0000000000000..e263119b0fb23
 --- /dev/null
 +++ b/chrome/browser/browseros/core/browseros_action_utils.h
-@@ -0,0 +1,70 @@
+@@ -0,0 +1,67 @@
 +// Copyright 2025 The Chromium Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -18,7 +18,7 @@ index 0000000000000..0adfaa4a8ac83
 +#include "chrome/browser/browseros/core/browseros_constants.h"
 +#include "chrome/browser/ui/actions/chrome_action_id.h"
 +#include "chrome/browser/ui/ui_features.h"
-+#include "chrome/browser/ui/views/side_panel/side_panel_entry_key.h"
++#include "chrome/browser/ui/side_panel/side_panel_entry_key.h"
 +#include "chrome/common/chrome_features.h"
 +#include "ui/actions/actions.h"
 +
@@ -32,7 +32,6 @@ index 0000000000000..0adfaa4a8ac83
 +constexpr auto kBrowserOSNativeActionIds =
 +    base::MakeFixedFlatSet<actions::ActionId>({
 +        kActionSidePanelShowThirdPartyLlm,
-+        kActionSidePanelShowClashOfGpts,
 +        kActionBrowserOSAgent,
 +    });
 +
@@ -64,8 +63,6 @@ index 0000000000000..0adfaa4a8ac83
 +  switch (id) {
 +    case kActionSidePanelShowThirdPartyLlm:
 +      return &features::kThirdPartyLlmPanel;
-+    case kActionSidePanelShowClashOfGpts:
-+      return &features::kClashOfGpts;
 +    default:
 +      return nullptr;
 +  }

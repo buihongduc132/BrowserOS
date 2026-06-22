@@ -34,14 +34,14 @@ function getFs() {
   if (!fsImpl) {
     fsImpl = require('node:fs')
   }
-  return fsImpl
+  return fsImpl!
 }
 
 function getPath() {
   if (!pathImpl) {
     pathImpl = require('node:path')
   }
-  return pathImpl
+  return pathImpl!
 }
 
 export class ConfigStore {
@@ -136,7 +136,12 @@ export class ConfigStore {
       if (!fs.existsSync(this.filePath)) return {}
 
       const content = fs.readFileSync(this.filePath, 'utf8')
-      const parsed = JSON.parse(content)
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(content)
+      } catch {
+        return {}
+      }
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
         return {}
       }

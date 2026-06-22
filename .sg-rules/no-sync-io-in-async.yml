@@ -1,0 +1,40 @@
+# SOURCE: Blocking I/O in async context — stalls the event loop for ALL concurrent work.
+# readFileSync/writeFileSync inside async functions or callbacks blocks the Node.js event loop.
+# In a pi agent serving multiple sessions, one extension's readFileSync blocks ALL sessions.
+#
+# SOURCE: https://nodejs.org/en/learn/asynchronous-work/don-t-block-the-event-loop
+#   "Avoid synchronous methods in asynchronous contexts."
+# SOURCE: https://rules.sonarsource.com/typescript/RSPEC-2819/
+#   SonarQube S2819: "Synchronous calls should not be used in asynchronous contexts"
+# SOURCE: https://typescript-eslint.io/rules/no-sync-ist-falsch/
+#
+# Note: readFileSync at module top-level (during import/require) is ACCEPTABLE —
+# it runs once at startup, not per-request. Only flag when inside async boundary.
+id: no-sync-io-in-async
+language: TypeScript
+message: "Synchronous I/O (readFileSync/writeFileSync) inside async context blocks the event loop. Use fs/promises (readFile/writeFile) instead."
+severity: warning
+note: |
+  readFileSync blocks the event loop. In a pi agent running multiple sessions,
+  one extension's sync I/O freezes ALL sessions for the duration of the disk read.
+  
+  Even "fast" file reads take 1-10ms on SSD. Over many invocations, this adds up.
+  On NFS/network mounts (common in CI), sync reads can take 100ms+.
+  
+  Fix: replace `readFileSync(path, 'utf-8')` with `await readFile(path, 'utf-8')`
+  using `import { readFile } from 'node:fs/promises'`.
+  
+  Acceptable: sync I/O at module top-level (one-time config load at startup).
+  Not acceptable: sync I/O inside async functions, callbacks, or event handlers.
+rule:
+  any:
+    - pattern: readFileSync($$$ARGS)
+    - pattern: writeFileSync($$$ARGS)
+    - pattern: fs.readFileSync($$$ARGS)
+    - pattern: fs.writeFileSync($$$ARGS)
+  inside:
+    any:
+      - kind: function_declaration
+        regex: "^async\\s"
+      - kind: arrow_function
+        regex: "^async\\s"

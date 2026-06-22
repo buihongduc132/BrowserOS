@@ -8,7 +8,7 @@ import {
   RingBuffer,
   type TurnFrame,
   TurnRegistry,
-} from '../../../src/lib/agents/active-turn-registry'
+} from '../../../src/lib/agents/turns/active-turn-registry'
 
 const registries: TurnRegistry[] = []
 afterEach(() => {
@@ -93,7 +93,8 @@ describe('TurnRegistry', () => {
       stream: 'output',
     })
 
-    const stream = registry.subscribe(turn.turnId, { fromSeq: -1 })!
+    const stream = registry.subscribe(turn.turnId, { fromSeq: -1 })
+    if (!stream) throw new Error('expected subscribe to return a stream')
     // Push more after subscribe — both buffered and live frames should
     // arrive in order.
     registry.pushEvent(turn.turnId, {
@@ -123,7 +124,8 @@ describe('TurnRegistry', () => {
     }
     registry.pushEvent(turn.turnId, { type: 'done', stopReason: 'end_turn' })
 
-    const stream = registry.subscribe(turn.turnId, { fromSeq: 2 })!
+    const stream = registry.subscribe(turn.turnId, { fromSeq: 2 })
+    if (!stream) throw new Error('expected subscribe to return a stream')
     const frames = await collect(stream)
     expect(frames.map((f) => f.seq)).toEqual([3, 4])
   })
@@ -131,7 +133,8 @@ describe('TurnRegistry', () => {
   it('marks status `cancelled` and emits a synthetic terminal on cancel', async () => {
     const registry = makeRegistry()
     const turn = registry.register('agent-1')
-    const stream = registry.subscribe(turn.turnId, { fromSeq: -1 })!
+    const stream = registry.subscribe(turn.turnId, { fromSeq: -1 })
+    if (!stream) throw new Error('expected subscribe to return a stream')
 
     registry.pushEvent(turn.turnId, {
       type: 'text_delta',
@@ -158,6 +161,31 @@ describe('TurnRegistry', () => {
     expect(registry.getActiveFor('agent-1')?.turnId).toBe(turn.turnId)
     registry.pushEvent(turn.turnId, { type: 'done', stopReason: 'end_turn' })
     expect(registry.getActiveFor('agent-1')).toBeUndefined()
+  })
+
+  it('tracks separate active turns for the same agent in different sessions', () => {
+    const registry = makeRegistry()
+    const sidepanelSession = '00000000-0000-4000-8000-000000000001'
+
+    const mainTurn = registry.register('agent-1', 'main')
+    const sidepanelTurn = registry.register('agent-1', sidepanelSession)
+
+    expect(registry.getActiveFor('agent-1', 'main')?.turnId).toBe(
+      mainTurn.turnId,
+    )
+    expect(registry.getActiveFor('agent-1', sidepanelSession)?.turnId).toBe(
+      sidepanelTurn.turnId,
+    )
+
+    registry.pushEvent(mainTurn.turnId, {
+      type: 'done',
+      stopReason: 'end_turn',
+    })
+
+    expect(registry.getActiveFor('agent-1', 'main')).toBeUndefined()
+    expect(registry.getActiveFor('agent-1', sidepanelSession)?.turnId).toBe(
+      sidepanelTurn.turnId,
+    )
   })
 
   it('evicts terminal turns past the retain window via sweep', () => {

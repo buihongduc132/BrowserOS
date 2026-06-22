@@ -1,0 +1,23 @@
+# SOURCE: coding-guard internal — enforces per-session workspace override (Wave C)
+# SOURCE: https://en.wikipedia.org/wiki/Single_responsibility_principle
+# BUILT_ON: https://ast-grep.com/
+id: no-bypass-workspace-override
+message: "Use repo.getWorkspaces(sessionId) instead of global workspace storage when per-session workspace is available"
+severity: info
+language: TypeScript
+note: |
+  After Wave C, workspace per conversation/session is managed through the repo.
+  Direct access to selectedWorkspaceStorage in files that also import session-repo
+  should use the per-session override instead.
+rule:
+  pattern: $STORE.selectedWorkspace
+constraints:
+  STORE:
+    regex: '(selectedWorkspaceStorage|workspace-storage|workspaceStorage)'
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/session-repo/**'
+  - '**/workspace-storage.ts'
+  - '**/usePerSessionWorkspace.ts'

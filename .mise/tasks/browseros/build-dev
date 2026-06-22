@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
-REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-[[ -d "${REPO_ROOT}/packages/browseros-agent" ]] || REPO_ROOT="$(pwd)"
-cd "${REPO_ROOT}/packages/browseros-agent"
-bun run build:agent:dev
+# build-dev — Build dev extension only (no launch)
+# The Go CLI builds as part of watch --manual, but this is useful for
+# pre-building without starting the browser.
+REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+AGENT_DIR="${REPO_ROOT}/packages/browseros-agent/apps/agent"
+
+cd "${AGENT_DIR}"
+bun --env-file=.env.development wxt build --mode development

@@ -10,7 +10,7 @@ echo "Cleaning up BrowserOS test resources..."
 # Test ports (from setup.ts defaults)
 CDP_PORT=${CDP_PORT:-9005}
 SERVER_PORT=${SERVER_PORT:-9105}
-EXTENSION_PORT=${EXTENSION_PORT:-9305}
+EXTENSION_PORT=${EXTENSION_PORT:-9310}
 
 for port in $CDP_PORT $SERVER_PORT $EXTENSION_PORT; do
   pid=$(lsof -ti :$port 2>/dev/null || true)

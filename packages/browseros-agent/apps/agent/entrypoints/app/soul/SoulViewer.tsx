@@ -41,7 +41,6 @@ export const SoulViewer: FC = () => {
   }
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: mouseEnter for background refetch, not user interaction
     <div
       className="rounded-xl border border-border bg-card shadow-sm"
       onMouseEnter={() => refetch()}
