@@ -1,5 +1,4 @@
 import { createParser, type EventSourceMessage } from 'eventsource-parser'
-import type { ChatMode } from '@/entrypoints/sidepanel/index/chatTypes'
 import { getAgentServerUrl } from '@/lib/browseros/helpers'
 import {
   createDefaultBrowserOSProvider,
@@ -9,17 +8,22 @@ import {
 import type { LlmProviderConfig } from '@/lib/llm-providers/types'
 import { mcpServerStorage } from '@/lib/mcp/mcpServerStorage'
 import { buildChatRequestBody } from '@/lib/messaging/server/buildChatRequestBody'
+import type { ChatMode } from '@/modules/chat/chat-types'
+import {
+  findCloudChatProviderById,
+  resolveCloudChatProvider,
+} from '../llm-providers/provider-runtime'
 import { personalizationStorage } from '../personalization/personalizationStorage'
 import { scheduleSystemPrompt } from './scheduleSystemPrompt'
 import type { ToolCallExecution } from './scheduleTypes'
 
-interface ActiveTab {
+export interface ActiveTab {
   id?: number
   url?: string
   title?: string
 }
 
-interface ChatServerRequest {
+export interface ChatServerRequest {
   message: string
   mode?: ChatMode
   conversationId?: string
@@ -29,7 +33,7 @@ interface ChatServerRequest {
   providerId?: string
 }
 
-interface ChatServerResponse {
+export interface ChatServerResponse {
   text: string
   conversationId: string
   finalResult: string
@@ -73,17 +77,15 @@ const getDefaultProvider = async (): Promise<LlmProviderConfig | null> => {
   if (!providers?.length) return null
 
   const defaultProviderId = await defaultProviderIdStorage.getValue()
-  const defaultProvider = providers.find((p) => p.id === defaultProviderId)
-  return defaultProvider ?? providers[0] ?? null
+  return resolveCloudChatProvider(providers, defaultProviderId)
 }
 
-// Resolve provider by ID, falling back to global default
 const resolveProvider = async (
   providerId?: string,
 ): Promise<LlmProviderConfig> => {
   if (providerId) {
     const providers = await providersStorage.getValue()
-    const match = providers?.find((p) => p.id === providerId)
+    const match = findCloudChatProviderById(providers ?? [], providerId)
     if (match) return match
   }
   return (await getDefaultProvider()) ?? createDefaultBrowserOSProvider()
@@ -104,7 +106,6 @@ export async function getChatServerResponse(
     .filter((name): name is string => !!name)
   const customMcpServers = mcpServers
     .filter((s) => s.type === 'custom' && !!s.config?.url)
-    // biome-ignore lint/style/noNonNullAssertion: filter guarantees url exists
     .map((s) => ({ name: s.displayName, url: s.config!.url }))
 
   const response = await fetch(`${agentServerUrl}/chat`, {

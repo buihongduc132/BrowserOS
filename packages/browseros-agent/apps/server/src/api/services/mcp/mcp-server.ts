@@ -4,28 +4,20 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import type { AclRule } from '@browseros/shared/types/acl'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js'
-import type { Browser } from '../../../browser/browser'
-import type { ToolExecutionObserver } from '../../../monitoring/observer'
-import type { ToolRegistry } from '../../../tools/tool-registry'
-import {
-  type KlavisProxyRef,
-  registerKlavisTools,
-} from '../klavis/strata-proxy'
+import type { BrowserSession } from '../../../browser/core/session'
+import type { ConnectorToolScope, KlavisService } from '../klavis'
 import { MCP_INSTRUCTIONS } from './mcp-prompt'
 import { registerTools } from './register-mcp'
 
 export interface McpServiceDeps {
   version: string
-  registry: ToolRegistry
-  browser: Browser
-  executionDir: string
-  resourcesDir: string
-  aclRules?: AclRule[]
-  klavisRef?: KlavisProxyRef
-  observer?: ToolExecutionObserver
+  browserSession: BrowserSession
+  klavis?: KlavisService
+  connectorScope?: ConnectorToolScope
+  defaultWindowId?: number
+  defaultTabGroupId?: string
 }
 
 export function createMcpServer(deps: McpServiceDeps): McpServer {
@@ -42,21 +34,13 @@ export function createMcpServer(deps: McpServiceDeps): McpServer {
     return {}
   })
 
-  // Register browser tools
-  registerTools(server, deps.registry, {
-    browser: deps.browser,
-    directories: {
-      workingDir: deps.executionDir,
-      resourcesDir: deps.resourcesDir,
-    },
-    aclRules: deps.aclRules,
-    observer: deps.observer,
+  registerTools(server, {
+    browserSession: deps.browserSession,
+    defaultWindowId: deps.defaultWindowId,
+    defaultTabGroupId: deps.defaultTabGroupId,
   })
 
-  // Register Klavis proxy tools (if connected via background init)
-  if (deps.klavisRef?.handle) {
-    registerKlavisTools(server, deps.klavisRef.handle, deps.observer)
-  }
+  deps.klavis?.registerMcpTools(server, deps.connectorScope)
 
   return server
 }

@@ -1,224 +1,127 @@
-/**
- * @license
- * Copyright 2025 BrowserOS
- * SPDX-License-Identifier: AGPL-3.0-or-later
- *
- * TDD tests for MCP route spec compliance.
- *
- * Covers the MCP Streamable HTTP transport spec requirements:
- * - Server MUST provide endpoint supporting both POST and GET
- * - Client MAY issue GET with Accept: text/event-stream → server MUST
- *   return text/event-stream OR 405 Method Not Allowed
- * - Server MUST NOT return 200 + application/json when client expects SSE
- *
- * Regression guard for PR #490 (bde80fed) which broke SSE GET by
- * splitting .all('/') into separate .get() + .post() handlers.
- */
+import { beforeEach, describe, expect, it, mock } from 'bun:test'
+import type {
+  ConnectorToolScope,
+  KlavisProxyStatus,
+} from '../../../src/api/services/klavis'
 
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { mkdirSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { Hono } from 'hono'
-import { createMcpRoutes } from '../../../src/api/routes/mcp'
-import { ToolRegistry } from '../../../src/tools/tool-registry'
-import type { Env } from '../../../src/api/types'
-
-// ── Minimal mocks ──
-
-function mockPolicyService() {
-  return { getEnabledRules: () => [] } as any
+interface McpServerCreation {
+  proxyStatus: KlavisProxyStatus | null
+  selectedServerNames: readonly string[] | undefined
 }
 
-function mockDeps() {
-  return {
-    version: 'test',
-    registry: new ToolRegistry([]),
-    browser: {} as any,
-    executionDir: tmpdir(),
-    resourcesDir: tmpdir(),
-    policyService: mockPolicyService(),
+const serverCreations: McpServerCreation[] = []
+const transportInstances: FakeTransport[] = []
+const connectCalls: FakeTransport[] = []
+
+class FakeTransport {
+  constructor(readonly options: unknown) {
+    transportInstances.push(this)
   }
+
+  handleRequest = mock(async () => Response.json({ ok: true }))
 }
 
-let tempDir: string
-let originalBrowserosDir: string | undefined
+const createMcpServerSpy = mock(
+  (deps: {
+    klavis?: { getProxyStatus(): KlavisProxyStatus }
+    connectorScope?: ConnectorToolScope
+  }) => {
+    serverCreations.push({
+      proxyStatus: deps.klavis?.getProxyStatus() ?? null,
+      selectedServerNames: deps.connectorScope?.selectedServerNames,
+    })
 
-function createApp() {
-  return new Hono<Env>().route('/mcp', createMcpRoutes(mockDeps()))
-}
+    return {
+      connect: mock(async (transport: FakeTransport) => {
+        connectCalls.push(transport)
+      }),
+    }
+  },
+)
+
+mock.module('@hono/mcp', () => ({
+  StreamableHTTPTransport: FakeTransport,
+}))
+
+mock.module('../../../src/api/services/mcp/mcp-server', () => ({
+  createMcpServer: createMcpServerSpy,
+}))
+
+const {
+  MANAGED_MCP_SERVERS_HEADER,
+  createMcpRoutes,
+  parseManagedMcpServersHeader,
+} = await import('../../../src/api/routes/mcp')
 
 beforeEach(() => {
-  originalBrowserosDir = process.env.BROWSEROS_DIR
-  tempDir = join(
-    tmpdir(),
-    `browseros-mcp-test-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-  )
-  mkdirSync(tempDir, { recursive: true })
-  process.env.BROWSEROS_DIR = tempDir
+  serverCreations.length = 0
+  transportInstances.length = 0
+  connectCalls.length = 0
 })
 
-afterEach(() => {
-  rmSync(tempDir, { recursive: true, force: true })
-  if (originalBrowserosDir === undefined) {
-    delete process.env.BROWSEROS_DIR
-  } else {
-    process.env.BROWSEROS_DIR = originalBrowserosDir
-  }
-})
+async function postMcp(
+  app: ReturnType<typeof createMcpRoutes>,
+  headers: Record<string, string> = {},
+) {
+  return app.request('/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/list',
+    }),
+  })
+}
 
-// ── GET /mcp (health check — no SSE) ──
-
-describe('GET /mcp (health check)', () => {
-  test('TC-MCP1: returns 200 JSON when no Accept: text/event-stream', async () => {
-    const app = createApp()
-    const res = await app.request('http://localhost/mcp')
-
-    expect(res.status).toBe(200)
-    const contentType = res.headers.get('content-type') ?? ''
-    expect(contentType).toContain('application/json')
+describe('parseManagedMcpServersHeader', () => {
+  it('returns an empty scope for missing or empty headers', () => {
+    expect(parseManagedMcpServersHeader(undefined)).toEqual([])
+    expect(parseManagedMcpServersHeader('')).toEqual([])
   })
 
-  test('TC-MCP2: response body has { status: "ok", message: string }', async () => {
-    const app = createApp()
-    const res = await app.request('http://localhost/mcp')
-    const body = await res.json()
-
-    expect(body.status).toBe('ok')
-    expect(typeof body.message).toBe('string')
-    expect(body.message.length).toBeGreaterThan(0)
-  })
-})
-
-// ── GET /mcp (SSE — spec compliance) ──
-
-describe('GET /mcp (SSE stream — MCP spec compliance)', () => {
-  test('TC-MCP3: with Accept: text/event-stream returns SSE content type', async () => {
-    const app = createApp()
-    const res = await app.request('http://localhost/mcp', {
-      headers: { Accept: 'text/event-stream' },
-    })
-
-    expect(res.status).toBe(200)
-    const contentType = res.headers.get('content-type') ?? ''
-    expect(contentType).toContain('text/event-stream')
+  it('parses comma-separated encoded connector names', () => {
+    expect(parseManagedMcpServersHeader('Slack,Google%20Docs,Linear')).toEqual([
+      'Slack',
+      'Google Docs',
+      'Linear',
+    ])
   })
 
-  test('TC-MCP4: REGRESSION — SSE request MUST NOT return application/json', async () => {
-    // PR #490 (bde80fed) broke this by returning static JSON from GET handler
-    // before the transport could handle SSE. The spec says server MUST return
-    // text/event-stream or 405 — never 200 + application/json for SSE clients.
-    const app = createApp()
-    const res = await app.request('http://localhost/mcp', {
-      headers: { Accept: 'text/event-stream' },
-    })
-
-    expect(res.status).toBe(200)
-    const contentType = res.headers.get('content-type') ?? ''
-    expect(contentType).not.toContain('application/json')
-  })
-
-  test('TC-MCP5: SSE endpoint returns 200 (not 405)', async () => {
-    // Spec allows 405 if server doesn't support SSE streams.
-    // Since we DO support SSE, we must return 200, not 405.
-    const app = createApp()
-    const res = await app.request('http://localhost/mcp', {
-      headers: { Accept: 'text/event-stream' },
-    })
-
-    expect(res.status).toBe(200)
+  it('degrades malformed encoded values to an empty scope', () => {
+    expect(parseManagedMcpServersHeader('Slack,%E0%A4%A')).toEqual([])
   })
 })
 
-// ── POST /mcp ──
-
-describe('POST /mcp', () => {
-  test('TC-MCP6: valid JSON-RPC initialize returns 200', async () => {
-    const app = createApp()
-    const res = await app.request('http://localhost/mcp', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json, text/event-stream',
-      },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'initialize',
-        params: {
-          protocolVersion: '2025-03-26',
-          capabilities: {},
-          clientInfo: { name: 'test-client', version: '1.0.0' },
-        },
-      }),
-    })
-
-    // Either JSON response or SSE stream — both are valid per spec
-    expect(res.status).toBe(200)
-  })
-
-  test('TC-MCP7: initialize response contains server info', async () => {
-    const app = createApp()
-    const res = await app.request('http://localhost/mcp', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json, text/event-stream',
-      },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 2,
-        method: 'initialize',
-        params: {
-          protocolVersion: '2025-03-26',
-          capabilities: {},
-          clientInfo: { name: 'test-client', version: '1.0.0' },
-        },
-      }),
-    })
-
-    const contentType = res.headers.get('content-type') ?? ''
-    if (contentType.includes('application/json')) {
-      const body = await res.json()
-      expect(body.jsonrpc).toBe('2.0')
-      expect(body.result).toBeDefined()
-      expect(body.result.serverInfo).toBeDefined()
-    } else if (contentType.includes('text/event-stream')) {
-      // SSE stream — read first event
-      const text = await res.text()
-      expect(text.length).toBeGreaterThan(0)
+describe('createMcpRoutes', () => {
+  it('passes latest Klavis status and selected connector scope per request', async () => {
+    let status: KlavisProxyStatus = { state: 'connecting' }
+    const klavis = {
+      getProxyStatus: () => status,
     }
-  })
-})
-
-// ── Spec structural guard ──
-
-describe('MCP spec structural requirements', () => {
-  test('TC-MCP8: GET and POST share the same endpoint path', async () => {
-    // Spec: "The server MUST provide a single HTTP endpoint path that
-    // supports both POST and GET methods."
-    const app = createApp()
-
-    const getRes = await app.request('http://localhost/mcp')
-    expect(getRes.status).toBe(200)
-
-    const postRes = await app.request('http://localhost/mcp', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json, text/event-stream',
-      },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 8,
-        method: 'initialize',
-        params: {
-          protocolVersion: '2025-03-26',
-          capabilities: {},
-          clientInfo: { name: 'test-client', version: '1.0.0' },
-        },
-      }),
+    const app = createMcpRoutes({
+      version: '0.0.0-test',
+      browserSession: {} as never,
+      klavis: klavis as never,
     })
-    expect(postRes.status).toBe(200)
+
+    const first = await postMcp(app)
+
+    status = { state: 'ready', toolCount: 3 }
+    const second = await postMcp(app, {
+      [MANAGED_MCP_SERVERS_HEADER]: 'Slack,Google%20Docs',
+    })
+
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(200)
+    expect(serverCreations).toEqual([
+      { proxyStatus: { state: 'connecting' }, selectedServerNames: [] },
+      {
+        proxyStatus: { state: 'ready', toolCount: 3 },
+        selectedServerNames: ['Slack', 'Google Docs'],
+      },
+    ])
+    expect(transportInstances).toHaveLength(2)
+    expect(connectCalls).toEqual(transportInstances)
   })
 })

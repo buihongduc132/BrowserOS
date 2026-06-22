@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 
@@ -61,14 +60,6 @@ type dogfoodConfigFile struct {
 	} `yaml:"ports"`
 }
 
-func defaultBrowserUserDataDirs() []string {
-	if runtime.GOOS == "linux" {
-		home, _ := os.UserHomeDir()
-		return []string{filepath.Join(home, ".browseros-dev-chrome")}
-	}
-	return []string{"/tmp/browseros-dev"}
-}
-
 func resolveResetTarget(root string, opts resetTargetOptions) (resetTarget, error) {
 	target := strings.TrimSpace(opts.Target)
 	if target == "" {
@@ -95,17 +86,21 @@ func resolveDevTarget(root string, opts resetTargetOptions) (resetTarget, error)
 	if err != nil {
 		return resetTarget{}, err
 	}
+	devProfile, err := proc.DefaultDevUserDataDir(root)
+	if err != nil {
+		return resetTarget{}, err
+	}
 	return resetTarget{
 		Name:                targetDev,
 		Title:               "BrowserOS dev reset",
 		BrowserOSDir:        browserosDir,
 		LimaHome:            filepath.Join(browserosDir, "lima"),
 		Ports:               &ports,
-		BrowserUserDataDirs: defaultBrowserUserDataDirs(),
+		BrowserUserDataDirs: []string{"/tmp/browseros-dev", devProfile},
 		TempPrefixes:        []string{"browseros-test-", "browseros-dev-"},
 		WatchRunStateDir:    filepath.Join(browserosDir, "runs"),
 		DeleteRootLabel:     "Delete dev profile?",
-		DeleteRootBody:      "It removes BrowserOS dev data plus VM/OpenClaw state.",
+		DeleteRootBody:      "It removes BrowserOS dev data plus VM state.",
 	}, nil
 }
 
@@ -151,7 +146,7 @@ func resolveDogfoodTarget(opts resetTargetOptions) (resetTarget, error) {
 		Ports:               &ports,
 		BrowserUserDataDirs: []string{browserUserDataDir},
 		DeleteRootLabel:     "Delete dogfood BrowserOS state?",
-		DeleteRootBody:      "It removes dogfood-local BrowserOS server data plus VM/OpenClaw state. It does not touch your source BrowserOS browser profile.",
+		DeleteRootBody:      "It removes dogfood-local BrowserOS server data plus VM state. It does not touch your source BrowserOS browser profile.",
 		Dogfood: &dogfoodRuntimeTarget{
 			ConfigDir:  cfgDir,
 			LockPath:   filepath.Join(cfgDir, "run.lock"),
@@ -192,7 +187,7 @@ func resolveProdTarget(opts resetTargetOptions) (resetTarget, error) {
 		BrowserOSDir:    browserosDir,
 		LimaHome:        filepath.Join(browserosDir, "lima"),
 		DeleteRootLabel: "Delete prod BrowserOS state?",
-		DeleteRootBody:  "It removes ~/.browseros server data plus VM/OpenClaw state. It does not delete your BrowserOS browser profile.",
+		DeleteRootBody:  "It removes ~/.browseros server data plus VM state. It does not delete your BrowserOS browser profile.",
 	}, nil
 }
 

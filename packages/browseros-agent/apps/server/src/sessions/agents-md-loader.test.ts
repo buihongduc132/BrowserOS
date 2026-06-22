@@ -4,18 +4,16 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import {
-  mkdtempSync,
-  writeFileSync,
   mkdirSync,
+  mkdtempSync,
   rmSync,
   symlinkSync,
-  renameSync,
-  existsSync,
+  writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve, dirname } from 'node:path'
+import { join, resolve } from 'node:path'
 import { AgentsMdLoader } from './agents-md-loader'
 
 // ── Helpers ──
@@ -45,7 +43,9 @@ describe('AgentsMdLoader', () => {
 
   afterEach(() => {
     for (const d of [tmpDir1, tmpDir2, outsideDir]) {
-      try { rmSync(d, { recursive: true, force: true }) } catch {}
+      try {
+        rmSync(d, { recursive: true, force: true })
+      } catch {}
     }
   })
 
@@ -62,7 +62,9 @@ describe('AgentsMdLoader', () => {
 
     test('rejects path that resolves outside allowlist', async () => {
       // Create a subdir inside tmpDir1, then try to read from outside
-      const sub = mkdirSync(join(tmpDir1, 'sub'), { recursive: true }) ?? join(tmpDir1, 'sub')
+      const sub =
+        mkdirSync(join(tmpDir1, 'sub'), { recursive: true }) ??
+        join(tmpDir1, 'sub')
       const loader = new AgentsMdLoader([tmpDir1])
       // Try to load from tmpDir2 (not in allowlist) via traversal
       const attackPath = join(sub, '..', '..', '..', 'etc', 'passwd')
@@ -127,7 +129,9 @@ describe('AgentsMdLoader', () => {
     })
 
     test('returns null for nonexistent workspace path', async () => {
-      const loader = new AgentsMdLoader(['/nonexistent/path/that/does/not/exist'])
+      const loader = new AgentsMdLoader([
+        '/nonexistent/path/that/does/not/exist',
+      ])
       const result = await loader.load('/nonexistent/path/that/does/not/exist')
       expect(result).toBeNull()
     })
@@ -207,7 +211,7 @@ describe('AgentsMdLoader', () => {
       expect(first!.content).toBe('# Original')
 
       // Modify file (need a small delay to ensure mtime changes on some filesystems)
-      await new Promise(r => setTimeout(r, 10))
+      await new Promise((r) => setTimeout(r, 10))
       makeAgendumMd(tmpDir1, '# Updated')
 
       const second = await loader.load(tmpDir1)
@@ -227,7 +231,7 @@ describe('AgentsMdLoader', () => {
 
       const results = await loader.loadMultiple([tmpDir1, tmpDir2])
       expect(results).toHaveLength(2)
-      const contents = results.map(r => r.content).sort()
+      const contents = results.map((r) => r.content).sort()
       expect(contents).toEqual(['# Workspace 1', '# Workspace 2'])
     })
 
@@ -308,7 +312,8 @@ describe('AgentsMdLoader', () => {
 
   describe('normal load', () => {
     test('returns content for valid AGENTS.md', async () => {
-      const content = '# My Project\n\nUse TypeScript. Prefer function components.'
+      const content =
+        '# My Project\n\nUse TypeScript. Prefer function components.'
       makeAgendumMd(tmpDir1, content)
       const loader = new AgentsMdLoader([tmpDir1])
 

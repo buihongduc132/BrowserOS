@@ -16,8 +16,6 @@ describe('grader python script layout', () => {
     expect(await exists(resolve(pythonDir, 'agisdk-evaluate.py'))).toBe(true)
     expect(await exists(resolve(pythonDir, 'infinity-evaluate.py'))).toBe(true)
     expect(await exists(resolve(scriptsDir, 'agisdk-evaluate.py'))).toBe(true)
-    expect(await exists(resolve(scriptsDir, 'infinity-evaluate.py'))).toBe(
-      true,
-    )
+    expect(await exists(resolve(scriptsDir, 'infinity-evaluate.py'))).toBe(true)
   })
 })

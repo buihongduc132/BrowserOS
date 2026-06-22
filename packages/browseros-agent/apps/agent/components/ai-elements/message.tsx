@@ -85,7 +85,6 @@ export const AssistantMessageBody = ({
       className,
     )}
     data-role="assistant-scroll-body"
-    tabIndex={0}
     {...props}
   >
     {children}

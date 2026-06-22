@@ -23,19 +23,14 @@ import type {
   HarnessAgentAdapter,
 } from './agent-harness-types'
 import type { CreateAgentRuntime, ProviderOption } from './agents-page-types'
-import { ProviderSelector } from './OpenClawControls'
-import {
-  type OpenClawCliProvider,
-  type OpenClawCliProviderAuthStatus,
-  OpenClawCliProviderStatusPanel,
-} from './openclaw-cli-providers'
+import { ProviderSelector } from './ProviderSelector'
 
 /** Probe result badge — extracted to reduce parent complexity */
 const ProbeResultBadge: FC<{
   result: { healthy: boolean; error?: string } | null
-}> = ({ result }) => {
-  if (!result) return null
-  if (result.healthy) {
+}> = ({ result: _result }) => {
+  if (!_result) return null
+  if (_result.healthy) {
     return (
       <span className="flex items-center gap-1 text-green-600 text-sm">
         <CheckCircle className="size-4" /> ACP ready
@@ -44,14 +39,13 @@ const ProbeResultBadge: FC<{
   }
   return (
     <span className="flex items-center gap-1 text-sm text-yellow-600">
-      <TriangleAlert className="size-4" /> {result.error ?? 'Probe failed'}
+      <TriangleAlert className="size-4" /> {_result.error ?? 'Probe failed'}
     </span>
   )
 }
 
 interface NewAgentDialogProps {
   adapters: HarnessAdapterDescriptor[]
-  canManageOpenClaw: boolean
   createError: string | null
   createRuntime: CreateAgentRuntime
   creating: boolean
@@ -68,13 +62,6 @@ interface NewAgentDialogProps {
   hermesSelectedProviderId: string
   name: string
   open: boolean
-  providers: ProviderOption[]
-  selectedCliProvider: OpenClawCliProvider | undefined
-  selectedProviderId: string
-  cliAuthError: Error | null
-  cliAuthLoading: boolean
-  cliAuthStatus: OpenClawCliProviderAuthStatus | undefined
-  onConnectCliProvider: () => void
   onCreate: () => void
   onOpenChange: (open: boolean) => void
   onRuntimeChange: (runtime: CreateAgentRuntime) => void
@@ -93,7 +80,6 @@ interface NewAgentDialogProps {
 
 export const NewAgentDialog: FC<NewAgentDialogProps> = ({
   adapters,
-  canManageOpenClaw,
   createError,
   createRuntime,
   creating,
@@ -110,13 +96,6 @@ export const NewAgentDialog: FC<NewAgentDialogProps> = ({
   hermesSelectedProviderId,
   name,
   open,
-  providers,
-  selectedCliProvider,
-  selectedProviderId,
-  cliAuthError,
-  cliAuthLoading,
-  cliAuthStatus,
-  onConnectCliProvider,
   onCreate,
   onOpenChange,
   onRuntimeChange,
@@ -125,22 +104,21 @@ export const NewAgentDialog: FC<NewAgentDialogProps> = ({
   onHarnessReasoningChange,
   onHermesProviderChange,
   onNameChange,
-  onProviderChange,
+  onProviderChange: _onProviderChange,
   onCustomCommandChange = () => {},
   onCustomArgsChange = () => {},
-  onCustomLabelChange = () => {},
+  onCustomLabelChange: _onCustomLabelChange = () => {},
   onProbeCustom = () => {},
   onImportAcpx = () => {},
 }) => {
   const selectedHarnessAdapter =
     adapters.find((adapter) => adapter.id === harnessAdapterId) ?? adapters[0]
-  const isHarnessRuntime = createRuntime !== 'openclaw'
   const isHermesRuntime = createRuntime === 'hermes'
   const isCustomRuntime = createRuntime === 'custom'
   const isClassicHarnessRuntime =
     isHarnessRuntime && !isHermesRuntime && !isCustomRuntime
-  const openClawBlocked = createRuntime === 'openclaw' && !canManageOpenClaw
-  const cliBlocked =
+  const _openClawBlocked = createRuntime === 'openclaw' && !canManageOpenClaw
+  const _cliBlocked =
     createRuntime === 'openclaw' &&
     !!selectedCliProvider &&
     !cliAuthStatus?.loggedIn
@@ -151,8 +129,6 @@ export const NewAgentDialog: FC<NewAgentDialogProps> = ({
   const canCreate =
     Boolean(name.trim()) &&
     !creating &&
-    !openClawBlocked &&
-    !cliBlocked &&
     !hermesBlocked &&
     !customBlocked &&
     (createRuntime === 'openclaw'
@@ -183,9 +159,7 @@ export const NewAgentDialog: FC<NewAgentDialogProps> = ({
               id="agent-name"
               value={name}
               onChange={(event) => onNameChange(event.target.value)}
-              placeholder={
-                createRuntime === 'openclaw' ? 'research-agent' : 'Review bot'
-              }
+              placeholder="Review bot"
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && canCreate) onCreate()
               }}
@@ -198,14 +172,13 @@ export const NewAgentDialog: FC<NewAgentDialogProps> = ({
               value={createRuntime}
               onValueChange={(value) => {
                 if (
-                  value === 'openclaw' ||
                   value === 'claude' ||
                   value === 'codex' ||
                   value === 'hermes' ||
                   value === 'custom'
                 ) {
                   onRuntimeChange(value)
-                  if (value !== 'openclaw') onHarnessAdapterChange(value)
+                  onHarnessAdapterChange(value)
                 }
               }}
             >
@@ -221,39 +194,6 @@ export const NewAgentDialog: FC<NewAgentDialogProps> = ({
               </SelectContent>
             </Select>
           </div>
-
-          {createRuntime === 'openclaw' ? (
-            <>
-              {openClawBlocked ? (
-                <Alert>
-                  <AlertCircle className="size-4" />
-                  <AlertTitle>OpenClaw is not ready</AlertTitle>
-                  <AlertDescription>
-                    Start or set up the OpenClaw gateway before creating an
-                    OpenClaw agent.
-                  </AlertDescription>
-                </Alert>
-              ) : null}
-
-              <ProviderSelector
-                providers={providers}
-                defaultProviderId={defaultProviderId}
-                selectedId={selectedProviderId}
-                onSelect={onProviderChange}
-                hideApiKeyHint={!!selectedCliProvider}
-              />
-
-              {selectedCliProvider ? (
-                <OpenClawCliProviderStatusPanel
-                  provider={selectedCliProvider}
-                  status={cliAuthStatus}
-                  loading={cliAuthLoading}
-                  fetchError={cliAuthError}
-                  onConnect={onConnectCliProvider}
-                />
-              ) : null}
-            </>
-          ) : null}
 
           {isHermesRuntime ? (
             <ProviderSelector

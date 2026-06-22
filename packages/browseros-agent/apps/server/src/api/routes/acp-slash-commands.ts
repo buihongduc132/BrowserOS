@@ -96,7 +96,7 @@ export async function dispatchCommand(
       error: `Unknown command: /${cmdName}. Available: ${Array.from(
         commands.keys(),
       )
-        .map((k) => '/' + k)
+        .map((k) => `/${k}`)
         .join(', ')}`,
     }
   }

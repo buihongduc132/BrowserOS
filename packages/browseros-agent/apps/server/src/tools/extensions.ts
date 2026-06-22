@@ -7,9 +7,9 @@
  * Delegates to browser/extensions.ts module via Browser class methods.
  */
 
+import type { StorageArea } from '@browseros/cdp-protocol/domains/extensions'
 import { z } from 'zod'
 import { defineToolWithCategory } from './framework'
-import type { StorageArea } from '@browseros/cdp-protocol/domains/extensions'
 
 const defineExtTool = defineToolWithCategory('data-modification')
 const defineExtReadTool = defineToolWithCategory('observation')
@@ -60,9 +60,7 @@ export const get_extension_storage = defineExtReadTool({
   description:
     'Get storage items from an extension. Supports local, sync, session, and managed (read-only) areas.',
   input: z.object({
-    extensionId: z
-      .string()
-      .describe('Extension ID to read storage from'),
+    extensionId: z.string().describe('Extension ID to read storage from'),
     storageArea: z
       .enum(['local', 'sync', 'session', 'managed'])
       .describe('Storage area to read'),
@@ -100,15 +98,11 @@ export const set_extension_storage = defineExtTool({
   description:
     'Set storage items for an extension. Supports local, sync, and session areas. Managed storage is read-only.',
   input: z.object({
-    extensionId: z
-      .string()
-      .describe('Extension ID to write storage to'),
+    extensionId: z.string().describe('Extension ID to write storage to'),
     storageArea: z
       .enum(['local', 'sync', 'session'])
       .describe('Storage area to write'),
-    values: z
-      .record(z.unknown())
-      .describe('Key-value pairs to set'),
+    values: z.record(z.unknown()).describe('Key-value pairs to set'),
   }),
   output: z.object({
     action: z.literal('set_storage'),
@@ -137,16 +131,9 @@ export const remove_extension_storage = defineExtTool({
   description:
     'Remove specific keys from an extension storage area. Managed storage is read-only.',
   input: z.object({
-    extensionId: z
-      .string()
-      .describe('Extension ID'),
-    storageArea: z
-      .enum(['local', 'sync', 'session'])
-      .describe('Storage area'),
-    keys: z
-      .array(z.string())
-      .min(1)
-      .describe('Keys to remove (at least one)'),
+    extensionId: z.string().describe('Extension ID'),
+    storageArea: z.enum(['local', 'sync', 'session']).describe('Storage area'),
+    keys: z.array(z.string()).min(1).describe('Keys to remove (at least one)'),
   }),
   output: z.object({
     action: z.literal('remove_storage'),
@@ -177,9 +164,7 @@ export const clear_extension_storage = defineExtTool({
   description:
     'Clear all items from an extension storage area. Managed storage is read-only.',
   input: z.object({
-    extensionId: z
-      .string()
-      .describe('Extension ID'),
+    extensionId: z.string().describe('Extension ID'),
     storageArea: z
       .enum(['local', 'sync', 'session'])
       .describe('Storage area to clear'),
@@ -194,9 +179,7 @@ export const clear_extension_storage = defineExtTool({
       args.extensionId,
       args.storageArea as StorageArea,
     )
-    response.text(
-      `Cleared ${args.storageArea} storage for ${args.extensionId}`,
-    )
+    response.text(`Cleared ${args.storageArea} storage for ${args.extensionId}`)
     response.data({
       action: 'clear_storage',
       extensionId: args.extensionId,
@@ -245,8 +228,7 @@ export const list_extensions = defineExtReadTool({
 
 export const get_extension_info = defineExtReadTool({
   name: 'get_extension_info',
-  description:
-    'Get detailed info for a specific extension.',
+  description: 'Get detailed info for a specific extension.',
   input: z.object({
     extensionId: z.string().describe('Extension ID'),
   }),
@@ -258,7 +240,9 @@ export const get_extension_info = defineExtReadTool({
   }),
   handler: async (args, ctx, response) => {
     const info = await ctx.browser.getExtensionInfo(args.extensionId)
-    response.text(`Extension: ${info.name} (${info.id}) v${info.version} — ${info.state}`)
+    response.text(
+      `Extension: ${info.name} (${info.id}) v${info.version} — ${info.state}`,
+    )
     response.data({
       id: info.id,
       name: info.name,
@@ -270,8 +254,7 @@ export const get_extension_info = defineExtReadTool({
 
 export const enable_extension = defineExtTool({
   name: 'enable_extension',
-  description:
-    'Enable a disabled extension.',
+  description: 'Enable a disabled extension.',
   input: z.object({
     extensionId: z.string().describe('Extension ID to enable'),
   }),
@@ -309,17 +292,13 @@ export const disable_extension = defineExtTool({
 export const send_extension_message = defineExtTool({
   name: 'send_extension_message',
   description:
-    'Send a JSON message to an extension\'s chrome.runtime.onMessage listener. '
-    + 'Discovers the extension\'s service worker via CDP and injects the message. '
-    + 'Only works for extensions with sync onMessage responders (V1 limitation). '
-    + 'Returns the extension\'s response or null if no handler responded.',
+    "Send a JSON message to an extension's chrome.runtime.onMessage listener. " +
+    "Discovers the extension's service worker via CDP and injects the message. " +
+    'Only works for extensions with sync onMessage responders (V1 limitation). ' +
+    "Returns the extension's response or null if no handler responded.",
   input: z.object({
-    extensionId: z
-      .string()
-      .describe('Target extension ID'),
-    message: z
-      .unknown()
-      .describe('JSON-serializable message payload'),
+    extensionId: z.string().describe('Target extension ID'),
+    message: z.unknown().describe('JSON-serializable message payload'),
     timeout: z
       .number()
       .min(100)
@@ -350,9 +329,9 @@ export const send_extension_message = defineExtTool({
 export const list_messageable_extensions = defineExtReadTool({
   name: 'list_messageable_extensions',
   description:
-    'List extensions with active service workers that can receive messages. '
-    + 'Only returns extensions with currently running service workers. '
-    + 'Use send_extension_message to wake up suspended workers.',
+    'List extensions with active service workers that can receive messages. ' +
+    'Only returns extensions with currently running service workers. ' +
+    'Use send_extension_message to wake up suspended workers.',
   input: z.object({}),
   output: z.object({
     extensions: z.array(

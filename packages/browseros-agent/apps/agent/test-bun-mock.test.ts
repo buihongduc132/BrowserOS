@@ -1,12 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, mock, vi } from 'bun:test'
-import { createElement } from 'react'
+import { describe, expect, it, vi } from 'bun:test'
 
 vi.mock('@/lib/utils', () => ({
   cn: (...args: unknown[]) =>
     args.filter((a) => typeof a === 'string' && a.length > 0).join(' '),
 }))
 
-const mod = await import('react')
+const _mod = await import('react')
 
 describe('test', () => {
   it('works', () => {

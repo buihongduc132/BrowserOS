@@ -26,7 +26,6 @@ export interface BuildSectionsInput {
 const BLOCKER_RE =
   /\b(fail(ed|s|ure|ing)?|broken|cannot|can't|won't work|does not work|doesn't work|still (broken|failing|wrong)|blocked|blocker|not (fixed|resolved|working)|crash(es|ed|ing)?)\b/i
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: vendored pi-vcc extraction logic
 const extractOutstandingContext = (blocks: NormalizedBlock[]): string[] => {
   const items: string[] = []
   const tail = blocks.slice(-20)

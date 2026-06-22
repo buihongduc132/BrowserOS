@@ -6,6 +6,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "${SCRIPT_DIR}/../../../scripts/ports.sh"
+source "${SCRIPT_DIR}/../../../scripts/gpu-flags.sh"
+
+if [[ -n "${BROWSEROS_GPU_FLAGS}" ]]; then
+    echo "[start-dev] GPU flags: ${BROWSEROS_GPU_FLAGS}"
+fi
+export BROWSEROS_GPU_FLAGS
 
 echo "[start-dev] Dev ports: CDP=${DEV_CDP_PORT} Server=${DEV_SERVER_PORT} Extension=${DEV_EXTENSION_PORT}"
 mise run browseros:dev -- watch --manual

@@ -76,7 +76,7 @@ export const MCP_EXTERNAL_ACCESS_DISABLED_EVENT =
 export const MCP_SERVER_RESTARTED_EVENT = 'settings.mcp_server.restarted'
 
 /** @public */
-export const AGENT_CREATED_EVENT = 'agents.agent.created'
+export const MCP_PROXY_PORT_CHANGED_EVENT = 'settings.mcp_proxy_port.changed'
 
 /** @public */
 export const AGENT_DELETED_EVENT = 'agents.agent.deleted'
@@ -114,34 +114,13 @@ export const SCHEDULED_TASK_VIEW_MORE_IN_NEWTAB_EVENT =
   'newtab.scheduled_task.view_more'
 
 /** @public */
-export const NEWTAB_OPENED_EVENT = 'newtab.opened'
-
-/** @public */
 export const NEWTAB_AI_TRIGGERED_EVENT = 'newtab.ai.triggered'
-
-/** @public */
-export const NEWTAB_SEARCH_EXECUTED_EVENT = 'newtab.search.executed'
-
-/** @public */
-export const NEWTAB_WORKSPACE_OPENED_EVENT = 'newtab.workspace.opened'
-
-/** @public */
-export const NEWTAB_TABS_OPENED_EVENT = 'newtab.tabs.opened'
 
 /** @public */
 export const NEWTAB_TAB_TOGGLED_EVENT = 'newtab.tab.toggled'
 
 /** @public */
 export const NEWTAB_TAB_REMOVED_EVENT = 'newtab.tab.removed'
-
-/** @public */
-export const NEWTAB_APPS_OPENED_EVENT = 'newtab.apps.opened'
-
-/** @public */
-export const NEWTAB_TIP_DISMISSED_EVENT = 'newtab.tip.dismissed'
-
-/** @public */
-export const NEWTAB_CHAT_STARTED_EVENT = 'newtab.chat.started'
 
 /** @public */
 export const NEWTAB_CHAT_STOPPED_EVENT = 'newtab.chat.stopped'
@@ -220,9 +199,6 @@ export const SCHEDULED_TASK_RETRIED_EVENT = 'settings.scheduled_task.retried'
 export const JTBD_POPUP_DISMISSED_EVENT = 'ui.jtbd_popup.dismissed'
 
 /** @public */
-export const SEARCH_PROVIDER_CHANGED_EVENT = 'settings.search_provider.changed'
-
-/** @public */
 export const ONBOARDING_STARTED_EVENT = 'onboarding.started'
 
 /** @public */
@@ -233,9 +209,6 @@ export const ONBOARDING_STEP_COMPLETED_EVENT = 'onboarding.step.completed'
 
 /** @public */
 export const ONBOARDING_ABOUT_SUBMITTED_EVENT = 'onboarding.about.submitted'
-
-/** @public */
-export const ONBOARDING_SOUL_SELECTED_EVENT = 'onboarding.soul.selected'
 
 /** @public */
 export const ONBOARDING_CONNECT_APPS_VIEWED_EVENT =

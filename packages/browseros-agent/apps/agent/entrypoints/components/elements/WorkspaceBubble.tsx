@@ -1,4 +1,4 @@
-import { type FC, useMemo } from 'react'
+import type { FC } from 'react'
 import { colorFromPath } from '../../sidepanel/history/components/workspace-bubble-colors'
 
 export interface WorkspaceBubbleProps {
@@ -18,7 +18,8 @@ export const WorkspaceBubble: FC<WorkspaceBubbleProps> = ({
 }) => {
   const resolvedColor = color ?? colorFromPath(path)
 
-  const sizeClass = size === 'sm' ? 'text-xs px-1.5 py-0.5' : 'text-sm px-2 py-1'
+  const sizeClass =
+    size === 'sm' ? 'text-xs px-1.5 py-0.5' : 'text-sm px-2 py-1'
 
   return (
     <span
@@ -31,7 +32,13 @@ export const WorkspaceBubble: FC<WorkspaceBubbleProps> = ({
       onClick={onClick}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
-      onKeyDown={onClick ? (e) => { if (e.key === 'Enter') onClick() } : undefined}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === 'Enter') onClick()
+            }
+          : undefined
+      }
     >
       {name}
     </span>

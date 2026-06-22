@@ -12,27 +12,25 @@
  *   Happy path
  */
 
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
-import type { ToolContext, ToolDefinition } from './framework'
-import type { ToolResponse } from './response'
+import { describe, expect, mock, test } from 'bun:test'
 import type { Browser } from '../browser/browser'
-import type { CdpBackend, CdpTarget } from '../browser/backends/types'
-
 // Import all tools
 import {
-  list_extensions,
-  get_extension_info,
-  enable_extension,
-  disable_extension,
-  uninstall_extension,
-  load_unpacked_extension,
-  get_extension_storage,
-  set_extension_storage,
   clear_extension_storage,
+  disable_extension,
+  enable_extension,
+  get_extension_info,
+  get_extension_storage,
+  list_extensions,
+  list_messageable_extensions,
+  load_unpacked_extension,
   remove_extension_storage,
   send_extension_message,
-  list_messageable_extensions,
+  set_extension_storage,
+  uninstall_extension,
 } from './extensions'
+import type { ToolContext } from './framework'
+import type { ToolResponse } from './response'
 
 // ── Helpers ──
 
@@ -62,7 +60,7 @@ function createMockBrowser(overrides?: Partial<Browser>): Browser {
     listMessageableExtensions: mock(async () => []),
     isCdpConnected: mock(() => true),
     listExtensions: mock(async () => []),
-    getExtensionInfo: mock(async () => ({} as any)),
+    getExtensionInfo: mock(async () => ({}) as any),
     enableExtension: mock(async () => {}),
     disableExtension: mock(async () => {}),
     ...overrides,
@@ -262,7 +260,11 @@ describe('extension tools — F11: send_extension_message', () => {
       resp,
     )
 
-    expect(sendMock).toHaveBeenCalledWith('ext-1', { action: 'ping' }, undefined)
+    expect(sendMock).toHaveBeenCalledWith(
+      'ext-1',
+      { action: 'ping' },
+      undefined,
+    )
     expect(resp.dataParts[0]).toEqual({
       extensionId: 'ext-1',
       response: { status: 'ok', data: 42 },
@@ -343,7 +345,9 @@ describe('extension tools — F11: list_messageable_extensions', () => {
 
     expect(resp.dataParts[0]).toMatchObject({
       count: 1,
-      extensions: [{ id: 'ext-1', name: 'Test Extension', type: 'service_worker' }],
+      extensions: [
+        { id: 'ext-1', name: 'Test Extension', type: 'service_worker' },
+      ],
     })
     expect(resp.textParts[0]).toContain('1 messageable')
   })
@@ -689,7 +693,9 @@ describe('extension tools — L2: disable_extension', () => {
   test('throws on first-party BrowserOS extension', async () => {
     const ctx = createMockContext({
       disableExtension: mock(async () => {
-        throw new Error('Cannot disable BrowserOS first-party extension: bflpfmnmnokmjhmgnolecpppdbdophmk')
+        throw new Error(
+          'Cannot disable BrowserOS first-party extension: bflpfmnmnokmjhmgnolecpppdbdophmk',
+        )
       }),
     })
     const resp = createMockResponse()

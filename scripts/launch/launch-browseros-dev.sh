@@ -4,6 +4,9 @@
 # Delegates to the Go CLI via mise.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "${SCRIPT_DIR}/../../../scripts/gpu-flags.sh"
+
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
 # ── Ensure mise is available ──

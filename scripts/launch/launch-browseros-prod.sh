@@ -4,6 +4,9 @@
 # Launches the AppImage directly with correct flags.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "${SCRIPT_DIR}/../gpu-flags.sh"
+
 APPIMAGE="${BROWSEROS_APP_PATH:-$HOME/Downloads/alta/BrowserOS.AppImage}"
 
 if [[ ! -f "$APPIMAGE" ]]; then
@@ -15,4 +18,4 @@ fi
 rm -f ~/.config/browser-os/SingletonLock ~/.config/browser-os/SingletonCookie ~/.config/browser-os/SingletonSocket 2>/dev/null
 
 # Launch browser (foreground — GNOME tracks this process)
-exec "$APPIMAGE" --class=browseros
+exec "$APPIMAGE" ${BROWSEROS_GPU_FLAGS} --class=browseros

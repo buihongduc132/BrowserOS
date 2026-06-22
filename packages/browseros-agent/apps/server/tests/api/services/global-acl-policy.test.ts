@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { configStore } from '@browseros/shared/constants/config-store'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { configStore } from '@browseros/shared/constants/config-store'
 
 const fixtureRules = [
   {

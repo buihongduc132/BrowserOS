@@ -6,8 +6,6 @@
 import { describe, expect, it } from 'bun:test'
 import {
   type AcpCommandContext,
-  type AcpCommandResult,
-  clearAcpCommands,
   dispatchCommand,
   getAcpCommand,
   getAllAcpCommands,

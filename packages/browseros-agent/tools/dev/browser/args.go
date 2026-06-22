@@ -17,6 +17,48 @@ type ArgsConfig struct {
 	LoadDevExtensions bool
 }
 
+// hasNvidiaGPU detects NVIDIA GPU on Linux by checking /proc/modules and /dev/dri.
+func hasNvidiaGPU() bool {
+	if data, err := os.ReadFile("/proc/modules"); err == nil {
+		if contains(string(data), "nvidia") {
+			return true
+		}
+	}
+	if matches, _ := filepath.Glob("/dev/dri/by-path/*-nvidia*"); len(matches) > 0 {
+		return true
+	}
+	return false
+}
+
+// contains checks if s contains substr (case-insensitive).
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && searchSubstring(s, substr)
+}
+
+func searchSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		match := true
+		for j := 0; j < len(substr); j++ {
+			sc := s[i+j]
+			tc := substr[j]
+			if sc >= 'A' && sc <= 'Z' {
+				sc += 32
+			}
+			if tc >= 'A' && tc <= 'Z' {
+				tc += 32
+			}
+			if sc != tc {
+				match = false
+				break
+			}
+		}
+		if match {
+			return true
+		}
+	}
+	return false
+}
+
 // resolveBrowserBinary returns the BrowserOS executable path for the current OS.
 func resolveBrowserBinary() string {
 	if runtime.GOOS == "linux" {
@@ -34,6 +76,18 @@ func BuildArgs(cfg ArgsConfig) []string {
 	binary := resolveBrowserBinary()
 
 	args := []string{binary}
+
+	// GPU workaround: NVIDIA + Chromium + Wayland = SIGILL crashes
+	// --use-angle=vulkan bypasses the broken EGL/GBM shared memory path
+	// See: scripts/gpu-flags.sh for full evidence + references
+	if runtime.GOOS == "linux" && os.Getenv("BROWSEROS_SKIP_GPU_FLAGS") == "" {
+		if gpuFlags := os.Getenv("BROWSEROS_GPU_FLAGS"); gpuFlags != "" {
+			// Respect env override from mise/shell wrapper
+			args = append(args, gpuFlags)
+		} else if hasNvidiaGPU() {
+			args = append(args, "--use-angle=vulkan")
+		}
+	}
 
 	if cfg.LoadDevExtensions {
 		args = append(args, "--no-first-run", "--no-default-browser-check")

@@ -1,0 +1,47 @@
+# SOURCE: Case-sensitive status comparisons — Bug: budget-calc.ts used
+#   status: 'APPROVED' (case-sensitive) which missed lowercase 'approved' records.
+#   Same risk applies to === 'STATUS' and !== 'STATUS' comparisons.
+#
+# SPECIES 2: ALL-CAPS status string literals used in comparisons or assignments
+# Locations: invoices.ts:80,84,87,90; reimbursements.ts:237,304,335
+# NOTE: Uses kind:string + regex because ast-grep can't parse
+#   `status === 'LITERAL'` as an AST pattern (binary_expression with string right-hand side
+#   is too generic). This catches ALL-CAPS status string literals, which covers both
+#   Prisma queries and runtime comparisons.
+
+id: no-case-sensitive-status-comparison
+language: typescript
+severity: warning
+message: "Hardcoded status string literal — DB may contain mixed-case values. Use enum constant or case-insensitive match."
+note: |
+  Catches hardcoded ALL-CAPS status string literals.
+  If DB has mixed-case values (e.g., 'approved' vs 'APPROVED'), comparisons silently fail.
+
+  BAD:
+    if (status === 'REVIEW' || status === 'CONFIRMED') { ... }
+    if (existing.status !== 'SUBMITTED') { ... }
+
+  GOOD:
+    if (status === InvoiceStatus.REVIEW || status === InvoiceStatus.CONFIRMED) { ... }
+    if (existing.status.toLowerCase() !== 'submitted') { ... }
+
+rule:
+  kind: string
+  regex: "'(APPROVED|REJECTED|SUBMITTED|UNDER_REVIEW|DRAFT|REVIEW|CONFIRMED|PAID|SETTLED|CANCELLED|PENDING)'"
+
+ignores:
+  - '**/*.test.ts'
+  - '**/*.test.tsx'
+  - '**/*.spec.ts'
+  - '**/*.spec.tsx'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/node_modules/**'
+  - '**/seed.ts'
+  - '**/fixtures/**'
+  - '**/schemas/**'
+  - '**/constants.ts'
+  - '**/brands.ts'
+  - '**/types.ts'
+  - '**/index.ts'
