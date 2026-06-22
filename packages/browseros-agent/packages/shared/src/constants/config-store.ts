@@ -136,7 +136,12 @@ export class ConfigStore {
       if (!fs.existsSync(this.filePath)) return {}
 
       const content = fs.readFileSync(this.filePath, 'utf8')
-      const parsed = JSON.parse(content)
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(content)
+      } catch {
+        return {}
+      }
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
         return {}
       }

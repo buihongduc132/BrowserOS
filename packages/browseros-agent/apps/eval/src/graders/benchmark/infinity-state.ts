@@ -129,6 +129,12 @@ export class InfinityStateGrader implements Grader {
       )
     }
 
-    return JSON.parse(stdout.trim()) as InfinityEvalOutput
+    let result: InfinityEvalOutput
+    try {
+      result = JSON.parse(stdout.trim()) as InfinityEvalOutput
+    } catch {
+      return null
+    }
+    return result
   }
 }

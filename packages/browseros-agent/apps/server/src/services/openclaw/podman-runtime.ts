@@ -50,10 +50,15 @@ export class PodmanRuntime {
       const output = await new Response(proc.stdout).text()
       await proc.exited
 
-      const machines = JSON.parse(output) as Array<{
-        Running?: boolean
-        LastUp?: string
-      }>
+      let machines: Array<{ Running?: boolean; LastUp?: string }>
+      try {
+        machines = JSON.parse(output) as Array<{
+          Running?: boolean
+          LastUp?: string
+        }>
+      } catch {
+        return { initialized: false, running: false }
+      }
 
       if (!machines.length) return { initialized: false, running: false }
 
