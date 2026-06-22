@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'bun:test'
-import { WORKSPACE_COLORS, colorFromPath } from '../../sidepanel/history/components/workspace-bubble-colors'
+import {
+  colorFromPath,
+  WORKSPACE_COLORS,
+} from '../../sidepanel/history/components/workspace-bubble-colors'
 
 /**
  * Tests for the logic underpinning WorkspaceBubble and WorkspaceBubbleGroup components.

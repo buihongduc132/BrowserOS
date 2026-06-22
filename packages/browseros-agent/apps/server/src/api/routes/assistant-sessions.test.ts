@@ -4,16 +4,16 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { Database } from 'bun:sqlite'
+import { beforeEach, describe, expect, it } from 'bun:test'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator'
-import * as schema from '../../lib/db/schema'
-import { AssistantSessionStore } from '../../sessions/assistant-session-store'
-import { fileURLToPath } from 'node:url'
-import { join, dirname } from 'node:path'
 import { Hono } from 'hono'
 import { z } from 'zod'
+import * as schema from '../../lib/db/schema'
+import { AssistantSessionStore } from '../../sessions/assistant-session-store'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const migrationsDir = join(__dirname, '..', '..', 'lib', 'db', 'migrations')
@@ -76,9 +76,7 @@ describe('ChatRequestSchema backward compatibility', () => {
     const result = ChatRequestSchema.safeParse({
       ...makeBaseRequest(),
       userWorkingDir: '/legacy/path',
-      userWorkspaces: [
-        { id: 'ws-1', path: '/new/path', name: 'new' },
-      ],
+      userWorkspaces: [{ id: 'ws-1', path: '/new/path', name: 'new' }],
     })
     expect(result.success).toBe(true)
     if (result.success) {
@@ -129,7 +127,8 @@ describe('resolveWorkspaces', () => {
       return request.userWorkspaces
     }
     if (request.userWorkingDir) {
-      const basename = request.userWorkingDir.split('/').pop() ?? request.userWorkingDir
+      const basename =
+        request.userWorkingDir.split('/').pop() ?? request.userWorkingDir
       const hash = request.userWorkingDir.split('').reduce((a, b) => {
         a = ((a << 5) - a + b.charCodeAt(0)) | 0
         return a
@@ -265,11 +264,14 @@ describe('Assistant Session Routes', () => {
     expect(fetched.tags).toEqual([])
 
     // Update title
-    const patchRes = await app.request('/550e8400-e29b-41d4-a716-446655440001', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: 'Updated title' }),
-    })
+    const patchRes = await app.request(
+      '/550e8400-e29b-41d4-a716-446655440001',
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'Updated title' }),
+      },
+    )
     expect(patchRes.status).toBe(200)
 
     // Add workspace via PATCH
@@ -278,7 +280,11 @@ describe('Assistant Session Routes', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         workspaces: [
-          { workspaceId: 'ws-1', workspacePath: '/home/user/frontend', workspaceName: 'frontend' },
+          {
+            workspaceId: 'ws-1',
+            workspacePath: '/home/user/frontend',
+            workspaceName: 'frontend',
+          },
         ],
       }),
     })
@@ -301,7 +307,9 @@ describe('Assistant Session Routes', () => {
     expect(delRes.status).toBe(200)
 
     // Verify deleted
-    const afterDelete = await app.request('/550e8400-e29b-41d4-a716-446655440001')
+    const afterDelete = await app.request(
+      '/550e8400-e29b-41d4-a716-446655440001',
+    )
     expect(afterDelete.status).toBe(404)
   })
 

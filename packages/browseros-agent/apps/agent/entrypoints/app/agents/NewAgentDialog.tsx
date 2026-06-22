@@ -104,7 +104,7 @@ export const NewAgentDialog: FC<NewAgentDialogProps> = ({
   onHarnessReasoningChange,
   onHermesProviderChange,
   onNameChange,
-  onProviderChange,
+  onProviderChange: _onProviderChange,
   onCustomCommandChange = () => {},
   onCustomArgsChange = () => {},
   onCustomLabelChange: _onCustomLabelChange = () => {},

@@ -86,7 +86,7 @@ export class OAuthTokenManager {
     private readonly callbackServer: OAuthCallbackServer,
   ) {}
 
-  // --- PKCE flow (ChatGPT Plus/Pro) ---
+  // --- PKCE flow (ChatGPT) ---
 
   async generateAuthorizationUrl(
     providerId: string,
@@ -531,12 +531,11 @@ function parseAccessTokenClaims(accessToken: string): {
   accountId?: string
   email?: string
 } {
+  const parts = accessToken.split('.')
+  if (parts.length !== 3) return {}
   try {
-    const parts = accessToken.split('.')
-    if (parts.length !== 3) return {}
-    const payload = JSON.parse(
-      atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')),
-    )
+    const decoded = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))
+    const payload = JSON.parse(decoded)
     const authClaims = payload['https://api.openai.com/auth']
     const profileClaims = payload['https://api.openai.com/profile']
     return {

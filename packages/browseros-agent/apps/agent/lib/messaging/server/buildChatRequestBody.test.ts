@@ -46,81 +46,41 @@ describe('buildChatRequestBody', () => {
     expect(body.declinedApps).toEqual(['gmail'])
   })
 
-  it('includes userWorkspaces when provided', () => {
-    const workspaces = [
-      { id: 'ws-1', path: '/home/user/frontend', name: 'frontend' },
-      { id: 'ws-2', path: '/home/user/backend', name: 'backend' },
-    ]
+  it('forwards the provider id so the server can scope per-provider state', () => {
     const body = buildChatRequestBody({
       conversationId: '6ff46e3b-e45a-40a4-9157-ca520e800f43',
-      provider,
-      userWorkspaces: workspaces,
+      provider: { ...provider, id: 'uuid-opus-high' },
     })
-
-    expect(body.userWorkspaces).toEqual(workspaces)
+    expect(body.providerId).toBe('uuid-opus-high')
   })
 
-  it('includes userWorkspaces as undefined when not provided', () => {
+  it('forwards every ACP field so the chat path can reach a custom agent', () => {
+    const acpProvider: LlmProviderConfig = {
+      ...provider,
+      id: 'uuid-claude-opus',
+      type: 'claude-code',
+      name: 'Claude Opus',
+      acpAgentId: 'claude',
+      acpCommand: undefined,
+      acpFixedWorkspacePath: '/home/user/agents/claude-opus',
+    }
     const body = buildChatRequestBody({
       conversationId: '6ff46e3b-e45a-40a4-9157-ca520e800f43',
-      provider,
+      provider: acpProvider,
     })
-
-    expect(body.userWorkspaces).toBeUndefined()
+    expect(body.providerId).toBe('uuid-claude-opus')
+    expect(body.acpAgentId).toBe('claude')
+    expect(body.acpCommand).toBeUndefined()
+    expect(body.acpFixedWorkspacePath).toBe('/home/user/agents/claude-opus')
   })
 
-  it('sends both userWorkingDir and userWorkspaces for backward compat', () => {
-    const body = buildChatRequestBody({
-      conversationId: '6ff46e3b-e45a-40a4-9157-ca520e800f43',
-      provider,
-      userWorkingDir: '/home/user/frontend',
-      userWorkspaces: [
-        { id: 'ws-1', path: '/home/user/frontend', name: 'frontend' },
-      ],
-    })
-
-    expect(body.userWorkingDir).toBe('/home/user/frontend')
-    expect(body.userWorkspaces).toEqual([
-      { id: 'ws-1', path: '/home/user/frontend', name: 'frontend' },
-    ])
-  })
-
-  it('includes userWorkspaces when provided', () => {
-    const workspaces = [
-      { id: 'ws-1', path: '/home/user/frontend', name: 'frontend' },
-      { id: 'ws-2', path: '/home/user/backend', name: 'backend' },
-    ]
-    const body = buildChatRequestBody({
-      conversationId: '6ff46e3b-e45a-40a4-9157-ca520e800f43',
-      provider,
-      userWorkspaces: workspaces,
-    })
-
-    expect(body.userWorkspaces).toEqual(workspaces)
-  })
-
-  it('includes userWorkspaces as undefined when not provided', () => {
+  it('leaves ACP fields undefined for non-ACP providers', () => {
     const body = buildChatRequestBody({
       conversationId: '6ff46e3b-e45a-40a4-9157-ca520e800f43',
       provider,
     })
-
-    expect(body.userWorkspaces).toBeUndefined()
-  })
-
-  it('sends both userWorkingDir and userWorkspaces for backward compat', () => {
-    const body = buildChatRequestBody({
-      conversationId: '6ff46e3b-e45a-40a4-9157-ca520e800f43',
-      provider,
-      userWorkingDir: '/home/user/frontend',
-      userWorkspaces: [
-        { id: 'ws-1', path: '/home/user/frontend', name: 'frontend' },
-      ],
-    })
-
-    expect(body.userWorkingDir).toBe('/home/user/frontend')
-    expect(body.userWorkspaces).toEqual([
-      { id: 'ws-1', path: '/home/user/frontend', name: 'frontend' },
-    ])
+    expect(body.acpAgentId).toBeUndefined()
+    expect(body.acpCommand).toBeUndefined()
+    expect(body.acpFixedWorkspacePath).toBeUndefined()
   })
 })

@@ -1,55 +1,87 @@
-import { beforeEach, describe, expect, it, mock } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
 
-const getPrefMock = mock(async () => ({ value: 9201 }))
-const supportsMock = mock(async () => true)
+const MCP_PORT_PREF = 'browseros.server.mcp_port'
+const PROXY_PORT_PREF = 'browseros.server.proxy_port'
+let originalChrome: typeof globalThis.chrome | undefined
 
-mock.module('@/lib/env', () => ({
-  env: {
-    VITE_BROWSEROS_SERVER_PORT: 9110,
-    VITE_ALPHA_FEATURES: false,
-    PROD: false,
+function readPref(name: string): { value: unknown } {
+  if (name === MCP_PORT_PREF) return { value: 9105 }
+  if (name === PROXY_PORT_PREF) return { value: 9106 }
+  return { value: null }
+}
+
+mock.module('./prefs', () => ({
+  BROWSEROS_PREFS: {
+    MCP_PORT: MCP_PORT_PREF,
+    PROVIDERS: 'browseros.providers',
+    THIRD_PARTY_LLM_PROVIDERS: 'browseros.third_party_llm.providers',
+    PROXY_PORT: PROXY_PORT_PREF,
+    SERVER_PORT: 'browseros.server.server_port',
+    ALLOW_REMOTE_MCP: 'browseros.server.allow_remote_in_mcp',
+    RESTART_SERVER: 'browseros.server.restart_requested',
+    SHOW_LLM_CHAT: 'browseros.show_llm_chat',
+    SHOW_TOOLBAR_LABELS: 'browseros.show_toolbar_labels',
+    VERTICAL_TABS_ENABLED: 'browseros.vertical_tabs_enabled',
+    INSTALL_ID: 'browseros.metrics_install_id',
   },
 }))
 
 mock.module('./adapter', () => ({
+  BrowserOSAdapter: {
+    getInstance: () => ({
+      getPref: async (name: string) => readPref(name),
+      getBrowserosVersion: async () => null,
+    }),
+  },
   getBrowserOSAdapter: () => ({
-    getPref: getPrefMock,
+    getPref: async (name: string) => readPref(name),
   }),
 }))
 
-mock.module('./capabilities', () => ({
-  Capabilities: {
-    supports: supportsMock,
-  },
-  Feature: {
-    UNIFIED_PORT_SUPPORT: 'UNIFIED_PORT_SUPPORT',
-    PROXY_SUPPORT: 'PROXY_SUPPORT',
-  },
-}))
-
-describe('browseros helpers env precedence', () => {
+describe('BrowserOS helper URLs', () => {
   beforeEach(() => {
-    getPrefMock.mockClear()
-    supportsMock.mockClear()
+    originalChrome = globalThis.chrome
+    Object.assign(globalThis, {
+      chrome: {
+        ...originalChrome,
+        browserOS: {
+          ...originalChrome?.browserOS,
+          getPref: (
+            name: string,
+            resolve: (result: { value: unknown }) => void,
+          ) => {
+            resolve(readPref(name))
+          },
+        },
+      },
+    })
   })
 
-  it('prefers VITE_BROWSEROS_SERVER_PORT for unified agent URL', async () => {
+  afterEach(() => {
+    if (originalChrome) {
+      Object.assign(globalThis, { chrome: originalChrome })
+      return
+    }
+    Reflect.deleteProperty(globalThis, 'chrome')
+  })
+
+  it('uses the BrowserOS MCP port as the server URL', async () => {
     const { getAgentServerUrl } = await import('./helpers')
-    await expect(getAgentServerUrl()).resolves.toBe('http://127.0.0.1:9110')
-    expect(getPrefMock).not.toHaveBeenCalled()
+
+    await expect(getAgentServerUrl()).resolves.toBe('http://127.0.0.1:9105')
   })
 
-  it('prefers VITE_BROWSEROS_SERVER_PORT for MCP URL even when proxy is supported', async () => {
+  it('uses the BrowserOS proxy port for MCP requests', async () => {
     const { getMcpServerUrl } = await import('./helpers')
-    await expect(getMcpServerUrl()).resolves.toBe('http://127.0.0.1:9110/mcp')
-    expect(getPrefMock).not.toHaveBeenCalled()
+
+    await expect(getMcpServerUrl()).resolves.toBe('http://127.0.0.1:9106/mcp')
   })
 
-  it('prefers VITE_BROWSEROS_SERVER_PORT for health URL even when proxy is supported', async () => {
+  it('uses the BrowserOS proxy port for health checks', async () => {
     const { getHealthCheckUrl } = await import('./helpers')
+
     await expect(getHealthCheckUrl()).resolves.toBe(
-      'http://127.0.0.1:9110/health',
+      'http://127.0.0.1:9106/health',
     )
-    expect(getPrefMock).not.toHaveBeenCalled()
   })
 })

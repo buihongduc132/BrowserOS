@@ -1,10 +1,22 @@
 import { unlinkSync } from 'node:fs'
-import { readdir, rm, stat, writeFile } from 'node:fs/promises'
+import {
+  chmod,
+  lstat,
+  mkdir,
+  readdir,
+  realpath,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { PATHS } from '@browseros/shared/constants/paths'
 import type { ServerDiscoveryConfig } from '@browseros/shared/types/server-config'
 import { logger } from './logger'
+
+export const TOOL_OUTPUT_DIR_MODE = 0o700
+export const TOOL_OUTPUT_FILE_MODE = 0o600
 
 export function getBrowserosDir(): string {
   const override = process.env.BROWSEROS_DIR?.trim()
@@ -27,44 +39,49 @@ export function getSessionsDir(): string {
   return join(getBrowserosDir(), PATHS.SESSIONS_DIR_NAME)
 }
 
-export function getSoulPath(): string {
-  return join(getBrowserosDir(), PATHS.SOUL_FILE_NAME)
-}
-
-export function getCoreMemoryPath(): string {
-  return join(getMemoryDir(), PATHS.CORE_MEMORY_FILE_NAME)
-}
-
-export function getSkillsDir(): string {
-  return join(getBrowserosDir(), PATHS.SKILLS_DIR_NAME)
-}
-
-export function getBuiltinSkillsDir(): string {
-  return join(getSkillsDir(), PATHS.BUILTIN_DIR_NAME)
-}
-
-export function getSkillsSourcesPath(): string {
-  return join(getSkillsDir(), 'sources.json')
-}
-
-export function getSkillsStatePath(): string {
-  return join(getSkillsDir(), 'state.json')
-}
-
-export function getCommandsDir(): string {
-  return join(getBrowserosDir(), PATHS.COMMANDS_DIR_NAME)
-}
-
-export function getOpenClawDir(): string {
-  return join(getVmStateDir(), PATHS.OPENCLAW_DIR_NAME)
-}
-
-export function getLegacyOpenClawDir(): string {
-  return join(getBrowserosDir(), PATHS.OPENCLAW_DIR_NAME)
-}
-
 export function getCacheDir(): string {
   return join(getBrowserosDir(), PATHS.CACHE_DIR_NAME)
+}
+
+/** Returns the ready-to-use directory for large generated tool outputs. */
+export async function getToolOutputDir(): Promise<string> {
+  const outputDirPath = join(getBrowserosDir(), 'tool-output')
+  await mkdir(outputDirPath, {
+    recursive: true,
+    mode: TOOL_OUTPUT_DIR_MODE,
+  })
+  const info = await lstat(outputDirPath)
+  if (!info.isDirectory() || info.isSymbolicLink()) {
+    throw new Error('BrowserOS tool output directory must be a real directory.')
+  }
+  const outputDir = await realpath(outputDirPath)
+  await chmod(outputDir, TOOL_OUTPUT_DIR_MODE)
+  return outputDir
+}
+
+/** Writes a generated tool output file with private owner-only permissions. */
+export async function writeToolOutputFile(
+  filePath: string,
+  content: string,
+): Promise<void> {
+  await writeFile(filePath, content, {
+    encoding: 'utf-8',
+    flag: 'wx',
+    mode: TOOL_OUTPUT_FILE_MODE,
+  })
+  await chmod(filePath, TOOL_OUTPUT_FILE_MODE)
+}
+
+/** Writes binary tool output (PDFs, downloads) with the same owner-only permissions. */
+export async function writeToolOutputBinaryFile(
+  filePath: string,
+  content: Uint8Array,
+): Promise<void> {
+  await writeFile(filePath, content, {
+    flag: 'wx',
+    mode: TOOL_OUTPUT_FILE_MODE,
+  })
+  await chmod(filePath, TOOL_OUTPUT_FILE_MODE)
 }
 
 /** Returns the durable SQLite database path for local BrowserOS server state. */
@@ -72,40 +89,13 @@ export function getDbPath(): string {
   return join(getBrowserosDir(), PATHS.DB_DIR_NAME, PATHS.DB_FILE_NAME)
 }
 
-export function getVmCacheDir(): string {
-  return join(getCacheDir(), 'vm')
-}
-
-export function getLimaHomeDir(): string {
-  return join(getBrowserosDir(), 'lima')
-}
-
-export function getVmStateDir(): string {
-  return join(getBrowserosDir(), 'vm')
-}
-
-export function getVmDisksDir(): string {
-  return getVmCacheDir()
-}
-
-export function getLazyMonitoringDir(): string {
-  return join(getBrowserosDir(), 'lazy-monitoring')
-}
-
-export function getLazyMonitoringRunsDir(): string {
-  return join(getLazyMonitoringDir(), 'runs')
-}
-
-export function getLazyMonitoringRunDir(runId: string): string {
-  return join(getLazyMonitoringRunsDir(), runId)
-}
-
 export function getServerConfigPath(): string {
   return join(getBrowserosDir(), PATHS.SERVER_CONFIG_FILE_NAME)
 }
 
-export function getAdvancedConfigPath(): string {
-  return join(getBrowserosDir(), 'advanced-config.json')
+/** Returns the user-managed SOUL.md path used as passive agent prompt context. */
+export function getSoulPath(): string {
+  return join(getBrowserosDir(), PATHS.SOUL_FILE_NAME)
 }
 
 export async function writeServerConfig(
@@ -118,19 +108,14 @@ export function removeServerConfigSync(): void {
   try {
     unlinkSync(getServerConfigPath())
   } catch {
-    // File may not exist or already be removed
+    return
   }
 }
 
 export async function ensureBrowserosDir(): Promise<void> {
   logDevelopmentBrowserosDir()
-  await mkdir(getMemoryDir(), { recursive: true })
-  await mkdir(getSkillsDir(), { recursive: true })
-  await mkdir(getBuiltinSkillsDir(), { recursive: true })
-  await mkdir(getCommandsDir(), { recursive: true })
   await mkdir(getSessionsDir(), { recursive: true })
-  await mkdir(getLazyMonitoringRunsDir(), { recursive: true })
-  await mkdir(getVmDisksDir(), { recursive: true })
+  await getToolOutputDir()
 }
 
 export async function cleanOldSessions(): Promise<void> {

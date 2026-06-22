@@ -202,14 +202,20 @@ describe('editMessageAtTurn', () => {
     expect(result[0].parts[0]).toEqual({ type: 'text', text: 'Hello' })
     expect(result[1].parts[0]).toEqual({ type: 'text', text: 'Hi there!' })
     // Second turn user message edited
-    expect(result[2].parts[0]).toEqual({ type: 'text', text: 'Updated question' })
+    expect(result[2].parts[0]).toEqual({
+      type: 'text',
+      text: 'Updated question',
+    })
   })
 
   it('edits third turn, keeps first two turns', () => {
     const msgs = buildConversation()
     const result = editMessageAtTurn(msgs, 4, 'New joke request')
     expect(result).toHaveLength(5)
-    expect(result[4].parts[0]).toEqual({ type: 'text', text: 'New joke request' })
+    expect(result[4].parts[0]).toEqual({
+      type: 'text',
+      text: 'New joke request',
+    })
   })
 
   it('returns same array for out-of-bounds', () => {

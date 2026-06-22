@@ -58,7 +58,6 @@ function isToolOutputError(output: ToolResultPart['output']): boolean {
 }
 
 /** Convert a single ModelMessage to NormalizedBlock(s). */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: handles all ModelMessage variants
 function normalizeOne(msg: ModelMessage, msgIndex: number): NormalizedBlock[] {
   // System messages are skipped — they carry no conversation content
   if (msg.role === 'system') return []

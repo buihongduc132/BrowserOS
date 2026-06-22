@@ -5,10 +5,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import type {
-  ActiveSession,
-  AgentSessionStore,
-} from '../../../agent/agent-session-store'
+import type { AgentSessionStore } from '../../../agent/agent-session-store'
 
 /**
  * Persistent session metadata for an ACP agent session.
