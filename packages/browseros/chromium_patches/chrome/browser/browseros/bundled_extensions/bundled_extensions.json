@@ -1,0 +1,26 @@
+[
+  {
+    "extension_id": "bflpfmnmnokmjhmgnolecpppdbdophmk",
+    "filename": "bflpfmnmnokmjhmgnolecpppdbdophmk.crx",
+    "version": "1.0.0",
+    "name": "Agent"
+  },
+  {
+    "extension_id": "adlpneommgkgeanpaekgoaolcpncohkf",
+    "filename": "adlpneommgkgeanpaekgoaolcpncohkf.crx",
+    "version": "1.0.0",
+    "name": "Bug Reporter"
+  },
+  {
+    "extension_id": "nlnihljpboknmfagkikhkdblbedophja",
+    "filename": "nlnihljpboknmfagkikhkdblbedophja.crx",
+    "version": "1.0.0",
+    "name": "Controller"
+  },
+  {
+    "extension_id": "browseros-adblocker",
+    "filename": "browseros-adblocker.crx",
+    "version": "1.0.0",
+    "name": "Ad Blocker"
+  }
+]

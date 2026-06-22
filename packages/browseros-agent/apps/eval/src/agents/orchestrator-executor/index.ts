@@ -14,7 +14,6 @@ import { CdpBackend } from '@browseros/server/browser/backends/cdp'
 import { CaptchaWaiter } from '../../capture/captcha-waiter'
 import { DEFAULT_TIMEOUT_MS } from '../../constants'
 import type {
-  EvalConfig,
   OrchestratorExecutorConfig,
   TaskMetadata,
   UIMessageStreamEvent,
@@ -25,24 +24,16 @@ import {
   resolveProviderConfig,
 } from '../../utils/resolve-provider-config'
 import { withEvalTimeout } from '../../utils/with-eval-timeout'
+import { isCladoActionProvider } from '../orchestrated/backends/clado/types'
+import { createExecutorBackend } from '../orchestrated/backends/create-executor-backend'
+import type { ExecutorCallbacks } from '../orchestrated/executor-backend'
 import type { AgentContext, AgentEvaluator, AgentResult } from '../types'
-import { Executor, type ExecutorCallbacks } from './executor'
 import { OrchestratorAgent } from './orchestrator-agent'
 import type { ExecutorFactory, ExecutorResult } from './types'
-
-function extractCdpPort(config: EvalConfig): number {
-  const serverUrl = config.browseros.server_url
-  const match = serverUrl.match(/:(\d+)$/)
-  if (!match) return config.browseros.base_cdp_port
-  const serverPort = Number.parseInt(match[1], 10)
-  const workerOffset = serverPort - config.browseros.base_server_port
-  return config.browseros.base_cdp_port + workerOffset
-}
 
 interface ResolvedConfigs {
   orchestratorConfig: ResolvedAgentConfig & { maxTurns?: number }
   executorConfig: ResolvedAgentConfig
-  isCladoAction: boolean
 }
 
 function toResolvedAgentConfig(
@@ -77,7 +68,10 @@ async function resolveAgentConfig(
   if (!executorModel) {
     throw new Error('executor.model is required in config')
   }
-  if (config.executor.provider === 'clado-action' && !config.executor.baseUrl) {
+  if (
+    isCladoActionProvider(config.executor.provider) &&
+    !config.executor.baseUrl
+  ) {
     throw new Error(
       'executor.baseUrl is required in config for clado-action provider',
     )
@@ -85,10 +79,8 @@ async function resolveAgentConfig(
 
   const resolvedOrchestrator = await resolveProviderConfig(config.orchestrator)
 
-  const isCladoAction = config.executor.provider === 'clado-action'
-
   let executorConfig: ResolvedAgentConfig
-  if (isCladoAction) {
+  if (isCladoActionProvider(config.executor.provider)) {
     executorConfig = {
       conversationId: crypto.randomUUID(),
       provider: config.executor.provider as ResolvedAgentConfig['provider'],
@@ -117,14 +109,14 @@ async function resolveAgentConfig(
     maxTurns: config.orchestrator.maxTurns,
   }
 
-  return { orchestratorConfig, executorConfig, isCladoAction }
+  return { orchestratorConfig, executorConfig }
 }
 
 export class OrchestratorExecutorEvaluator implements AgentEvaluator {
   constructor(private ctx: AgentContext) {}
 
   async execute(): Promise<AgentResult> {
-    const { config, task, capture } = this.ctx
+    const { config, task, capture, workerIndex } = this.ctx
     const startTime = Date.now()
     const timeoutMs = config.timeout_ms ?? DEFAULT_TIMEOUT_MS
 
@@ -137,12 +129,15 @@ export class OrchestratorExecutorEvaluator implements AgentEvaluator {
     }
 
     const agentConfig = config.agent as OrchestratorExecutorConfig
-    const { orchestratorConfig, executorConfig, isCladoAction } =
+    const { orchestratorConfig, executorConfig } =
       await resolveAgentConfig(agentConfig)
 
-    // Connect to Chrome via CDP
-    const cdpPort = extractCdpPort(config)
-    const cdp = new CdpBackend({ port: cdpPort })
+    // Connect to Chrome via CDP — same per-worker offset used by app-manager.
+    const cdpPort = config.browseros.base_cdp_port + workerIndex
+    const cdp = new CdpBackend({
+      port: cdpPort,
+      exitOnReconnectFailure: false,
+    })
     await cdp.connect()
     const browser = new Browser(cdp)
     capture.screenshot.setBrowser(browser)
@@ -245,12 +240,12 @@ export class OrchestratorExecutorEvaluator implements AgentEvaluator {
         await capture.messageLogger.logStreamEvent(delegateInputEvent)
         capture.emitEvent(task.query_id, delegateInputEvent)
 
-        const executor = new Executor(
-          executorConfig,
+        const executor = createExecutorBackend({
+          configTemplate: executorConfig,
           browser,
-          config.browseros.server_url,
-          { isCladoAction, callbacks },
-        )
+          serverUrl: config.browseros.server_url,
+          callbacks,
+        })
         let result: ExecutorResult
         try {
           result = await executor.execute(instruction, signal)
@@ -275,8 +270,9 @@ export class OrchestratorExecutorEvaluator implements AgentEvaluator {
         return result
       }
 
-      // Create orchestrator with factory (synchronous — no async init needed)
-      const agent = OrchestratorAgent.create(orchestratorConfig, {
+      // Create orchestrator with factory. async because createLanguageModel
+      // returns a Promise so ACP-backed providers can await on agent spawn.
+      const agent = await OrchestratorAgent.create(orchestratorConfig, {
         executorFactory,
       })
 
@@ -339,6 +335,4 @@ export class OrchestratorExecutorEvaluator implements AgentEvaluator {
   }
 }
 
-export { Executor } from './executor'
-export { OrchestratorAgent } from './orchestrator-agent'
 export * from './types'

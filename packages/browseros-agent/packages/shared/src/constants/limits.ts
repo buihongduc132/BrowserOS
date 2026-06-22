@@ -4,11 +4,20 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
  * Centralized limits and thresholds.
+ *
+ * Select values can be overridden via environment variables.
+ * Invalid values (non-numeric, negative) fall back to defaults.
  */
 
+import { configStore } from './config-store'
+
 export const AGENT_LIMITS = {
-  MAX_TURNS: 100,
-  DEFAULT_CONTEXT_WINDOW: 200_000,
+  get MAX_TURNS() {
+    return configStore.get('AGENT_LIMITS.MAX_TURNS')
+  },
+  get DEFAULT_CONTEXT_WINDOW() {
+    return configStore.get('AGENT_LIMITS.DEFAULT_CONTEXT_WINDOW')
+  },
 
   // Compression settings for context compaction heuristics
   COMPRESSION_MIN_HEADROOM: 10_000,
@@ -36,8 +45,12 @@ export const AGENT_LIMITS = {
   // Compaction — summarization
   COMPACTION_MIN_TOKEN_FLOOR: 256,
   COMPACTION_TURN_PREFIX_OUTPUT_RATIO: 0.5,
-  COMPACTION_MAX_SUMMARIZATION_INPUT: 100_000,
-  COMPACTION_SUMMARIZATION_TIMEOUT_MS: 60_000,
+  get COMPACTION_MAX_SUMMARIZATION_INPUT() {
+    return configStore.get('AGENT_LIMITS.COMPACTION_MAX_SUMMARIZATION_INPUT')
+  },
+  get COMPACTION_SUMMARIZATION_TIMEOUT_MS() {
+    return configStore.get('AGENT_LIMITS.COMPACTION_SUMMARIZATION_TIMEOUT_MS')
+  },
   COMPACTION_SUMMARIZER_OUTPUT_RATIO: 0.8,
 
   // Compaction — estimation (step 0 / no real usage)
@@ -53,14 +66,22 @@ export const AGENT_LIMITS = {
   COMPACTION_CLEAR_OUTPUT_MIN_CHARS: 100,
 
   // Compaction — tool output truncation
-  COMPACTION_TOOL_OUTPUT_MAX_CHARS: 15_000,
+  get COMPACTION_TOOL_OUTPUT_MAX_CHARS() {
+    return configStore.get('AGENT_LIMITS.COMPACTION_TOOL_OUTPUT_MAX_CHARS')
+  },
   COMPACTION_TRANSCRIPT_TOOL_OUTPUT_MAX_CHARS: 2_000,
 } as const
 
 export const TOOL_LIMITS = {
-  INLINE_PAGE_CONTENT_MAX_CHARS: 5_000,
-  FILESYSTEM_READ_MAX_LINES: 500,
-  FILESYSTEM_READ_MAX_CHARS: 15_000,
+  get INLINE_PAGE_CONTENT_MAX_CHARS() {
+    return configStore.get('TOOL_LIMITS.INLINE_PAGE_CONTENT_MAX_CHARS')
+  },
+  get FILESYSTEM_READ_MAX_LINES() {
+    return configStore.get('TOOL_LIMITS.FILESYSTEM_READ_MAX_LINES')
+  },
+  get FILESYSTEM_READ_MAX_CHARS() {
+    return configStore.get('TOOL_LIMITS.FILESYSTEM_READ_MAX_CHARS')
+  },
 } as const
 
 export const PAGINATION = {
@@ -76,12 +97,23 @@ export const CONTENT_LIMITS = {
   BODY_CONTEXT_SIZE: 10_000,
   MAX_QUEUE_SIZE: 1_000,
   CONSOLE_META_CHAR: 1_000,
-  CONSOLE_BUFFER_MAX_ENTRIES: 500,
-  CONSOLE_DEFAULT_LIMIT: 50,
-  CONSOLE_MAX_LIMIT: 200,
 } as const
 
 export const REFERRAL_LIMITS = {
   MAX_DAILY_CREDITS: 500,
   CREDITS_PER_REFERRAL: 200,
+} as const
+
+export const SCREENCAST_LIMITS = {
+  DEFAULT_JPEG_QUALITY: 80,
+  EVERY_NTH_FRAME: 1,
+  MAX_WIDTH: 1280,
+  MAX_HEIGHT: 800,
+  SUBSCRIBER_BACKPRESSURE_BYTES: 4 * 1024 * 1024,
+} as const
+
+export const AGENT_HARNESS_LIMITS = {
+  AGENT_NAME_MAX_CHARS: 80,
+  QUEUE_MAX_LENGTH: 50,
+  QUEUE_MESSAGE_MAX_BYTES: 64 * 1024,
 } as const

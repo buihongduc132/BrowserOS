@@ -1,0 +1,9 @@
+id: barrel-circular-risk
+language: typescript
+rule:
+  pattern: import $$$ from '$SOURCE'
+constraints:
+  SOURCE:
+    regex: "(\\./|\\.\\./)$|index$"
+message: "Importing from a barrel file (index.ts) or relative directory is a high-risk pattern for circular dependencies. Import from specific files instead."
+severity: warning

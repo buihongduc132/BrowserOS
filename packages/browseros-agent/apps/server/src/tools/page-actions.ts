@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rename, rm } from 'node:fs/promises'
+import { mkdtemp, rename, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { z } from 'zod'
@@ -123,7 +123,7 @@ export const download_file = defineTool({
   handler: async (args, ctx, response) => {
     const resolvedDir = resolveWorkingPath(ctx, args.path, args.cwd)
     const baseDir = ctx.directories.workingDir ?? tmpdir()
-    await mkdir(baseDir, { recursive: true })
+    await ensureDirectory(baseDir)
     const tempDir = await mkdtemp(join(baseDir, 'browseros-dl-'))
 
     try {

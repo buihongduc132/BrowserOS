@@ -15,17 +15,17 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import { useAvailableTabs } from './available-tabs.hooks'
 import { TabListItem } from './tab-list-item'
-import { useAvailableTabs } from './use-available-tabs'
 
-type PopoverSide = 'top' | 'bottom' | 'left' | 'right'
+export type PopoverSide = 'top' | 'bottom' | 'left' | 'right'
 
-interface TabPickerCommonProps {
+export interface TabPickerCommonProps {
   selectedTabs: chrome.tabs.Tab[]
   onToggleTab: (tab: chrome.tabs.Tab) => void
 }
 
-interface TabPickerMentionPopoverProps extends TabPickerCommonProps {
+export interface TabPickerMentionPopoverProps extends TabPickerCommonProps {
   variant: 'mention'
   isOpen: boolean
   filterText: string
@@ -34,13 +34,13 @@ interface TabPickerMentionPopoverProps extends TabPickerCommonProps {
   side?: PopoverSide
 }
 
-interface TabPickerSelectorPopoverProps
+export interface TabPickerSelectorPopoverProps
   extends PropsWithChildren<TabPickerCommonProps> {
   variant: 'selector'
   side?: PopoverSide
 }
 
-type TabPickerPopoverProps =
+export type TabPickerPopoverProps =
   | TabPickerMentionPopoverProps
   | TabPickerSelectorPopoverProps
 

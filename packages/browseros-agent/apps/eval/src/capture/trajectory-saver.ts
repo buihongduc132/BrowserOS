@@ -19,7 +19,13 @@ export async function hasExistingGraderResults(
   try {
     await access(metadataPath)
     const content = await readFile(metadataPath, 'utf-8')
-    const metadata = TaskMetadataSchema.parse(JSON.parse(content))
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(content)
+    } catch {
+      return false
+    }
+    const metadata = TaskMetadataSchema.parse(parsed)
 
     // Check if grader_results exists and has at least one entry
     const hasResults =
@@ -57,12 +63,32 @@ export class TrajectorySaver {
     )
   }
 
+  async saveAttempt(attempt: Record<string, unknown>): Promise<void> {
+    await writeFile(
+      join(this.outputDir, 'attempt.json'),
+      JSON.stringify(attempt, null, 2),
+    )
+  }
+
+  async saveGrades(graderResults: Record<string, GraderResult>): Promise<void> {
+    await writeFile(
+      join(this.outputDir, 'grades.json'),
+      JSON.stringify(graderResults, null, 2),
+    )
+  }
+
   async loadMetadata(): Promise<TaskMetadata> {
     const content = await readFile(
       join(this.outputDir, 'metadata.json'),
       'utf-8',
     )
-    return TaskMetadataSchema.parse(JSON.parse(content))
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(content)
+    } catch {
+      return null
+    }
+    return TaskMetadataSchema.parse(parsed)
   }
 
   async updateGraderResults(
@@ -70,6 +96,7 @@ export class TrajectorySaver {
   ): Promise<void> {
     const metadata = await this.loadMetadata()
     metadata.grader_results = graderResults
+    await this.saveGrades(graderResults)
     await this.saveMetadata(metadata)
   }
 
@@ -90,7 +117,10 @@ export class TrajectorySaver {
       errors: [],
       warnings: [],
       agent_config: {
-        type: agentConfig.type as 'single' | 'orchestrator-executor',
+        type: agentConfig.type as
+          | 'single'
+          | 'orchestrator-executor'
+          | 'claude-code',
         model: agentConfig.model,
       },
       grader_results: {},

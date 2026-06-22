@@ -1,0 +1,19 @@
+# SOURCE: coding-guard internal — Math.random() is not cryptographically suitable for IDs
+# SOURCE: https://developer.mozilla.org/en-US/docs/Web/API/Crypto/randomUUID
+# BUILT_ON: https://ast-grep.com/
+id: no-math-random-uuid
+message: "Use crypto.randomUUID() instead of Math.random() for ID generation"
+severity: warning
+language: TypeScript
+note: |
+  Math.random() produces predictable values unsuitable for unique identifiers.
+  Use crypto.randomUUID() which is available in all modern browsers and
+  produces proper UUID v4 identifiers. This project already uses crypto.randomUUID()
+  in 12+ files as the standard pattern.
+rule:
+  pattern: Math.random().toString($$$ARGS)
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'

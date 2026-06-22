@@ -25,6 +25,7 @@ nxtscape-cli-access.json
 gclient.json
 .env
 .grove/
+AGENTS.md
 **/resources/binaries/
 
 packages/browseros/build/tools/
@@ -32,3 +33,13 @@ packages/browseros/build/tools/
 # AI SDK DevTools traces
 .devtools/
 .omc/
+.gitnexus
+identity/
+browseros-server.log
+.browseros-prod-resources/bin/browseros_server.vendor
+.fusion
+.pi
+.llm/
+.ralph-mid-turn/
+.ralph-tab-owner/
+.worktrees/

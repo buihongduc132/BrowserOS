@@ -10,6 +10,20 @@ import { browseros_info } from './browseros-info'
 import { get_console_logs } from './console'
 import { get_dom, search_dom } from './dom'
 import {
+  clear_extension_storage,
+  disable_extension,
+  enable_extension,
+  get_extension_info,
+  get_extension_storage,
+  list_extensions,
+  list_messageable_extensions,
+  load_unpacked_extension,
+  remove_extension_storage,
+  send_extension_message,
+  set_extension_storage,
+  uninstall_extension,
+} from './extensions'
+import {
   delete_history_range,
   delete_history_url,
   get_recent_history,
@@ -70,6 +84,7 @@ import {
   create_hidden_window,
   create_window,
   list_windows,
+  set_window_visibility,
 } from './windows'
 
 export const registry = createRegistry([
@@ -119,12 +134,13 @@ export const registry = createRegistry([
   save_screenshot,
   download_file,
 
-  // Windows (5)
+  // Windows (6)
   list_windows,
   create_window,
   create_hidden_window,
   close_window,
   activate_window,
+  set_window_visibility,
 
   // Bookmarks (6)
   get_bookmarks,
@@ -153,4 +169,18 @@ export const registry = createRegistry([
   // Nudges (2)
   suggest_schedule,
   suggest_app_connection,
+
+  // Extensions (12)
+  list_extensions,
+  get_extension_info,
+  enable_extension,
+  disable_extension,
+  uninstall_extension,
+  load_unpacked_extension,
+  get_extension_storage,
+  set_extension_storage,
+  remove_extension_storage,
+  clear_extension_storage,
+  send_extension_message,
+  list_messageable_extensions,
 ])

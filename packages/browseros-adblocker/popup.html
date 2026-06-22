@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <h1>🛡️ BrowserOS Ad Blocker</h1>
+    <div id="tab-stats">
+      <h2>This page</h2>
+      <div class="stat-row"><span>Ads blocked</span><span id="tab-blocked">0</span></div>
+      <div class="stat-row"><span>Trackers blocked</span><span id="tab-trackers">0</span></div>
+      <div class="stat-row"><span>Scripts blocked</span><span id="tab-scripts">0</span></div>
+    </div>
+    <hr>
+    <div id="global-stats">
+      <h2>Session totals</h2>
+      <div class="stat-row"><span>Total blocked</span><span id="global-blocked">0</span></div>
+      <div class="stat-row"><span>Domains blocked</span><span id="global-domains">0</span></div>
+    </div>
+  </div>
+  <script src="popup.iife.js"></script>
+</body>
+</html>

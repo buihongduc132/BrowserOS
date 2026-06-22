@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"time"
 )
 
@@ -27,7 +28,8 @@ const (
 	randomPortMax = 9999
 )
 
-var defaultLocalPorts = Ports{CDP: 9005, Server: 9105, Extension: 9305}
+// These MUST match scripts/ports.sh DEV_*_PORT values. Single source of truth.
+var defaultLocalPorts = Ports{CDP: 9010, Server: 9011, Extension: 9012}
 
 func DefaultLocalPorts() Ports {
 	return defaultLocalPorts
@@ -130,7 +132,34 @@ func (r *PortReservations) ReleaseAll() {
 }
 
 func KillPort(port int) {
-	exec.Command("sh", "-c", fmt.Sprintf("lsof -ti:%d | xargs kill -9 2>/dev/null || true", port)).Run()
+	if runtime.GOOS == "linux" {
+		exec.Command("sh", "-c", fmt.Sprintf("fuser -k %d/tcp 2>/dev/null || true", port)).Run()
+	} else {
+		exec.Command("sh", "-c", fmt.Sprintf("lsof -ti:%d | xargs kill -9 2>/dev/null || true", port)).Run()
+	}
+}
+
+func KillPortAndWait(port int, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		KillPort(port)
+		if IsPortAvailable(port) {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("port %d is still in use after kill -9 cleanup", port)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func KillPortsAndWait(p Ports, timeout time.Duration) error {
+	for _, port := range []int{p.CDP, p.Server, p.Extension} {
+		if err := KillPortAndWait(port, timeout); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func BuildEnv(p Ports, nodeEnv string) []string {
@@ -139,7 +168,6 @@ func BuildEnv(p Ports, nodeEnv string) []string {
 		fmt.Sprintf("BROWSEROS_CDP_PORT=%d", p.CDP),
 		fmt.Sprintf("BROWSEROS_SERVER_PORT=%d", p.Server),
 		fmt.Sprintf("BROWSEROS_EXTENSION_PORT=%d", p.Extension),
-		fmt.Sprintf("VITE_BROWSEROS_SERVER_PORT=%d", p.Server),
 		fmt.Sprintf("NODE_ENV=%s", nodeEnv),
 	)
 	return env

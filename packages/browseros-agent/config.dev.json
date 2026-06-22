@@ -1,8 +1,9 @@
 {
+  "_comment": "Dev config — ports match .env.development (canonical source of truth). Loaded ONLY via --config flag; start-dev uses ENV vars instead.",
   "ports": {
-    "cdp": 9005,
-    "http_mcp": 9105,
-    "agent": 9205,
+    "cdp": 9010,
+    "http_mcp": 9115,
+    "agent": 9115,
     "extension": 9305
   },
   "flags": {

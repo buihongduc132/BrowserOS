@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"sync"
 	"syscall"
+	"time"
 
 	"browseros-dev/browser"
 	"browseros-dev/proc"
@@ -38,11 +40,40 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := ensureLimactlPresent(); err != nil {
+		return err
+	}
 
-	defaultPorts := proc.DefaultLocalPorts()
+	defaultPorts, err := resolveTargetPorts(root, "")
+	if err != nil {
+		return err
+	}
 	p := defaultPorts
 	var reservations *proc.PortReservations
-	userDataDir := "/tmp/browseros-dev"
+	userDataDir, err := proc.DefaultDevUserDataDir(root)
+	if err != nil {
+		return err
+	}
+	mode := "watch"
+	if watchManual {
+		mode = "manual"
+	}
+	var runLock *proc.WatchRunLock
+	acquireRunLock := func(ports proc.Ports) error {
+		lock, stopped, err := proc.AcquireWatchRunLock(proc.WatchRunIdentity{
+			Mode:    mode,
+			Profile: userDataDir,
+			Ports:   ports,
+		}, 3*time.Second)
+		if err != nil {
+			return err
+		}
+		runLock = lock
+		if stopped {
+			proc.LogMsgf(proc.TagInfo, "Stopped existing dev watch for profile %s", userDataDir)
+		}
+		return nil
+	}
 
 	if watchNew {
 		proc.LogMsg(proc.TagInfo, "Selecting random available ports...")
@@ -57,13 +88,28 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		}
 		userDataDir = dir
 		proc.LogMsgf(proc.TagInfo, "Created fresh profile: %s", userDataDir)
+		if err := acquireRunLock(p); err != nil {
+			return err
+		}
 	} else {
 		if err := os.MkdirAll(userDataDir, 0o755); err != nil {
 			return fmt.Errorf("creating user-data dir: %w", err)
 		}
+		if err := acquireRunLock(p); err != nil {
+			return err
+		}
 		proc.LogMsg(proc.TagInfo, "Killing processes on preferred ports...")
-		proc.KillPorts(defaultPorts)
+		if err := proc.KillPortsAndWait(defaultPorts, 3*time.Second); err != nil {
+			return err
+		}
 		proc.LogMsg(proc.TagInfo, "Ports cleared")
+		killedBrowsers, err := proc.KillBrowserProcessesForUserDataDirs([]string{userDataDir}, 3*time.Second)
+		if err != nil {
+			return err
+		}
+		if killedBrowsers > 0 {
+			proc.LogMsgf(proc.TagInfo, "Stopped %d BrowserOS process(es) for profile %s", killedBrowsers, userDataDir)
+		}
 
 		p, reservations, err = proc.ResolveWatchPorts(false)
 		if err != nil {
@@ -75,13 +121,18 @@ func runWatch(cmd *cobra.Command, args []string) error {
 				p.CDP, p.Server, p.Extension)
 		}
 	}
+	defer func() {
+		if err := runLock.Close(); err != nil {
+			proc.LogMsgf(proc.TagInfo, "Warning: closing run lock: %v", err)
+		}
+	}()
 	defer reservations.ReleaseAll()
 
-	fmt.Println()
-	mode := "watch"
-	if watchManual {
-		mode = "manual"
+	if err := runDevSetup(cmd.Context(), root, setupModeIfNeeded); err != nil {
+		return err
 	}
+
+	fmt.Println()
 	proc.LogMsgf(proc.TagInfo, "Mode: %s", proc.BoldColor.Sprint(mode))
 	proc.LogMsgf(proc.TagInfo, "Ports: CDP=%d Server=%d Extension=%d", p.CDP, p.Server, p.Extension)
 	proc.LogMsgf(proc.TagInfo, "Profile: %s", userDataDir)
@@ -100,16 +151,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	var wg sync.WaitGroup
 	var procs []*proc.ManagedProc
 
-	// Run agent codegen if generated files don't exist
 	agentDir := filepath.Join(root, "apps/agent")
-	if _, err := os.Stat(filepath.Join(agentDir, "generated/graphql")); os.IsNotExist(err) {
-		proc.LogMsg(proc.TagBuild, "Running agent codegen...")
-		if err := proc.RunBlocking(ctx, agentDir, proc.TagBuild,
-			"bun", "--env-file=.env.development", "graphql-codegen", "--config", "codegen.ts"); err != nil {
-			return fmt.Errorf("agent codegen failed: %w", err)
-		}
-		proc.LogMsg(proc.TagBuild, "agent codegen done")
-	}
 
 	if watchManual {
 		proc.LogMsg(proc.TagBuild, "Building agent (dev)...")
@@ -159,6 +201,9 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		Env:     env,
 		Restart: true,
 		Cmd:     []string{"bun", "--watch", "--env-file=.env.development", "src/index.ts"},
+		BeforeStart: func() error {
+			return proc.KillPortAndWait(p.Server, 3*time.Second)
+		},
 	}))
 
 	<-sigCh
@@ -181,5 +226,15 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	}
 	wg.Wait()
 	proc.LogMsg(proc.TagInfo, "All processes stopped")
+	return nil
+}
+
+func ensureLimactlPresent() error {
+	if _, err := exec.LookPath("limactl"); err != nil {
+		return fmt.Errorf("%s %s",
+			proc.ErrorColor.Sprint("Lima is not installed."),
+			proc.DimColor.Sprintf("Install with %s.", proc.BoldColor.Sprint("brew install lima")),
+		)
+	}
 	return nil
 }

@@ -1,8 +1,9 @@
 {
+  "_comment": "Production sample config. Ports follow +100 per service pattern. Dev ports offset by +10 from these (see config.dev.json). agent is deprecated — use http_mcp.",
   "ports": {
     "cdp": 9000,
     "http_mcp": 9100,
-    "agent": 9200,
+    "agent": 9100,
     "extension": 9300
   },
   "directories": {

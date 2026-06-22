@@ -49,6 +49,12 @@ jobs:
       - name: Clone WebArena-Infinity
         run: git clone --depth 1 https://github.com/web-arena-x/webarena-infinity.git /tmp/webarena-infinity
 
+      - name: Install Python eval dependencies
+        run: pip install agisdk requests
+
+      - name: Clone WebArena-Infinity
+        run: git clone --depth 1 https://github.com/web-arena-x/webarena-infinity.git /tmp/webarena-infinity
+
       - name: Install xvfb
         run: sudo apt-get update && sudo apt-get install -y xvfb
 

@@ -1,8 +1,10 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { query } from '@anthropic-ai/claude-agent-sdk'
+import { writeGraderJsonArtifact } from '../../grading/artifacts'
+import type { GraderInput } from '../../grading/types'
 import type { GraderResult } from '../../types'
-import type { Grader, GraderInput } from '../types'
+import type { Grader } from '../types'
 import {
   buildUserPrompt,
   DEFAULT_AXES,
@@ -16,9 +18,9 @@ import {
   type PerformanceGraderOptions,
 } from './types'
 
-export const DEFAULT_MAX_TURNS = 100
-export const DEFAULT_MAX_BUDGET_USD = 100
-export const DEFAULT_PASS_THRESHOLD = 75
+const DEFAULT_MAX_TURNS = 100
+const DEFAULT_MAX_BUDGET_USD = 100
+const DEFAULT_PASS_THRESHOLD = 75
 const DEFAULT_MODEL = 'claude-opus-4-5-20251101'
 const GRADER_TIMEOUT_MS = 300_000
 
@@ -63,6 +65,7 @@ export class PerformanceGrader implements Grader {
         input.screenshotCount,
         terminationReason,
       )
+      await writeGraderJsonArtifact(input, this.name, 'metrics.json', metrics)
 
       const systemPrompt = PERFORMANCE_SYSTEM_PROMPT.replace(
         /\{screenshot_count\}/g,
@@ -82,6 +85,14 @@ export class PerformanceGrader implements Grader {
         userPrompt,
         input.outputDir,
       )
+      if (response) {
+        await writeGraderJsonArtifact(
+          input,
+          this.name,
+          'agent-output.json',
+          response,
+        )
+      }
 
       if (!response) {
         return {
@@ -140,6 +151,7 @@ export class PerformanceGrader implements Grader {
           `Perf grader: LLM returned ${returnedAxes.size}/${expectedAxes.size} axes, missing: ${missingAxes.join(', ')}`,
         )
       }
+      await writeGraderJsonArtifact(input, this.name, 'axes.json', axisResults)
 
       return {
         score: compositeScore / 100,

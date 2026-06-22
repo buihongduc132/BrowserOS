@@ -16,7 +16,7 @@ import { VERSION } from './version'
 
 const portSchema = z.number().int()
 
-export const ServerConfigSchema = z.object({
+const ServerConfigSchema = z.object({
   cdpPort: portSchema.nullable(),
   serverPort: portSchema,
   agentPort: portSchema,
@@ -24,7 +24,6 @@ export const ServerConfigSchema = z.object({
   resourcesDir: z.string(),
   executionDir: z.string(),
   mcpAllowRemote: z.boolean(),
-  codegenServiceUrl: z.string().optional(),
   instanceClientId: z.string().optional(),
   instanceInstallId: z.string().optional(),
   instanceBrowserosVersion: z.string().optional(),
@@ -46,35 +45,28 @@ interface ParsedCliArgs {
   overrides: PartialConfig
 }
 
+/** Loads and validates server config from CLI, file, env, and defaults. */
 export function loadServerConfig(
   argv: string[] = process.argv,
 ): ConfigResult<ServerConfig> {
-  // 1. Parse CLI args
   const cli = parseCliArgs(argv)
   if (!cli.ok) return cli
 
-  // 2. Parse config file (only if --config provided)
   const file = parseConfigFile(cli.value.configPath)
   if (!file.ok) return file
 
-  // 3. Parse runtime environment variables
   const runtimeEnv = parseRuntimeEnv()
+  if (!runtimeEnv.ok) return runtimeEnv
 
-  // 4. Merge: Defaults < Env < File < CLI
   const merged = mergeConfigs(
     getDefaults(cli.value.cwd),
-    runtimeEnv,
+    runtimeEnv.value,
     file.value,
     cli.value.overrides,
   )
 
-  // 5. Add build-time inlined values
-  merged.codegenServiceUrl = INLINED_ENV.CODEGEN_SERVICE_URL
-
-  // 6. agentPort is deprecated - always equals serverPort
   merged.agentPort = merged.serverPort
 
-  // 7. Validate with Zod
   const result = ServerConfigSchema.safeParse(merged)
   if (!result.success) {
     const errors = result.error.issues
@@ -86,7 +78,6 @@ export function loadServerConfig(
     }
   }
 
-  // 8. Validate required inlined env vars for production
   const inlinedValidation = validateInlinedEnv()
   if (!inlinedValidation.ok) return inlinedValidation
 
@@ -250,29 +241,33 @@ function parseConfigFile(filePath?: string): ConfigResult<PartialConfig> {
   }
 }
 
-function parseRuntimeEnv(): PartialConfig {
+function parseRuntimeEnv(): ConfigResult<PartialConfig> {
   const cwd = process.cwd()
-  return omitUndefined({
-    cdpPort: process.env.BROWSEROS_CDP_PORT
-      ? safeParseInt(process.env.BROWSEROS_CDP_PORT)
-      : undefined,
-    serverPort: process.env.BROWSEROS_SERVER_PORT
-      ? safeParseInt(process.env.BROWSEROS_SERVER_PORT)
-      : undefined,
-    extensionPort: process.env.BROWSEROS_EXTENSION_PORT
-      ? safeParseInt(process.env.BROWSEROS_EXTENSION_PORT)
-      : undefined,
-    resourcesDir: process.env.BROWSEROS_RESOURCES_DIR
-      ? toAbsolutePath(process.env.BROWSEROS_RESOURCES_DIR, cwd)
-      : undefined,
-    executionDir: process.env.BROWSEROS_EXECUTION_DIR
-      ? toAbsolutePath(process.env.BROWSEROS_EXECUTION_DIR, cwd)
-      : undefined,
-    instanceInstallId: process.env.BROWSEROS_INSTALL_ID,
-    instanceClientId: process.env.BROWSEROS_CLIENT_ID,
-    aiSdkDevtoolsEnabled:
-      process.env.BROWSEROS_AI_SDK_DEVTOOLS === 'true' ? true : undefined,
-  })
+
+  return {
+    ok: true,
+    value: omitUndefined({
+      cdpPort: process.env.BROWSEROS_CDP_PORT
+        ? safeParseInt(process.env.BROWSEROS_CDP_PORT)
+        : undefined,
+      serverPort: process.env.BROWSEROS_SERVER_PORT
+        ? safeParseInt(process.env.BROWSEROS_SERVER_PORT)
+        : undefined,
+      extensionPort: process.env.BROWSEROS_EXTENSION_PORT
+        ? safeParseInt(process.env.BROWSEROS_EXTENSION_PORT)
+        : undefined,
+      resourcesDir: process.env.BROWSEROS_RESOURCES_DIR
+        ? toAbsolutePath(process.env.BROWSEROS_RESOURCES_DIR, cwd)
+        : undefined,
+      executionDir: process.env.BROWSEROS_EXECUTION_DIR
+        ? toAbsolutePath(process.env.BROWSEROS_EXECUTION_DIR, cwd)
+        : undefined,
+      instanceInstallId: process.env.BROWSEROS_INSTALL_ID,
+      instanceClientId: process.env.BROWSEROS_CLIENT_ID,
+      aiSdkDevtoolsEnabled:
+        process.env.BROWSEROS_AI_SDK_DEVTOOLS === 'true' ? true : undefined,
+    }),
+  }
 }
 
 function validateInlinedEnv(): ConfigResult<void> {

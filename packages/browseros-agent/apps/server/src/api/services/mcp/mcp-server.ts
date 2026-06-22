@@ -6,22 +6,18 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js'
-import type { Browser } from '../../../browser/browser'
-import type { ToolRegistry } from '../../../tools/tool-registry'
-import {
-  type KlavisProxyHandle,
-  registerKlavisTools,
-} from '../klavis/strata-proxy'
+import type { BrowserSession } from '../../../browser/core/session'
+import type { ConnectorToolScope, KlavisService } from '../klavis'
 import { MCP_INSTRUCTIONS } from './mcp-prompt'
 import { registerTools } from './register-mcp'
 
 export interface McpServiceDeps {
   version: string
-  registry: ToolRegistry
-  browser: Browser
-  executionDir: string
-  resourcesDir: string
-  klavisProxy?: KlavisProxyHandle | null
+  browserSession: BrowserSession
+  klavis?: KlavisService
+  connectorScope?: ConnectorToolScope
+  defaultWindowId?: number
+  defaultTabGroupId?: string
 }
 
 export function createMcpServer(deps: McpServiceDeps): McpServer {
@@ -38,19 +34,13 @@ export function createMcpServer(deps: McpServiceDeps): McpServer {
     return {}
   })
 
-  // Register browser tools
-  registerTools(server, deps.registry, {
-    browser: deps.browser,
-    directories: {
-      workingDir: deps.executionDir,
-      resourcesDir: deps.resourcesDir,
-    },
+  registerTools(server, {
+    browserSession: deps.browserSession,
+    defaultWindowId: deps.defaultWindowId,
+    defaultTabGroupId: deps.defaultTabGroupId,
   })
 
-  // Register Klavis proxy tools (if connected)
-  if (deps.klavisProxy) {
-    registerKlavisTools(server, deps.klavisProxy)
-  }
+  deps.klavis?.registerMcpTools(server, deps.connectorScope)
 
   return server
 }

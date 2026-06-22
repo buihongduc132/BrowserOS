@@ -4,20 +4,35 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
  * Centralized file system paths.
+ *
+ * Retention and sizing values can be overridden via environment variables.
  */
+
+import { configStore } from './config-store'
 
 export const PATHS = {
   DEFAULT_EXECUTION_DIR: process.cwd(),
   BROWSEROS_DIR_NAME: '.browseros',
-  MEMORY_DIR_NAME: 'memory',
+  DEV_BROWSEROS_DIR_NAME: '.browseros-dev',
+  CACHE_DIR_NAME: 'cache',
+  DB_DIR_NAME: 'db',
+  DB_FILE_NAME: 'browseros.sqlite',
   SESSIONS_DIR_NAME: 'sessions',
   TOOL_OUTPUT_DIR_NAME: 'tool-output',
   SOUL_FILE_NAME: 'SOUL.md',
   CORE_MEMORY_FILE_NAME: 'CORE.md',
   SKILLS_DIR_NAME: 'skills',
   BUILTIN_DIR_NAME: 'builtin',
+  COMMANDS_DIR_NAME: 'commands',
   SERVER_CONFIG_FILE_NAME: 'server.json',
-  SOUL_MAX_LINES: 150,
-  MEMORY_RETENTION_DAYS: 30,
-  SESSION_RETENTION_DAYS: 30,
-} as const
+  OPENCLAW_DIR_NAME: 'openclaw',
+  get SOUL_MAX_LINES() {
+    return configStore.get('PATHS.SOUL_MAX_LINES')
+  },
+  get MEMORY_RETENTION_DAYS() {
+    return configStore.get('PATHS.MEMORY_RETENTION_DAYS')
+  },
+  get SESSION_RETENTION_DAYS() {
+    return configStore.get('PATHS.SESSION_RETENTION_DAYS')
+  },
+}

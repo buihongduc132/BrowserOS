@@ -7,8 +7,9 @@ import { PRODUCT_WEB_HOST } from './lib/constants/productWebHost'
 // biome-ignore lint/style/noProcessEnv: build config file needs env access
 const env = process.env
 
-// biome-ignore lint/style/noNonNullAssertion: required env var
-const apiUrl = new URL(env.VITE_PUBLIC_BROWSEROS_API!)
+const apiUrl = new URL(
+  env.VITE_PUBLIC_BROWSEROS_API?.trim() || 'https://api.browseros.com',
+)
 const apiPattern = apiUrl.port
   ? `${apiUrl.hostname}:${apiUrl.port}`
   : apiUrl.hostname
@@ -67,14 +68,7 @@ export default defineConfig({
       'webNavigation',
       'downloads',
     ],
-    host_permissions: [
-      'http://127.0.0.1/*',
-      'https://suggestqueries.google.com/*',
-      'https://api.bing.com/*',
-      'https://in.search.yahoo.com/*',
-      'https://duckduckgo.com/*',
-      'https://search.brave.com/*',
-    ],
+    host_permissions: ['http://127.0.0.1/*'],
   },
   vite: () => ({
     build: {

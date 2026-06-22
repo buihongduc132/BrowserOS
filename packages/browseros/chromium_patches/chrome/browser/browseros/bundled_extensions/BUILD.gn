@@ -1,9 +1,9 @@
 diff --git a/chrome/browser/browseros/bundled_extensions/BUILD.gn b/chrome/browser/browseros/bundled_extensions/BUILD.gn
 new file mode 100644
-index 0000000000000..baac689c55368
+index 0000000000000..0d4aee6f8bad1
 --- /dev/null
 +++ b/chrome/browser/browseros/bundled_extensions/BUILD.gn
-@@ -0,0 +1,32 @@
+@@ -0,0 +1,31 @@
 +# Copyright 2024 The Chromium Authors
 +# Use of this source code is governed by a BSD-style license that can be
 +# found in the LICENSE file.
@@ -19,9 +19,8 @@ index 0000000000000..baac689c55368
 +
 +_bundled_extensions_sources = [
 +  "bundled_extensions.json",
-+  "bflpfmnmnokmjhmgnolecpppdbdophmk.crx",  # Agent V2
++  "bflpfmnmnokmjhmgnolecpppdbdophmk.crx",  # Agent
 +  "adlpneommgkgeanpaekgoaolcpncohkf.crx",  # Bug Reporter
-+  "nlnihljpboknmfagkikhkdblbedophja.crx",  # Controller
 +]
 +
 +if (!is_mac) {

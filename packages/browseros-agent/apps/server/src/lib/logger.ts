@@ -98,14 +98,22 @@ function rotateLogIfNeeded(logPath: string): void {
  * Returns null for production (use sync stdout to avoid thread-stream issues with Bun compile).
  */
 function createConsoleTransport(): pino.TransportSingleOptions | null {
-  if (isDev) {
-    return {
-      target: 'pino-pretty',
-      options: {
-        colorize: true,
-        translateTime: 'SYS:HH:MM:ss.l',
-        ignore: 'pid,hostname',
-      },
+  // Never use pino-pretty in compiled binaries — Bun compile can't resolve
+  // pino's thread-stream worker transport at runtime.
+  // Only enable in development when running via `bun run` directly.
+  if (isDev && !process.execPath.includes('bunfs')) {
+    try {
+      require.resolve('pino-pretty')
+      return {
+        target: 'pino-pretty',
+        options: {
+          colorize: true,
+          translateTime: 'SYS:HH:MM:ss.l',
+          ignore: 'pid,hostname',
+        },
+      }
+    } catch {
+      return null
     }
   }
 
@@ -114,7 +122,7 @@ function createConsoleTransport(): pino.TransportSingleOptions | null {
   return null
 }
 
-export class Logger implements LoggerInterface {
+class Logger implements LoggerInterface {
   private consoleLogger: pino.Logger
   private fileLogger: pino.Logger | null = null
   private level: LogLevel

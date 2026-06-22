@@ -1,6 +1,6 @@
 # BrowserOS Agent
 
-The agent platform powering [BrowserOS](https://github.com/browseros-ai/BrowserOS) — contains the MCP server, agent UI, CLI, evaluation framework, and SDK.
+The agent platform powering [BrowserOS](https://github.com/browseros-ai/BrowserOS) — contains the MCP server, agent UI, CLI, and evaluation framework.
 
 ## Monorepo Structure
 
@@ -12,7 +12,6 @@ apps/
   eval/            # Evaluation framework for benchmarking agents
 
 packages/
-  agent-sdk/       # Node.js SDK (@browseros-ai/agent-sdk)
   cdp-protocol/    # Type-safe Chrome DevTools Protocol bindings
   shared/          # Shared constants (ports, timeouts, limits)
 ```
@@ -23,7 +22,6 @@ packages/
 | `apps/agent` | Agent UI — Chrome extension for the chat interface |
 | `apps/cli` | Go CLI — control BrowserOS from the terminal or AI coding agents |
 | `apps/eval` | Benchmark framework — WebVoyager, Mind2Web evaluation |
-| `packages/agent-sdk` | Node.js SDK for browser automation with natural language |
 | `packages/cdp-protocol` | Auto-generated CDP type bindings used by the server |
 | `packages/shared` | Shared constants used across packages |
 
@@ -75,26 +73,20 @@ packages/
 
 ### Setup
 
-Requires [process-compose](https://github.com/F1bonacc1/process-compose):
-
-```bash
-brew install process-compose
-```
-
 ```bash
 # Copy environment files for each package
 cp apps/server/.env.example apps/server/.env.development
 cp apps/agent/.env.example apps/agent/.env.development
 cp apps/server/.env.production.example apps/server/.env.production
 
+# Install deps and generate agent code
+bun run dev:setup
+
 # Start the full dev environment
-process-compose up
+bun run dev:watch
 ```
 
-The `process-compose up` command runs the following in order:
-1. `bun install` — installs dependencies
-2. `bun --cwd apps/agent codegen` — generates agent code
-3. `bun --cwd apps/server start` and `bun --cwd apps/agent dev` — starts server and agent in parallel
+`dev:watch` starts the server and agent UI immediately.
 
 ### Environment Variables
 
@@ -126,7 +118,6 @@ Copy from `apps/server/.env.production.example` before running `build:server`.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `BROWSEROS_CONFIG_URL` | - | Remote config endpoint baked into prod binary |
-| `CODEGEN_SERVICE_URL` | - | Graph/codegen backend URL baked into prod binary |
 | `POSTHOG_API_KEY` | - | PostHog key baked into prod binary |
 | `SENTRY_DSN` | - | Sentry DSN baked into prod binary |
 | `R2_ACCOUNT_ID` | - | Cloudflare account id for production artifact downloads/uploads |
@@ -143,7 +134,6 @@ Copy from `apps/server/.env.production.example` before running `build:server`.
 | `BROWSEROS_SERVER_PORT` | 9100 | Passed to BrowserOS via CLI args |
 | `BROWSEROS_CDP_PORT` | 9000 | Passed to BrowserOS via CLI args |
 | `BROWSEROS_EXTENSION_PORT` | 9300 | Legacy BrowserOS CLI arg still passed for compatibility |
-| `VITE_BROWSEROS_SERVER_PORT` | 9100 | Agent UI connects to server (must match `BROWSEROS_SERVER_PORT`) |
 | `BROWSEROS_BINARY` | - | Path to BrowserOS binary |
 | `USE_BROWSEROS_BINARY` | true | Use BrowserOS instead of default Chrome |
 | `VITE_PUBLIC_POSTHOG_KEY` | - | Agent UI PostHog key |
@@ -164,9 +154,14 @@ bun run build:server          # Build production server resource artifacts and u
 bun run build:agent           # Build agent extension
 
 # Test
-bun run test                  # Run standard tests
-bun run test:cdp              # Run CDP-based tests
-bun run test:integration      # Run integration tests
+bun run test                  # Run all tests
+bun run test:all              # Run all tests
+bun run test:main             # Run key server tools and integration tests
+
+# App-specific test groups (from packages/browseros-agent)
+cd apps/server && bun run test:tools
+cd apps/server && bun run test:cdp
+cd apps/server && bun run test:integration
 
 # Quality
 bun run lint                  # Check with Biome

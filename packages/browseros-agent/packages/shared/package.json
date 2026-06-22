@@ -3,7 +3,8 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "zod": "^3.24.2"
@@ -32,6 +33,22 @@
     "./constants/paths": {
       "types": "./src/constants/paths.ts",
       "default": "./src/constants/paths.ts"
+    },
+    "./constants/config-schema": {
+      "types": "./src/constants/config-schema.ts",
+      "default": "./src/constants/config-schema.ts"
+    },
+    "./constants/config-store": {
+      "types": "./src/constants/config-store.ts",
+      "default": "./src/constants/config-store.ts"
+    },
+    "./constants/openclaw": {
+      "types": "./src/constants/openclaw.ts",
+      "default": "./src/constants/openclaw.ts"
+    },
+    "./constants/hermes": {
+      "types": "./src/constants/hermes.ts",
+      "default": "./src/constants/hermes.ts"
     },
     "./types/logger": {
       "types": "./src/types/logger.ts",

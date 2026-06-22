@@ -12,11 +12,9 @@ import { URL } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 
-import {
-  cleanupBrowserOS,
-  ensureBrowserOS,
-  type TestEnvironmentConfig,
-} from './__helpers__/index'
+import { MOCK_BROWSEROS_RESPONSE_TEXT } from '../src/lib/clients/llm/mock-language-model'
+import { cleanupBrowserOS, ensureBrowserOS } from './__helpers__/index'
+import type { TestEnvironmentConfig } from './__helpers__/setup'
 
 setDefaultTimeout(30000)
 
@@ -79,6 +77,23 @@ describe('HTTP Server Integration Tests', () => {
       }
       assert.strictEqual(json.status, 'ok')
       assert.strictEqual(json.cdpConnected, true)
+    })
+  })
+
+  describe('Agent endpoints', () => {
+    it('exposes the adapter catalog on /agents/adapters', async () => {
+      const response = await fetch(`${getBaseUrl()}/agents/adapters`)
+      assert.strictEqual(response.status, 200)
+
+      const json = (await response.json()) as {
+        adapters: Array<{ id: string }>
+      }
+      assert.ok(Array.isArray(json.adapters), 'Should return adapter list')
+      assert.ok(json.adapters.length > 0, 'Should expose at least one adapter')
+      assert.ok(
+        json.adapters.some((adapter) => adapter.id === 'claude'),
+        'Should include claude adapter',
+      )
     })
   })
 
@@ -153,9 +168,21 @@ describe('HTTP Server Integration Tests', () => {
     })
   })
 
+  describe('Removed endpoints', () => {
+    it('does not expose the removed /monitoring endpoint', async () => {
+      const response = await fetch(`${getBaseUrl()}/monitoring/runs`)
+
+      assert.strictEqual(
+        response.status,
+        404,
+        'Removed /monitoring should return 404',
+      )
+    })
+  })
+
   describe('Chat endpoint', () => {
     it(
-      'streams a chat response with BrowserOS provider',
+      'streams a mocked chat response for BrowserOS provider requests in test mode',
       async () => {
         const conversationId = crypto.randomUUID()
 
@@ -205,6 +232,10 @@ describe('HTTP Server Integration Tests', () => {
         assert.ok(
           fullResponse.includes('data:'),
           'Should contain SSE data events',
+        )
+        assert.ok(
+          fullResponse.includes(MOCK_BROWSEROS_RESPONSE_TEXT),
+          'Should include the mocked BrowserOS chat response',
         )
 
         const deleteResponse = await fetch(
