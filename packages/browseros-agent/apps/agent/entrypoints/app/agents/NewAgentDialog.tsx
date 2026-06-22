@@ -28,9 +28,9 @@ import { ProviderSelector } from './ProviderSelector'
 /** Probe result badge — extracted to reduce parent complexity */
 const ProbeResultBadge: FC<{
   result: { healthy: boolean; error?: string } | null
-}> = ({ result }) => {
-  if (!result) return null
-  if (result.healthy) {
+}> = ({ result: _result }) => {
+  if (!_result) return null
+  if (_result.healthy) {
     return (
       <span className="flex items-center gap-1 text-green-600 text-sm">
         <CheckCircle className="size-4" /> ACP ready
@@ -39,7 +39,7 @@ const ProbeResultBadge: FC<{
   }
   return (
     <span className="flex items-center gap-1 text-sm text-yellow-600">
-      <TriangleAlert className="size-4" /> {result.error ?? 'Probe failed'}
+      <TriangleAlert className="size-4" /> {_result.error ?? 'Probe failed'}
     </span>
   )
 }
@@ -104,10 +104,10 @@ export const NewAgentDialog: FC<NewAgentDialogProps> = ({
   onHarnessReasoningChange,
   onHermesProviderChange,
   onNameChange,
-  onProviderChange,
+  onProviderChange: _onProviderChange,
   onCustomCommandChange = () => {},
   onCustomArgsChange = () => {},
-  onCustomLabelChange = () => {},
+  onCustomLabelChange: _onCustomLabelChange = () => {},
   onProbeCustom = () => {},
   onImportAcpx = () => {},
 }) => {
@@ -117,8 +117,8 @@ export const NewAgentDialog: FC<NewAgentDialogProps> = ({
   const isCustomRuntime = createRuntime === 'custom'
   const isClassicHarnessRuntime =
     isHarnessRuntime && !isHermesRuntime && !isCustomRuntime
-  const openClawBlocked = createRuntime === 'openclaw' && !canManageOpenClaw
-  const cliBlocked =
+  const _openClawBlocked = createRuntime === 'openclaw' && !canManageOpenClaw
+  const _cliBlocked =
     createRuntime === 'openclaw' &&
     !!selectedCliProvider &&
     !cliAuthStatus?.loggedIn

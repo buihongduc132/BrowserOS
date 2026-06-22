@@ -136,7 +136,6 @@ export const MarkdownEditor = ({
 
   return (
     <div id={id} className={cn('mdx-editor-outer', className)}>
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: onKeyDown/onPasteCapture forwarding */}
       <div
         className="mdx-editor-themed"
         onKeyDown={onKeyDown}

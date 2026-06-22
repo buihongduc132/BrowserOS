@@ -32,7 +32,11 @@ describe('AgentsMdLoader', () => {
 
   it('loads AGENTS.md from allowed workspace path', async () => {
     const agentsMdPath = path.join(workspaceA, 'AGENTS.md')
-    await fs.writeFile(agentsMdPath, '# My Project\n\nSome rules here.', 'utf-8')
+    await fs.writeFile(
+      agentsMdPath,
+      '# My Project\n\nSome rules here.',
+      'utf-8',
+    )
 
     const result = await loader.load(workspaceA)
 
@@ -45,7 +49,11 @@ describe('AgentsMdLoader', () => {
   it('returns null for disallowed path', async () => {
     const otherDir = path.join(tempDir, 'other-workspace')
     await fs.mkdir(otherDir, { recursive: true })
-    await fs.writeFile(path.join(otherDir, 'AGENTS.md'), '# Not allowed', 'utf-8')
+    await fs.writeFile(
+      path.join(otherDir, 'AGENTS.md'),
+      '# Not allowed',
+      'utf-8',
+    )
 
     const result = await loader.load(otherDir)
 
@@ -85,13 +93,24 @@ describe('AgentsMdLoader', () => {
   })
 
   it('loads multiple workspace AGENTS.md files', async () => {
-    await fs.writeFile(path.join(workspaceA, 'AGENTS.md'), '# Workspace A', 'utf-8')
-    await fs.writeFile(path.join(workspaceB, 'AGENTS.md'), '# Workspace B', 'utf-8')
+    await fs.writeFile(
+      path.join(workspaceA, 'AGENTS.md'),
+      '# Workspace A',
+      'utf-8',
+    )
+    await fs.writeFile(
+      path.join(workspaceB, 'AGENTS.md'),
+      '# Workspace B',
+      'utf-8',
+    )
 
     const results = await loader.loadMultiple([workspaceA, workspaceB])
 
     expect(results).toHaveLength(2)
-    expect(results.map((r) => r.content).sort()).toEqual(['# Workspace A', '# Workspace B'])
+    expect(results.map((r) => r.content).sort()).toEqual([
+      '# Workspace A',
+      '# Workspace B',
+    ])
   })
 
   it('prevents path traversal', async () => {
@@ -107,7 +126,11 @@ describe('AgentsMdLoader', () => {
       // /etc/passwd doesn't exist — create a target file in temp
       safeExistingDir = path.join(tempDir, 'secret')
       await fs.mkdir(safeExistingDir, { recursive: true })
-      await fs.writeFile(path.join(safeExistingDir, 'passwd'), 'secret', 'utf-8')
+      await fs.writeFile(
+        path.join(safeExistingDir, 'passwd'),
+        'secret',
+        'utf-8',
+      )
     }
 
     const result = await loader.load(traversalPath)

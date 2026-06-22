@@ -1,0 +1,33 @@
+# SOURCE: https://react.dev/learn/typescript#typing-event-handlers
+#   React TypeScript docs: "Event handlers receive an event argument. You should type it explicitly
+#   to get autocomplete and type safety."
+# SOURCE: https://github.com/typescript-eslint/typescript-eslint/blob/main/packages/eslint-plugin/docs/rules/no-explicit-any.md
+#   Related: implicit any in event handlers disables type safety.
+id: no-implicit-any-event-handler
+language: typescript
+message: "Event handler parameter without explicit type — add type annotation (e.g., e: React.MouseEvent<HTMLButtonElement>)"
+severity: warning
+note: |
+  Catches inline event handler callbacks like onClick={(e) => ...} where the parameter has no type annotation.
+  Without explicit typing, TypeScript infers `any` or a less-specific type, losing autocomplete and error detection.
+  Common types: React.ChangeEvent<HTMLInputElement>, React.MouseEvent<HTMLButtonElement>, React.KeyboardEvent.
+rule:
+  pattern: ($PARAM) => { $$$ }
+constraints:
+  PARAM:
+    regex: "^[a-zA-Z_$][a-zA-Z0-9_$]*$"
+inside:
+  pattern: $PROP={$$$}
+  constraints:
+    PROP:
+      regex: "(?i)^(on|handle)[A-Z]"
+ignores:
+  - '**/*.test.ts'
+  - '**/*.test.tsx'
+  - '**/*.spec.ts'
+  - '**/*.spec.tsx'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/stories/**'
+  - '**/*.stories.tsx'

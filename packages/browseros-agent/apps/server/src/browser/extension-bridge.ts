@@ -215,15 +215,24 @@ export async function sendExtensionMessage(
       }
 
       try {
-        const valueStr = typeof value === 'string' ? value : JSON.stringify(value)
-        const parsed = JSON.parse(valueStr)
+        const valueStr =
+          typeof value === 'string' ? value : JSON.stringify(value)
+        let parsed: unknown
+        try {
+          parsed = JSON.parse(valueStr)
+        } catch {
+          return value
+        }
         if (parsed?.__browseros_bridge_error) {
           throw new Error(`Extension error: ${parsed.__browseros_bridge_error}`)
         }
         return parsed
       } catch (parseErr) {
-        // If JSON.parse threw and it's not from __error, return raw value
-        if (parseErr instanceof Error && parseErr.message.startsWith('Extension error')) {
+        // If parse threw and it's not from __error, return raw value
+        if (
+          parseErr instanceof Error &&
+          parseErr.message.startsWith('Extension error')
+        ) {
           throw parseErr
         }
         return value

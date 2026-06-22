@@ -22,7 +22,16 @@ function resolveBinaryPath(): string {
   if (process.env.BROWSEROS_APP_PATH) return process.env.BROWSEROS_APP_PATH
 
   // 3. CI wrapper (repo-relative)
-  const ciWrapper = join(import.meta.dirname, '..', '..', '..', '..', '.ci', 'bin', 'browseros')
+  const ciWrapper = join(
+    import.meta.dirname,
+    '..',
+    '..',
+    '..',
+    '..',
+    '.ci',
+    'bin',
+    'browseros',
+  )
   if (existsSync(ciWrapper)) return ciWrapper
 
   // 4. Platform defaults

@@ -10,8 +10,8 @@
  * process.env is read at import time with the overridden value.
  */
 
-import path from 'node:path'
 import { describe, expect, it } from 'bun:test'
+import path from 'node:path'
 
 import { spawnWithEnv } from './test-utils'
 
@@ -25,7 +25,8 @@ const PATHS_MODULE_PATH = JSON.stringify(
 
 describe('PATHS defaults — retention and sizing', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { PATHS } = require('../../src/constants/paths.ts') as typeof import('../../src/constants/paths')
+  const { PATHS } =
+    require('../../src/constants/paths.ts') as typeof import('../../src/constants/paths')
 
   it('exports exactly 18 keys', () => {
     expect(Object.keys(PATHS)).toHaveLength(18)
@@ -46,22 +47,36 @@ describe('PATHS defaults — retention and sizing', () => {
 
 describe('PATHS defaults — directory names', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { PATHS } = require('../../src/constants/paths.ts') as typeof import('../../src/constants/paths')
+  const { PATHS } =
+    require('../../src/constants/paths.ts') as typeof import('../../src/constants/paths')
 
-  it('has correct BROWSEROS_DIR_NAME', () => expect(PATHS.BROWSEROS_DIR_NAME).toBe('.browseros'))
-  it('has correct DEV_BROWSEROS_DIR_NAME', () => expect(PATHS.DEV_BROWSEROS_DIR_NAME).toBe('.browseros-dev'))
-  it('has correct CACHE_DIR_NAME', () => expect(PATHS.CACHE_DIR_NAME).toBe('cache'))
+  it('has correct BROWSEROS_DIR_NAME', () =>
+    expect(PATHS.BROWSEROS_DIR_NAME).toBe('.browseros'))
+  it('has correct DEV_BROWSEROS_DIR_NAME', () =>
+    expect(PATHS.DEV_BROWSEROS_DIR_NAME).toBe('.browseros-dev'))
+  it('has correct CACHE_DIR_NAME', () =>
+    expect(PATHS.CACHE_DIR_NAME).toBe('cache'))
   it('has correct DB_DIR_NAME', () => expect(PATHS.DB_DIR_NAME).toBe('db'))
-  it('has correct DB_FILE_NAME', () => expect(PATHS.DB_FILE_NAME).toBe('browseros.sqlite'))
-  it('has correct MEMORY_DIR_NAME', () => expect(PATHS.MEMORY_DIR_NAME).toBe('memory'))
-  it('has correct SESSIONS_DIR_NAME', () => expect(PATHS.SESSIONS_DIR_NAME).toBe('sessions'))
-  it('has correct SKILLS_DIR_NAME', () => expect(PATHS.SKILLS_DIR_NAME).toBe('skills'))
-  it('has correct BUILTIN_DIR_NAME', () => expect(PATHS.BUILTIN_DIR_NAME).toBe('builtin'))
-  it('has correct TOOL_OUTPUT_DIR_NAME', () => expect(PATHS.TOOL_OUTPUT_DIR_NAME).toBe('tool-output'))
-  it('has correct OPENCLAW_DIR_NAME', () => expect(PATHS.OPENCLAW_DIR_NAME).toBe('openclaw'))
-  it('has correct SERVER_CONFIG_FILE_NAME', () => expect(PATHS.SERVER_CONFIG_FILE_NAME).toBe('server.json'))
-  it('has correct SOUL_FILE_NAME', () => expect(PATHS.SOUL_FILE_NAME).toBe('SOUL.md'))
-  it('has correct CORE_MEMORY_FILE_NAME', () => expect(PATHS.CORE_MEMORY_FILE_NAME).toBe('CORE.md'))
+  it('has correct DB_FILE_NAME', () =>
+    expect(PATHS.DB_FILE_NAME).toBe('browseros.sqlite'))
+  it('has correct MEMORY_DIR_NAME', () =>
+    expect(PATHS.MEMORY_DIR_NAME).toBe('memory'))
+  it('has correct SESSIONS_DIR_NAME', () =>
+    expect(PATHS.SESSIONS_DIR_NAME).toBe('sessions'))
+  it('has correct SKILLS_DIR_NAME', () =>
+    expect(PATHS.SKILLS_DIR_NAME).toBe('skills'))
+  it('has correct BUILTIN_DIR_NAME', () =>
+    expect(PATHS.BUILTIN_DIR_NAME).toBe('builtin'))
+  it('has correct TOOL_OUTPUT_DIR_NAME', () =>
+    expect(PATHS.TOOL_OUTPUT_DIR_NAME).toBe('tool-output'))
+  it('has correct OPENCLAW_DIR_NAME', () =>
+    expect(PATHS.OPENCLAW_DIR_NAME).toBe('openclaw'))
+  it('has correct SERVER_CONFIG_FILE_NAME', () =>
+    expect(PATHS.SERVER_CONFIG_FILE_NAME).toBe('server.json'))
+  it('has correct SOUL_FILE_NAME', () =>
+    expect(PATHS.SOUL_FILE_NAME).toBe('SOUL.md'))
+  it('has correct CORE_MEMORY_FILE_NAME', () =>
+    expect(PATHS.CORE_MEMORY_FILE_NAME).toBe('CORE.md'))
 })
 
 describe('PATHS defaults — dynamic values', () => {
@@ -182,10 +197,15 @@ describe('PATHS edge-case env handling', () => {
 
 describe('PATHS structural checks', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { PATHS } = require('../../src/constants/paths.ts') as typeof import('../../src/constants/paths')
+  const { PATHS } =
+    require('../../src/constants/paths.ts') as typeof import('../../src/constants/paths')
 
   it('all numeric PATHS values are positive finite integers', () => {
-    const numericKeys = ['SOUL_MAX_LINES', 'MEMORY_RETENTION_DAYS', 'SESSION_RETENTION_DAYS'] as const
+    const numericKeys = [
+      'SOUL_MAX_LINES',
+      'MEMORY_RETENTION_DAYS',
+      'SESSION_RETENTION_DAYS',
+    ] as const
     for (const key of numericKeys) {
       expect(typeof PATHS[key]).toBe('number')
       expect(PATHS[key]).toBeGreaterThan(0)
@@ -196,11 +216,20 @@ describe('PATHS structural checks', () => {
 
   it('all string PATHS values are non-empty', () => {
     const stringKeys = [
-      'BROWSEROS_DIR_NAME', 'DEV_BROWSEROS_DIR_NAME', 'CACHE_DIR_NAME',
-      'DB_DIR_NAME', 'DB_FILE_NAME', 'MEMORY_DIR_NAME', 'SESSIONS_DIR_NAME',
-      'SKILLS_DIR_NAME', 'BUILTIN_DIR_NAME', 'TOOL_OUTPUT_DIR_NAME', 'OPENCLAW_DIR_NAME',
+      'BROWSEROS_DIR_NAME',
+      'DEV_BROWSEROS_DIR_NAME',
+      'CACHE_DIR_NAME',
+      'DB_DIR_NAME',
+      'DB_FILE_NAME',
+      'MEMORY_DIR_NAME',
+      'SESSIONS_DIR_NAME',
+      'SKILLS_DIR_NAME',
+      'BUILTIN_DIR_NAME',
+      'TOOL_OUTPUT_DIR_NAME',
+      'OPENCLAW_DIR_NAME',
       'SERVER_CONFIG_FILE_NAME',
-      'SOUL_FILE_NAME', 'CORE_MEMORY_FILE_NAME',
+      'SOUL_FILE_NAME',
+      'CORE_MEMORY_FILE_NAME',
     ] as const
     for (const key of stringKeys) {
       expect(typeof PATHS[key]).toBe('string')

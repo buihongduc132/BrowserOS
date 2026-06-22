@@ -15,7 +15,6 @@
 import type { AcpSessionRecord } from 'acpx/runtime'
 import type { Context } from 'hono'
 import { z } from 'zod'
-import { createAcpUIMessageStreamResponse } from '../../lib/agents/acp-ui-message-stream'
 import type { AcpxRuntime } from '../../lib/agents/acpx-runtime'
 import { logger } from '../../lib/logger'
 import type { Env } from '../types'
@@ -54,7 +53,11 @@ export function findTurnStart(
   if (messageIndex < 0 || messageIndex >= messages.length) return 0
   // Walk backwards to find the nearest User message
   for (let i = messageIndex; i >= 0; i--) {
-    if (messages[i] && typeof messages[i] === 'object' && 'User' in messages[i]) {
+    if (
+      messages[i] &&
+      typeof messages[i] === 'object' &&
+      'User' in messages[i]
+    ) {
       return i
     }
   }
@@ -166,14 +169,14 @@ export function createConversationMutationsService(deps: {
     },
 
     async fork(input) {
-      const { agentId, sessionId, messageIndex, newSessionId } = input
+      const { agentId } = input
       const record = await deps.runtime.loadSessionRecord(agentId)
       if (!record) {
         throw new Error(`Session not found for agent ${agentId}`)
       }
 
-      const prefix = copyMessagesUpTo(record.messages, messageIndex)
-      const newKey = newSessionId ?? crypto.randomUUID()
+      const prefix = copyMessagesUpTo(record.messages, input.messageIndex)
+      const newKey = input.newSessionId ?? crypto.randomUUID()
       const newSessionIdFinal = `fork-${newKey}`
 
       const forkedRecord: AcpSessionRecord = {

@@ -21,6 +21,7 @@ import { logger } from '../../logger'
 import { createOpenRouterCompatibleFetch } from '../../openrouter-fetch'
 import { createCodexFetch } from '../oauth/codex-fetch'
 import { createCopilotFetch } from '../oauth/copilot-fetch'
+import { createGeminiComputerUseFetch } from './gemini-computer-use-fetch'
 import {
   createMockBrowserOSLanguageModel,
   shouldUseMockBrowserOSLLM,
@@ -41,7 +42,12 @@ function createOpenAIModel(config: ResolvedLLMConfig): LanguageModel {
 
 function createGoogleModel(config: ResolvedLLMConfig): LanguageModel {
   if (!config.apiKey) throw new Error('Google provider requires apiKey')
-  return createGoogleGenerativeAI({ apiKey: config.apiKey })(config.model)
+  const fetch = createGeminiComputerUseFetch(config.model)
+  return createGoogleGenerativeAI({
+    apiKey: config.apiKey,
+    ...(config.baseUrl && { baseURL: config.baseUrl }),
+    ...(fetch && { fetch }),
+  })(config.model)
 }
 
 function createOpenRouterModel(config: ResolvedLLMConfig): LanguageModel {
@@ -183,8 +189,7 @@ function createGitHubCopilotModel(config: ResolvedLLMConfig): LanguageModel {
 }
 
 function createChatGPTProModel(config: ResolvedLLMConfig): LanguageModel {
-  if (!config.apiKey)
-    throw new Error('ChatGPT Plus/Pro requires OAuth authentication')
+  if (!config.apiKey) throw new Error('ChatGPT requires OAuth authentication')
   return createOpenAI({
     apiKey: config.apiKey,
     fetch: createCodexFetch(config.accountId) as typeof globalThis.fetch,

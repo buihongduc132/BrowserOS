@@ -1,4 +1,5 @@
 import { isEqual, omit } from 'es-toolkit'
+import { sessionStorage } from '@/lib/auth/sessionStorage'
 import { GetProfileIdByUserIdDocument } from '@/lib/conversations/graphql/uploadConversationDocument'
 import { execute } from '@/lib/graphql/execute'
 import { sentry } from '@/lib/sentry/sentry'
@@ -80,8 +81,7 @@ function getRemoteUpdatedAt(remote: RemoteScheduledJob): Date {
   return new Date(normalizeTimestamp(remote.updatedAt))
 }
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: TODO(dani) refactor to reduce complexity
-export async function syncSchedulesToBackend(
+async function syncSchedulesToBackend(
   localJobs: ScheduledJob[],
   userId: string,
 ): Promise<void> {
@@ -233,4 +233,29 @@ export async function syncSchedulesToBackend(
       })
     }
   }
+}
+
+export async function syncScheduledJobs(): Promise<void> {
+  const jobs = await scheduledJobStorage.getValue()
+  if (!jobs) return
+
+  const session = await sessionStorage.getValue()
+  const userId = session?.user?.id
+  if (!userId) return
+
+  await syncSchedulesToBackend(jobs, userId)
+}
+
+export function setupScheduledJobsSyncToBackend(): () => void {
+  syncScheduledJobs().catch(() => {})
+
+  const unsubscribe = scheduledJobStorage.watch(async () => {
+    try {
+      await syncScheduledJobs()
+    } catch {
+      // Sync failed silently - will retry on next storage change
+    }
+  })
+
+  return unsubscribe
 }

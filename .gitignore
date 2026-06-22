@@ -40,3 +40,6 @@ browseros-server.log
 .fusion
 .pi
 .llm/
+.ralph-mid-turn/
+.ralph-tab-owner/
+.worktrees/

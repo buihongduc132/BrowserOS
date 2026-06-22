@@ -1,0 +1,21 @@
+# SOURCE: https://github.com/buihongduc132/open-agent-sessions/blob/36d9cafc837b80a5c255160ba6d596b69b49448c/src/adapters/opencode.ts
+id: safe-json-parse
+message: JSON.parse without try/catch — parse errors will propagate as cryptic 'Unexpected token' instead of context-rich agent-specific messages
+severity: warning
+language: TypeScript
+rule:
+  pattern: JSON.parse($ARG)
+  not:
+    inside:
+      kind: try_statement
+      has:
+        kind: catch_clause
+        stopBy: end
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'
