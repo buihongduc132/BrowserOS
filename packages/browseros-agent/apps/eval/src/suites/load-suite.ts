@@ -15,7 +15,7 @@ export async function loadSuite(suitePath: string): Promise<LoadedSuite> {
   try {
     raw = JSON.parse(await Bun.file(absolute).text())
   } catch (e) {
-    throw new Error(`Failed to parse suite file ${suitePath}: ${e}`)
+    throw new Error(`Failed to parse suite ${suitePath}: ${e}`)
   }
   const suite = EvalSuiteSchema.parse(raw)
   const suiteDir = dirname(absolute)
