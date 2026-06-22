@@ -6,26 +6,20 @@
 
 import { StreamableHTTPTransport } from '@hono/mcp'
 import { Hono } from 'hono'
-import type { Browser } from '../../browser/browser'
+import type { BrowserSession } from '../../browser/core/session'
 import { logger } from '../../lib/logger'
 import { metrics } from '../../lib/metrics'
 import { Sentry } from '../../lib/sentry'
-import { getMonitoringService } from '../../monitoring/service'
-import type { ToolRegistry } from '../../tools/tool-registry'
-import type { KlavisProxyRef } from '../services/klavis/strata-proxy'
+import type { KlavisService } from '../services/klavis'
 import { createMcpServer } from '../services/mcp/mcp-server'
 import type { Env } from '../types'
 
+export const MANAGED_MCP_SERVERS_HEADER = 'X-BrowserOS-Managed-Mcp-Servers'
+
 interface McpRouteDeps {
   version: string
-  registry: ToolRegistry
-  browser: Browser
-  executionDir: string
-  resourcesDir: string
-  policyService?: GlobalAclPolicyService
-  klavisRef?: KlavisProxyRef
-  /** When true, MCP tool calls on tabs owned by another conversation are rejected. */
-  tabOwnershipStrict?: boolean
+  browserSession: BrowserSession
+  klavis?: KlavisService
 }
 
 function parseOptionalNumber(value: string | undefined): number | undefined {
@@ -37,78 +31,60 @@ function parseOptionalNumber(value: string | undefined): number | undefined {
   return Number.isInteger(n) ? n : undefined
 }
 
+/** Parses the internal ACP managed-connector scope header. */
+export function parseManagedMcpServersHeader(
+  value: string | undefined,
+): string[] {
+  if (!value?.trim()) {
+    return []
+  }
+  const out: string[] = []
+  for (const part of value.split(',')) {
+    if (!part) continue
+    try {
+      const decoded = decodeURIComponent(part)
+      if (decoded) {
+        out.push(decoded)
+      }
+    } catch {
+      return []
+    }
+  }
+  return out
+}
+
 export function createMcpRoutes(deps: McpRouteDeps) {
   const app = new Hono<Env>()
 
-  // GET / handles both health-check and SSE stream requests.
-  // StreamableHTTPTransport.handleGetRequest opens an SSE stream for
-  // MCP clients that connect via SSE transport (backward compat).
-  // Non-MCP GETs (no Accept: text/event-stream) get a JSON status.
-  app.get('/', async (c) => {
-    const accept = c.req.header('Accept') ?? ''
-    if (accept.includes('text/event-stream')) {
-      const mcpServer = createMcpServer({
-        ...deps,
-        strictOwnership: deps.tabOwnershipStrict,
-        aclRules: deps.policyService
-          ? await resolveAclPolicyForMcpRequest({ policyService: deps.policyService })
-          : undefined,
-      })
-      const transport = new StreamableHTTPTransport({
-        sessionIdGenerator: undefined,
-        enableJsonResponse: true,
-      })
-      try {
-        await mcpServer.connect(transport)
-        return transport.handleRequest(c)
-      } catch {
-        return c.json(
-          { jsonrpc: '2.0', error: { code: -32603, message: 'Internal server error' }, id: null },
-          500,
-        )
-      }
-    }
-    return c.json({
+  app.get('/', (c) =>
+    c.json({
       status: 'ok',
       message: 'MCP server is running. Use POST to interact.',
-    })
-  })
+    }),
+  )
 
   app.post('/', async (c) => {
     const scopeId = c.req.header('X-BrowserOS-Scope-Id') || 'ephemeral'
-    const monitoringService = getMonitoringService()
-    const explicitAgentId =
-      c.req.query('agentId') ??
-      c.req.header('X-BrowserOS-Agent-Id') ??
-      undefined
-    const activeSession =
-      monitoringService.resolveSessionForMcpRequest(explicitAgentId)
-    const agentId = activeSession?.agentId
     metrics.log('mcp.request', { scopeId })
-    const aclRules = deps.policyService
-      ? await resolveAclPolicyForMcpRequest({ policyService: deps.policyService })
-      : undefined
-    const monitoringSessionId = activeSession?.monitoringSessionId
-    const observer =
-      monitoringSessionId && agentId
-        ? monitoringService.createObserver(monitoringSessionId, agentId)
-        : undefined
 
-    // Lets the host pin every browser tool call in this request to a
-    // specific window. register-mcp.ts injects this into args.windowId
-    // for any tool whose zod input schema has a windowId field.
     const defaultWindowId = parseOptionalNumber(
       c.req.header('X-BrowserOS-Default-Window-Id'),
+    )
+    const defaultTabGroupId =
+      c.req.header('X-BrowserOS-Default-Tab-Group-Id') ?? undefined
+    const selectedServerNames = parseManagedMcpServersHeader(
+      c.req.header(MANAGED_MCP_SERVERS_HEADER),
     )
 
     // Per-request server + transport: no shared state, no race conditions,
     // no ID collisions. Required by MCP SDK 1.26.0+ security fix (GHSA-345p-7cg4-v4c7).
     const mcpServer = createMcpServer({
-      ...deps,
-      observer,
+      version: deps.version,
+      browserSession: deps.browserSession,
+      klavis: deps.klavis,
+      connectorScope: { selectedServerNames },
       defaultWindowId,
-      agentId,
-      strictOwnership: deps.tabOwnershipStrict,
+      defaultTabGroupId,
     })
     const transport = new StreamableHTTPTransport({
       sessionIdGenerator: undefined,
@@ -122,9 +98,6 @@ export function createMcpRoutes(deps: McpRouteDeps) {
       Sentry.withScope((scope) => {
         scope.setTag('route', 'mcp')
         scope.setTag('scopeId', scopeId)
-        if (agentId) {
-          scope.setTag('agentId', agentId)
-        }
         Sentry.captureException(error)
       })
       logger.error('Error handling MCP request', {

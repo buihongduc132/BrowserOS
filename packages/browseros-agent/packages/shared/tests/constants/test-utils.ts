@@ -24,7 +24,9 @@ export async function spawnWithEnv(
   const stdout = await new Response(proc.stdout).text()
   if (proc.exitCode !== 0) {
     const stderr = await new Response(proc.stderr).text()
-    throw new Error(`Child process exited ${proc.exitCode}: ${stderr}\n${stdout}`)
+    throw new Error(
+      `Child process exited ${proc.exitCode}: ${stderr}\n${stdout}`,
+    )
   }
   return stdout.trim()
 }

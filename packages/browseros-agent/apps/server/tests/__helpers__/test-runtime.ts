@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -23,7 +23,16 @@ function resolveBinaryPath(): string {
   if (process.env.BROWSEROS_APP_PATH) return process.env.BROWSEROS_APP_PATH
 
   // 3. CI wrapper (repo-relative)
-  const ciWrapper = join(import.meta.dirname, '..', '..', '..', '..', '.ci', 'bin', 'browseros')
+  const ciWrapper = join(
+    import.meta.dirname,
+    '..',
+    '..',
+    '..',
+    '..',
+    '.ci',
+    'bin',
+    'browseros',
+  )
   if (existsSync(ciWrapper)) return ciWrapper
 
   // 4. Platform defaults

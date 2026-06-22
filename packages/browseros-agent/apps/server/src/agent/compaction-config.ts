@@ -16,7 +16,6 @@ const VALID_METHODS = new Set(['default', 'vcc'])
  * Returns `undefined` if the input is falsy or an empty object (no compaction override).
  * Throws on invalid configs.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validation function with many branches
 export function resolveCompactionConfig(
   raw: unknown,
 ): CompactionStrategyConfig | undefined {

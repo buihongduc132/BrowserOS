@@ -19,15 +19,12 @@ import { formatUserMessage } from '../../../src/agent/format-message'
 import {
   AcpxRuntime,
   unwrapBrowserosAcpUserMessage,
-} from '../../../src/lib/agents/acpx-runtime'
+} from '../../../src/lib/agents/acpx/runtime'
+import { resolveAgentRuntimePaths } from '../../../src/lib/agents/acpx/runtime-context'
+import { saveLatestRuntimeState } from '../../../src/lib/agents/acpx/runtime-state'
 import type { AgentDefinition } from '../../../src/lib/agents/agent-types'
-import {
-  getAgentRuntimeRegistry,
-  HermesContainerRuntime,
-  resetAgentRuntimeRegistry,
-} from '../../../src/lib/agents/runtime'
+import { resetAgentRuntimeRegistry } from '../../../src/lib/agents/runtime'
 import type { AgentStreamEvent } from '../../../src/lib/agents/types'
-import type { ManagedContainerDeps } from '../../../src/lib/container/managed'
 
 describe('AcpxRuntime', () => {
   const tempDirs: string[] = []
@@ -76,6 +73,7 @@ describe('AcpxRuntime', () => {
     expect(calls.map((call) => call.method)).toEqual([
       'createRuntime',
       'ensureSession',
+      'setMode',
       'setConfigOption',
       'startTurn',
     ])
@@ -91,13 +89,16 @@ describe('AcpxRuntime', () => {
       cwd,
     })
     expect(calls[2]?.input).toMatchObject({
+      mode: 'agent-full-access',
+    })
+    expect(calls[3]?.input).toMatchObject({
       key: 'reasoning_effort',
       value: 'medium',
     })
-    expect(calls[3]?.input).toMatchObject({
+    expect(calls[4]?.input).toMatchObject({
       mode: 'prompt',
     })
-    expect(getStartTurnText(calls[3]?.input)).toContain(
+    expect(getStartTurnText(calls[4]?.input)).toContain(
       '<user_request>\nsay hello\n</user_request>',
     )
     expect(events).toEqual([
@@ -266,6 +267,154 @@ describe('AcpxRuntime', () => {
     })
 
     expect(history.items.at(0)?.text).toBe('hello from latest')
+  })
+
+  it('loads main history from the main session even after another session is latest', async () => {
+    const browserosDir = await mkdtemp(
+      join(tmpdir(), 'browseros-acpx-browseros-'),
+    )
+    const stateDir = await mkdtemp(join(tmpdir(), 'browseros-acpx-state-'))
+    tempDirs.push(browserosDir, stateDir)
+    const sessionStore = createRuntimeStore({ stateDir })
+    const agent = makeAgent({ id: 'agent-1', adapter: 'codex' })
+    const sidepanelSession = '00000000-0000-4000-8000-000000000001'
+    const mainRuntimeSessionKey = 'agent:agent-1:main:abc123abc123abcd'
+    const sidepanelRuntimeSessionKey = `agent:agent-1:${sidepanelSession}:def456def456def0`
+    await createLatestRuntimeStateForTest({
+      browserosDir,
+      agentId: agent.id,
+      sessionId: 'main',
+      runtimeSessionKey: mainRuntimeSessionKey,
+      updateAgentLatest: false,
+    })
+    await createLatestRuntimeStateForTest({
+      browserosDir,
+      agentId: agent.id,
+      sessionId: sidepanelSession,
+      runtimeSessionKey: sidepanelRuntimeSessionKey,
+      updateAgentLatest: true,
+    })
+    await sessionStore.save(
+      makeSessionRecord({
+        key: mainRuntimeSessionKey,
+        cwd: join(browserosDir, 'agents', 'harness', 'workspace'),
+        userText: 'main conversation',
+      }),
+    )
+    await sessionStore.save(
+      makeSessionRecord({
+        key: sidepanelRuntimeSessionKey,
+        cwd: join(browserosDir, 'agents', 'harness', 'workspace'),
+        userText: 'sidepanel conversation',
+      }),
+    )
+
+    const history = await new AcpxRuntime({
+      browserosDir,
+      stateDir,
+    }).getHistory({
+      agent,
+      sessionId: 'main',
+    })
+
+    expect(history.items.at(0)?.text).toBe('main conversation')
+  })
+
+  it('loads history for a UUID session from that session state', async () => {
+    const browserosDir = await mkdtemp(
+      join(tmpdir(), 'browseros-acpx-browseros-'),
+    )
+    const stateDir = await mkdtemp(join(tmpdir(), 'browseros-acpx-state-'))
+    tempDirs.push(browserosDir, stateDir)
+    const sessionStore = createRuntimeStore({ stateDir })
+    const agent = makeAgent({ id: 'agent-1', adapter: 'codex' })
+    const sessionId = '00000000-0000-4000-8000-000000000001'
+    const runtimeSessionKey = `agent:agent-1:${sessionId}:abc123abc123abcd`
+    await createLatestRuntimeStateForTest({
+      browserosDir,
+      agentId: agent.id,
+      sessionId,
+      runtimeSessionKey,
+    })
+    await sessionStore.save(
+      makeSessionRecord({
+        key: runtimeSessionKey,
+        cwd: join(browserosDir, 'agents', 'harness', 'workspace'),
+        userText: 'uuid conversation',
+      }),
+    )
+
+    const history = await new AcpxRuntime({
+      browserosDir,
+      stateDir,
+    }).getHistory({
+      agent,
+      sessionId,
+    })
+
+    expect(history.sessionId).toBe(sessionId)
+    expect(history.items.at(0)?.sessionId).toBe(sessionId)
+    expect(history.items.at(0)?.text).toBe('uuid conversation')
+  })
+
+  it('reads row snapshots from the requested session only', async () => {
+    const browserosDir = await mkdtemp(
+      join(tmpdir(), 'browseros-acpx-browseros-'),
+    )
+    const stateDir = await mkdtemp(join(tmpdir(), 'browseros-acpx-state-'))
+    tempDirs.push(browserosDir, stateDir)
+    const sessionStore = createRuntimeStore({ stateDir })
+    const agent = makeAgent({ id: 'agent-1', adapter: 'codex' })
+    const sidepanelSession = '00000000-0000-4000-8000-000000000001'
+    const mainRuntimeSessionKey = 'agent:agent-1:main:abc123abc123abcd'
+    const sidepanelRuntimeSessionKey = `agent:agent-1:${sidepanelSession}:def456def456def0`
+    await createLatestRuntimeStateForTest({
+      browserosDir,
+      agentId: agent.id,
+      sessionId: 'main',
+      runtimeSessionKey: mainRuntimeSessionKey,
+      updateAgentLatest: false,
+    })
+    await createLatestRuntimeStateForTest({
+      browserosDir,
+      agentId: agent.id,
+      sessionId: sidepanelSession,
+      runtimeSessionKey: sidepanelRuntimeSessionKey,
+      updateAgentLatest: true,
+    })
+    await sessionStore.save(
+      makeSessionRecord({
+        key: mainRuntimeSessionKey,
+        cwd: join(browserosDir, 'agents', 'harness', 'workspace'),
+        userText: 'main message',
+      }),
+    )
+    await sessionStore.save(
+      makeSessionRecord({
+        key: sidepanelRuntimeSessionKey,
+        cwd: join(browserosDir, 'agents', 'harness', 'workspace'),
+        userText: 'latest sidepanel message',
+      }),
+    )
+
+    const snapshot = await new AcpxRuntime({
+      browserosDir,
+      stateDir,
+    }).getRowSnapshot({
+      agent,
+      sessionId: 'main',
+    })
+
+    expect(snapshot?.lastUserMessage).toBe('main message')
+    expect(snapshot?.sessionId).toBe('main')
+
+    const latestSnapshot = await new AcpxRuntime({
+      browserosDir,
+      stateDir,
+    }).getLatestRowSnapshot(agent)
+
+    expect(latestSnapshot?.sessionId).toBe(sidepanelSession)
+    expect(latestSnapshot?.lastUserMessage).toBe('latest sidepanel message')
   })
 
   it('maps persisted acpx session records into rich history entries', async () => {
@@ -961,6 +1110,47 @@ Use the BrowserOS MCP server for all browser tasks, including browsing the web, 
     expect(command).toContain('npx -y @zed-industries/codex-acp')
   })
 
+  it('prepends the bundled native CLI directory to host ACP adapter commands', async () => {
+    const browserosDir = await mkdtemp(
+      join(tmpdir(), 'browseros-acpx-browseros-'),
+    )
+    const stateDir = await mkdtemp(join(tmpdir(), 'browseros-acpx-state-'))
+    const resourcesDir = await mkdtemp(
+      join(tmpdir(), 'browseros-acpx-resources-'),
+    )
+    tempDirs.push(browserosDir, stateDir, resourcesDir)
+    const bundledDir = join(resourcesDir, 'bin', 'third_party')
+    await mkdir(bundledDir, { recursive: true })
+    const calls: Array<{ method: string; input: unknown }> = []
+    const runtime = new AcpxRuntime({
+      browserosDir,
+      resourcesDir,
+      stateDir,
+      runtimeFactory: (options) => {
+        calls.push({ method: 'createRuntime', input: options })
+        return createFakeAcpRuntime(calls)
+      },
+    })
+    const agent = makeAgent({ id: 'agent-1', adapter: 'codex' })
+
+    await collectStream(
+      await runtime.send({
+        agent,
+        sessionId: 'main',
+        sessionKey: agent.sessionKey,
+        message: 'hi',
+        permissionMode: 'approve-all',
+      }),
+    )
+
+    const registry = getCreateRuntimeOptions(calls).agentRegistry
+    const pathEnvKey = process.platform === 'win32' ? 'Path' : 'PATH'
+    expect(registry.resolve('claude')).toContain(
+      `${pathEnvKey}='${bundledDir}'`,
+    )
+    expect(registry.resolve('codex')).toContain(`${pathEnvKey}='${bundledDir}'`)
+  })
+
   macosIt(
     'runs Claude and Codex ACP adapter packages through bundled Bun on macOS',
     async () => {
@@ -1005,111 +1195,11 @@ Use the BrowserOS MCP server for all browser tasks, including browsing the web, 
         `'${bunPath}' x --bun --silent --package '@zed-industries/codex-acp@^0.12.0' 'codex-acp'`,
       )
       expect(codexCommand).toContain('BUN_INSTALL_CACHE_DIR=')
-      expect(codexCommand).toContain('PATH=')
-      expect(codexCommand).toContain('/opt/homebrew/bin')
+      expect(codexCommand).toContain('cache/acp-node-shim')
+      expect(codexCommand).toContain(dirname(bunPath))
       expect(codexCommand).not.toContain('npx -y')
     },
   )
-
-  it('resolves the Hermes adapter to a container `nerdctl exec hermes acp` command when a HermesContainerRuntime is registered', async () => {
-    const browserosDir = await mkdtemp(
-      join(tmpdir(), 'browseros-acpx-browseros-'),
-    )
-    const stateDir = await mkdtemp(join(tmpdir(), 'browseros-acpx-state-'))
-    tempDirs.push(browserosDir, stateDir)
-    const fakeManagedDeps: ManagedContainerDeps = {
-      cli: {} as ManagedContainerDeps['cli'],
-      loader: {} as ManagedContainerDeps['loader'],
-      vm: {} as ManagedContainerDeps['vm'],
-      limactlPath: '/opt/homebrew/bin/limactl',
-      limaHome: '/Users/dev/.browseros-dev/lima',
-      vmName: 'browseros-vm',
-      lockDir: stateDir,
-    }
-    const hermesRuntime = new HermesContainerRuntime(fakeManagedDeps, {
-      hermesHarnessHostDir: join(browserosDir, 'vm', 'hermes', 'harness'),
-    })
-    getAgentRuntimeRegistry().register(hermesRuntime)
-
-    const calls: Array<{ method: string; input: unknown }> = []
-    const runtime = new AcpxRuntime({
-      browserosDir,
-      stateDir,
-      runtimeFactory: (options) => {
-        calls.push({ method: 'createRuntime', input: options })
-        return createFakeAcpRuntime(calls)
-      },
-    })
-    const agent = makeAgent({ id: 'agent-1', adapter: 'hermes' })
-
-    await collectStream(
-      await runtime.send({
-        agent,
-        sessionId: 'main',
-        sessionKey: agent.sessionKey,
-        message: 'hi',
-        permissionMode: 'approve-all',
-      }),
-    )
-
-    const command =
-      getCreateRuntimeOptions(calls).agentRegistry.resolve('hermes')
-    // Container-spawn path uses limactl shell + nerdctl exec; no host-
-    // process bash/tee workaround (those were Phase A only).
-    expect(command).toContain('env LIMA_HOME=/Users/dev/.browseros-dev/lima')
-    expect(command).toContain(
-      '/opt/homebrew/bin/limactl shell --workdir / browseros-vm --',
-    )
-    expect(command).toContain('nerdctl exec -i')
-    expect(command).toContain('hermes acp')
-    expect(command).toContain('HERMES_HOME=')
-    expect(command).not.toContain('bash -c')
-    expect(command).not.toContain('tee /dev/null')
-    expect(command).not.toContain('AGENT_HOME=')
-    expect(command).not.toContain('CODEX_HOME=')
-    expect(command).not.toContain('CLAUDE_CONFIG_DIR=')
-  })
-
-  it('falls back to a host-process `hermes acp` command when no HermesGatewayAccessor is wired', async () => {
-    const browserosDir = await mkdtemp(
-      join(tmpdir(), 'browseros-acpx-browseros-'),
-    )
-    const stateDir = await mkdtemp(join(tmpdir(), 'browseros-acpx-state-'))
-    tempDirs.push(browserosDir, stateDir)
-    const calls: Array<{ method: string; input: unknown }> = []
-    const runtime = new AcpxRuntime({
-      browserosDir,
-      stateDir,
-      runtimeFactory: (options) => {
-        calls.push({ method: 'createRuntime', input: options })
-        return createFakeAcpRuntime(calls)
-      },
-    })
-    const agent = makeAgent({ id: 'agent-1', adapter: 'hermes' })
-
-    await collectStream(
-      await runtime.send({
-        agent,
-        sessionId: 'main',
-        sessionKey: agent.sessionKey,
-        message: 'hi',
-        permissionMode: 'approve-all',
-      }),
-    )
-
-    const command =
-      getCreateRuntimeOptions(calls).agentRegistry.resolve('hermes')
-    // Host-process fallback: bare `hermes acp` with HERMES_HOME injected
-    // via wrapCommandWithEnv. No limactl/nerdctl chain — used by tests
-    // and as a defensive escape hatch when the container service hasn't
-    // been wired yet.
-    expect(command).toContain('hermes acp')
-    expect(command).toContain('env HERMES_HOME=')
-    expect(command).not.toContain('limactl')
-    expect(command).not.toContain('nerdctl')
-    expect(command).not.toContain('bash -c')
-    expect(command).not.toContain('tee /dev/null')
-  })
 
   it('does not reuse an Acpx runtime across different command identities', async () => {
     const browserosDir = await mkdtemp(
@@ -1225,7 +1315,7 @@ Use the BrowserOS MCP server for all browser tasks, including browsing the web, 
     expect(events).toEqual([
       {
         type: 'status',
-        text: 'Requested Claude bypassPermissions mode, but this acpx/runtime version does not expose mode control.',
+        text: 'Requested Claude Code bypassPermissions mode, but this acpx/runtime version does not expose mode control.',
       },
       {
         type: 'text_delta',
@@ -1246,6 +1336,103 @@ Use the BrowserOS MCP server for all browser tasks, including browsing the web, 
         stopReason: 'end_turn',
       },
     ])
+  })
+
+  it('sets Codex approve-all sessions to full access before starting a turn', async () => {
+    const calls: Array<{ method: string; input: unknown }> = []
+    const runtime = new AcpxRuntime({
+      cwd: '/tmp/browseros-acpx-runtime',
+      stateDir: '/tmp/browseros-acpx-state',
+      runtimeFactory: () => createFakeAcpRuntime(calls),
+    })
+    const agent = makeAgent({ id: 'agent-1', adapter: 'codex' })
+
+    await collectStream(
+      await runtime.send({
+        agent,
+        sessionId: 'main',
+        sessionKey: agent.sessionKey,
+        message: 'open example.com',
+        permissionMode: 'approve-all',
+      }),
+    )
+
+    expect(calls.map((call) => call.method)).toEqual([
+      'ensureSession',
+      'setMode',
+      'startTurn',
+    ])
+    expect(calls[1]?.input).toMatchObject({
+      mode: 'agent-full-access',
+    })
+  })
+
+  it('falls back to the zed codex mode id when the first candidate is rejected', async () => {
+    const calls: Array<{ method: string; input: unknown }> = []
+    const runtime = new AcpxRuntime({
+      cwd: '/tmp/browseros-acpx-runtime',
+      stateDir: '/tmp/browseros-acpx-state',
+      runtimeFactory: () =>
+        createFakeAcpRuntime(calls, { rejectModes: ['agent-full-access'] }),
+    })
+    const agent = makeAgent({ id: 'agent-1', adapter: 'codex' })
+
+    const events = await collectStream(
+      await runtime.send({
+        agent,
+        sessionId: 'main',
+        sessionKey: agent.sessionKey,
+        message: 'open example.com',
+        permissionMode: 'approve-all',
+      }),
+    )
+
+    expect(calls.map((call) => call.method)).toEqual([
+      'ensureSession',
+      'setMode',
+      'setMode',
+      'startTurn',
+    ])
+    expect(calls[1]?.input).toMatchObject({ mode: 'agent-full-access' })
+    expect(calls[2]?.input).toMatchObject({ mode: 'full-access' })
+    expect(events.filter((event) => event.type === 'status')).toEqual([])
+  })
+
+  it('continues the turn when every codex mode candidate is rejected', async () => {
+    const calls: Array<{ method: string; input: unknown }> = []
+    const runtime = new AcpxRuntime({
+      cwd: '/tmp/browseros-acpx-runtime',
+      stateDir: '/tmp/browseros-acpx-state',
+      runtimeFactory: () =>
+        createFakeAcpRuntime(calls, {
+          rejectModes: ['agent-full-access', 'full-access'],
+        }),
+    })
+    const agent = makeAgent({ id: 'agent-1', adapter: 'codex' })
+
+    const events = await collectStream(
+      await runtime.send({
+        agent,
+        sessionId: 'main',
+        sessionKey: agent.sessionKey,
+        message: 'open example.com',
+        permissionMode: 'approve-all',
+      }),
+    )
+
+    expect(calls.map((call) => call.method)).toEqual([
+      'ensureSession',
+      'setMode',
+      'setMode',
+      'startTurn',
+    ])
+    expect(events[0]).toMatchObject({
+      type: 'status',
+      text: expect.stringContaining(
+        'Could not apply Codex agent-full-access / full-access mode',
+      ),
+    })
+    expect(events.at(-1)).toEqual({ type: 'done', stopReason: 'end_turn' })
   })
 
   it('reuses cached runtime instances across per-turn timeouts', async () => {
@@ -1320,41 +1507,47 @@ function makeAgent(input: {
 async function createLatestRuntimeStateForTest(input: {
   browserosDir: string
   agentId: string
+  sessionId?: string
   runtimeSessionKey: string
+  updateAgentLatest?: boolean
 }) {
-  const { saveLatestRuntimeState } = await import(
-    '../../../src/lib/agents/acpx-runtime-state'
-  )
-  await saveLatestRuntimeState(
-    join(
+  const paths = resolveAgentRuntimePaths({
+    browserosDir: input.browserosDir,
+    agentId: input.agentId,
+    sessionId: input.sessionId ?? 'main',
+  })
+  const latest = {
+    sessionId: input.sessionId ?? 'main',
+    runtimeSessionKey: input.runtimeSessionKey,
+    cwd: join(input.browserosDir, 'agents', 'harness', 'workspace'),
+    agentHome: join(
       input.browserosDir,
       'agents',
       'harness',
-      'runtime-state',
-      `${input.agentId}.json`,
+      input.agentId,
+      'home',
     ),
-    {
-      sessionId: 'main',
-      runtimeSessionKey: input.runtimeSessionKey,
-      cwd: join(input.browserosDir, 'agents', 'harness', 'workspace'),
-      agentHome: join(
-        input.browserosDir,
-        'agents',
-        'harness',
-        input.agentId,
-        'home',
-      ),
-      updatedAt: 1234,
-    },
-  )
+    updatedAt: 1234,
+  }
+  await saveLatestRuntimeState(paths.runtimeSessionStatePath, latest)
+  if (input.updateAgentLatest ?? true) {
+    await saveLatestRuntimeState(paths.runtimeStatePath, latest)
+  }
 }
 
 async function writeFakeBundledBun(resourcesDir: string): Promise<string> {
-  const bunPath = join(resourcesDir, 'bin', 'third_party', 'bun')
-  await mkdir(dirname(bunPath), { recursive: true })
-  await writeFile(bunPath, '#!/bin/sh\n')
-  await chmod(bunPath, 0o755)
-  return bunPath
+  return writeFakeBundledNative(resourcesDir, 'bun')
+}
+
+async function writeFakeBundledNative(
+  resourcesDir: string,
+  binaryName: string,
+): Promise<string> {
+  const binaryPath = join(resourcesDir, 'bin', 'third_party', binaryName)
+  await mkdir(dirname(binaryPath), { recursive: true })
+  await writeFile(binaryPath, '#!/bin/sh\n')
+  await chmod(binaryPath, 0o755)
+  return binaryPath
 }
 
 function makeSessionRecord(input: {
@@ -1408,7 +1601,11 @@ function getCreateRuntimeOptions(
 
 function createFakeAcpRuntime(
   calls: Array<{ method: string; input: unknown }>,
-  options: { failConfig?: boolean; omitModeControl?: boolean } = {},
+  options: {
+    failConfig?: boolean
+    omitModeControl?: boolean
+    rejectModes?: string[]
+  } = {},
 ): AcpxCoreRuntime {
   const runtime: AcpxCoreRuntime = {
     async ensureSession(input) {
@@ -1463,6 +1660,9 @@ function createFakeAcpRuntime(
   if (!options.omitModeControl) {
     runtime.setMode = async (input) => {
       calls.push({ method: 'setMode', input })
+      if (options.rejectModes?.includes(input.mode)) {
+        throw new Error(`mode ${input.mode} is not supported`)
+      }
     }
   }
   return runtime

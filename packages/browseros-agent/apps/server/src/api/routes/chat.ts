@@ -1,46 +1,50 @@
+import { REMOTE_HERMES_PROVIDER_TYPE } from '@browseros/shared/constants/hermes'
 import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
 import { SessionStore } from '../../agent/session-store'
 import type { Browser } from '../../browser/browser'
+import type { BrowserSession } from '../../browser/core/session'
 import { logger } from '../../lib/logger'
 import { metrics } from '../../lib/metrics'
 import { Sentry } from '../../lib/sentry'
-import type { ToolRegistry } from '../../tools/tool-registry'
 import { ChatService } from '../services/chat-service'
-import type { KlavisProxyRef } from '../services/klavis/strata-proxy'
+import type { KlavisService } from '../services/klavis'
+import type { RemoteHermesService } from '../services/remote-hermes/remote-hermes-service'
 import { ChatRequestSchema } from '../types'
+import { resolveBrowserContextPageIds } from '../utils/resolve-browser-context-page-ids'
 import { ConversationIdParamSchema } from '../utils/validation'
-import { getDb } from '../../lib/db'
-import { AssistantSessionStore } from '../../sessions/assistant-session-store'
 
 interface ChatRouteDeps {
   browser: Browser
-  registry: ToolRegistry
+  browserSession: BrowserSession
   browserosId?: string
-  klavisRef?: KlavisProxyRef
+  klavis?: KlavisService
   aiSdkDevtoolsEnabled?: boolean
-  tabOwnershipStrict?: boolean
+  /** Port the BrowserOS server bound to. Threaded to ACP providers so
+   *  the spawned agent can dial back into the local /mcp route. */
+  serverPort: number
+  /** BrowserOS resources directory. Threaded to ACP providers so the
+   *  bundled-Bun launcher under <resourcesDir>/bin/third_party/bun
+   *  can be located for built-in adapters (claude / codex). */
+  resourcesDir?: string | null
+  /** Configured at server startup when AGENT_RUNNER_JWT_SECRET is set.
+   *  Null otherwise; `remote-hermes` chat requests get a soft 500. */
+  remoteHermes?: RemoteHermesService | null
 }
 
 export function createChatRoutes(deps: ChatRouteDeps) {
   const { browserosId } = deps
 
   const sessionStore = new SessionStore()
-  let assistantSessionStore: AssistantSessionStore | undefined
-  try {
-    assistantSessionStore = new AssistantSessionStore(getDb())
-  } catch {
-    // DB not initialized (e.g. during tests) — workspace tracking disabled
-  }
   const service = new ChatService({
     sessionStore,
-    klavisRef: deps.klavisRef,
+    klavis: deps.klavis,
     browser: deps.browser,
-    registry: deps.registry,
+    browserSession: deps.browserSession,
     browserosId,
     aiSdkDevtoolsEnabled: deps.aiSdkDevtoolsEnabled,
-    tabOwnershipStrict: deps.tabOwnershipStrict,
-    assistantSessionStore,
+    serverPort: deps.serverPort,
+    resourcesDir: deps.resourcesDir,
   })
 
   return new Hono()
@@ -76,6 +80,41 @@ export function createChatRoutes(deps: ChatRouteDeps) {
         provider: request.provider,
         model: request.model,
       })
+
+      if (request.provider === REMOTE_HERMES_PROVIDER_TYPE) {
+        if (!deps.remoteHermes) {
+          logger.warn(
+            'Remote Hermes chat received but service not configured',
+            {
+              conversationId: request.conversationId,
+            },
+          )
+          return c.json({ error: 'remote_hermes_not_configured' }, 500)
+        }
+        logger.info('Routing chat to Remote Hermes', {
+          conversationId: request.conversationId,
+          model: request.model,
+        })
+        // Resolve Chrome tab IDs to CDP pageIds on the laptop before
+        // forwarding — the remote worker has no CDP target visibility
+        // and the LLM needs pageIds in the prompt to dispatch browser
+        // tools through the WS RPC bridge.
+        const remoteBrowserContext = await resolveBrowserContextPageIds(
+          deps.browser,
+          request.browserContext,
+        )
+        return deps.remoteHermes.streamTurn(
+          {
+            conversationId: request.conversationId,
+            message: request.message,
+            modelId: request.model,
+            browserContext: remoteBrowserContext,
+            selectedText: request.selectedText,
+            selectedTextSource: request.selectedTextSource,
+          },
+          c.req.raw.signal,
+        )
+      }
 
       return service.processMessage(request, c.req.raw.signal)
     })

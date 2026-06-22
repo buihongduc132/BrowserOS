@@ -4,33 +4,18 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js'
-import type { Browser } from '../../../browser/browser'
-import type { ToolExecutionObserver } from '../../../monitoring/observer'
-import type { ToolRegistry } from '../../../tools/tool-registry'
-import {
-  type KlavisProxyRef,
-  registerKlavisTools,
-} from '../klavis/strata-proxy'
+import type { BrowserSession } from '../../../browser/core/session'
+import type { ConnectorToolScope, KlavisService } from '../klavis'
 import { MCP_INSTRUCTIONS } from './mcp-prompt'
 import { registerTools } from './register-mcp'
 
 export interface McpServiceDeps {
   version: string
-  registry: ToolRegistry
-  browser: Browser
-  executionDir: string
-  resourcesDir: string
-  klavisRef?: KlavisProxyRef
-  observer?: ToolExecutionObserver
-  // Per-request default windowId from the X-BrowserOS-Default-Window-Id
-  // header. When set, tool handlers inject this into args.windowId for
-  // any tool whose zod input schema has a `windowId` field and whose
-  // caller-supplied args didn't include one. Lets a host application
-  // bind every browser tool call to a specific window without the
-  // agent needing to be aware of it.
+  browserSession: BrowserSession
+  klavis?: KlavisService
+  connectorScope?: ConnectorToolScope
   defaultWindowId?: number
   // Optional agent identifier for the MCP connection.
   // Used in tab ownership tracking so the owning agent is visible.
@@ -53,14 +38,8 @@ export function createMcpServer(deps: McpServiceDeps): McpServer {
     return {}
   })
 
-  // Register browser tools
-  registerTools(server, deps.registry, {
-    browser: deps.browser,
-    directories: {
-      workingDir: deps.executionDir,
-      resourcesDir: deps.resourcesDir,
-    },
-    observer: deps.observer,
+  registerTools(server, {
+    browserSession: deps.browserSession,
     defaultWindowId: deps.defaultWindowId,
     // MCP callers get sidepanel-level protections by default.
     // This ensures guards (last-visible-tab, origin-tab) work for MCP
@@ -71,18 +50,13 @@ export function createMcpServer(deps: McpServiceDeps): McpServer {
     // originPageId is intentionally undefined — MCP callers have no host tab.
     session: {
       origin: 'sidepanel',
-      conversationId: deps.agentId
-        ? `mcp-${deps.agentId}`
-        : `mcp-default`,
+      conversationId: deps.agentId ? `mcp-${deps.agentId}` : `mcp-default`,
       agentId: deps.agentId,
     },
     strictOwnership: deps.strictOwnership ?? false,
   })
 
-  // Register Klavis proxy tools (if connected via background init)
-  if (deps.klavisRef?.handle) {
-    registerKlavisTools(server, deps.klavisRef.handle, deps.observer)
-  }
+  deps.klavis?.registerMcpTools(server, deps.connectorScope)
 
   return server
 }

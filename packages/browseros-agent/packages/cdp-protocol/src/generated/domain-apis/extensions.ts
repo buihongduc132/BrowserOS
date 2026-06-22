@@ -31,7 +31,9 @@ export interface ExtensionsApi {
   // ── BrowserOS extension commands ──
 
   listExtensions(): Promise<ListExtensionsResult>
-  getExtensionInfo(params: GetExtensionInfoParams): Promise<GetExtensionInfoResult>
+  getExtensionInfo(
+    params: GetExtensionInfoParams,
+  ): Promise<GetExtensionInfoResult>
   enableExtension(params: EnableExtensionParams): Promise<void>
   disableExtension(params: DisableExtensionParams): Promise<void>
 }

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import { describe, expect, it, beforeEach } from 'bun:test'
+import { beforeEach, describe, expect, it } from 'bun:test'
 import { TurnRegistry } from './active-turn-registry'
 
 describe('TurnRegistry sessionId parameterization', () => {

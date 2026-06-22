@@ -17,13 +17,13 @@
  *   Happy path
  */
 
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { describe, expect, mock, test } from 'bun:test'
 import type { ProtocolApi } from '@browseros/cdp-protocol/protocol-api'
 import type { CdpBackend, CdpTarget } from './backends/types'
 import {
+  deriveScopeURL,
   listMessageableExtensions,
   sendExtensionMessage,
-  deriveScopeURL,
 } from './extension-bridge'
 
 // ── Mock factories ──
@@ -36,7 +36,9 @@ interface MockCdpBackendOverrides {
   swStartWorkerError?: string
 }
 
-function createMockBackend(overrides: MockCdpBackendOverrides = {}): CdpBackend {
+function createMockBackend(
+  overrides: MockCdpBackendOverrides = {},
+): CdpBackend {
   const sessionApi = {
     Runtime: {
       enable: mock(async () => {}),
@@ -76,8 +78,8 @@ function createMockBackend(overrides: MockCdpBackendOverrides = {}): CdpBackend 
           url: t.url,
         })),
       })),
-      attachToTarget: mock(async () =>
-        overrides.attachToTarget ?? { sessionId: 'sw-sess-1' },
+      attachToTarget: mock(
+        async () => overrides.attachToTarget ?? { sessionId: 'sw-sess-1' },
       ),
       detachFromTarget: mock(async () => {}),
       createTarget: mock(async () => ({ targetId: 't-1' })),
@@ -213,9 +215,24 @@ describe('extension-bridge — Zone 1: empty results', () => {
   test('listMessageableExtensions filters out non-service_worker targets', async () => {
     const backend = createMockBackend({
       getTargets: [
-        { id: 'page-1', type: 'page', title: 'Tab', url: 'https://example.com' },
-        { id: 'bg-1', type: 'background_page', title: 'Old ext', url: 'chrome-extension://old-ext/bg.html' },
-        { id: 'sw-1', type: 'service_worker', title: 'MV3 Ext', url: 'chrome-extension://ext-1/sw.js' },
+        {
+          id: 'page-1',
+          type: 'page',
+          title: 'Tab',
+          url: 'https://example.com',
+        },
+        {
+          id: 'bg-1',
+          type: 'background_page',
+          title: 'Old ext',
+          url: 'chrome-extension://old-ext/bg.html',
+        },
+        {
+          id: 'sw-1',
+          type: 'service_worker',
+          title: 'MV3 Ext',
+          url: 'chrome-extension://ext-1/sw.js',
+        },
       ],
     })
 
@@ -233,16 +250,32 @@ describe('extension-bridge — Zone 1: empty results', () => {
 
 describe('extension-bridge — Zone 3: multi-flag', () => {
   test('deriveScopeURL derives correct scope from various script URLs', () => {
-    expect(deriveScopeURL('chrome-extension://abc123/sw.js')).toBe('chrome-extension://abc123/')
-    expect(deriveScopeURL('chrome-extension://abc123/scripts/worker.js')).toBe('chrome-extension://abc123/')
-    expect(deriveScopeURL('chrome-extension://xyz/sub/bg.js')).toBe('chrome-extension://xyz/')
+    expect(deriveScopeURL('chrome-extension://abc123/sw.js')).toBe(
+      'chrome-extension://abc123/',
+    )
+    expect(deriveScopeURL('chrome-extension://abc123/scripts/worker.js')).toBe(
+      'chrome-extension://abc123/',
+    )
+    expect(deriveScopeURL('chrome-extension://xyz/sub/bg.js')).toBe(
+      'chrome-extension://xyz/',
+    )
   })
 
   test('listMessageableExtensions handles extensions with both SW and page targets', async () => {
     const backend = createMockBackend({
       getTargets: [
-        { id: 'page-1', type: 'page', title: 'Ext popup', url: 'chrome-extension://ext-1/popup.html' },
-        { id: 'sw-1', type: 'service_worker', title: 'Ext SW', url: 'chrome-extension://ext-1/sw.js' },
+        {
+          id: 'page-1',
+          type: 'page',
+          title: 'Ext popup',
+          url: 'chrome-extension://ext-1/popup.html',
+        },
+        {
+          id: 'sw-1',
+          type: 'service_worker',
+          title: 'Ext SW',
+          url: 'chrome-extension://ext-1/sw.js',
+        },
       ],
     })
 
@@ -392,7 +425,9 @@ describe('extension-bridge — happy path', () => {
     ).rejects.toThrow('Target closed')
 
     // Should have attempted MAX_RETRIES times
-    const attachCallCount = (backend.Target.attachToTarget as ReturnType<typeof mock>).mock.calls.length
+    const attachCallCount = (
+      backend.Target.attachToTarget as ReturnType<typeof mock>
+    ).mock.calls.length
     expect(attachCallCount).toBe(2)
   })
 
@@ -432,9 +467,9 @@ describe('extension-bridge — happy path', () => {
 
   test('sendExtensionMessage throws timeout error when extension does not respond', async () => {
     // Create a session where evaluate never resolves
-    let rejectEvaluate: (err: Error) => void
+    let _rejectEvaluate: (err: Error) => void
     const evaluatePromise = new Promise<any>((_resolve, reject) => {
-      rejectEvaluate = reject
+      _rejectEvaluate = reject
     })
     const sessionApi = {
       Runtime: {
@@ -627,7 +662,10 @@ describe('extension-bridge — Fix 3: runtime.lastError in injected callback', (
         evaluate: mock(async () => ({
           result: {
             type: 'string',
-            value: JSON.stringify({ __browseros_bridge_error: 'Could not establish connection. Receiving end does not exist.' }),
+            value: JSON.stringify({
+              __browseros_bridge_error:
+                'Could not establish connection. Receiving end does not exist.',
+            }),
           },
         })),
         on: mock(() => {}),
@@ -690,7 +728,11 @@ describe('extension-bridge — Fix 1: __error sentinel key collision', () => {
         evaluate: mock(async () => ({
           result: {
             type: 'string',
-            value: JSON.stringify({ __error: 'last_error_message', count: 5, status: 'ok' }),
+            value: JSON.stringify({
+              __error: 'last_error_message',
+              count: 5,
+              status: 'ok',
+            }),
           },
         })),
         on: mock(() => {}),
@@ -710,8 +752,14 @@ describe('extension-bridge — Fix 1: __error sentinel key collision', () => {
     backend.session = mock((() => sessionApi) as any)
 
     // Should return the data as-is, NOT throw
-    const result = await sendExtensionMessage(backend, 'ext-1', { action: 'get_errors' })
-    expect(result).toEqual({ __error: 'last_error_message', count: 5, status: 'ok' })
+    const result = await sendExtensionMessage(backend, 'ext-1', {
+      action: 'get_errors',
+    })
+    expect(result).toEqual({
+      __error: 'last_error_message',
+      count: 5,
+      status: 'ok',
+    })
   })
 
   test('extension bridge error with new sentinel IS treated as error', async () => {
@@ -721,7 +769,9 @@ describe('extension-bridge — Fix 1: __error sentinel key collision', () => {
         evaluate: mock(async () => ({
           result: {
             type: 'string',
-            value: JSON.stringify({ __browseros_bridge_error: 'Actual bridge error' }),
+            value: JSON.stringify({
+              __browseros_bridge_error: 'Actual bridge error',
+            }),
           },
         })),
         on: mock(() => {}),
@@ -751,7 +801,7 @@ describe('extension-bridge — Fix 1: __error sentinel key collision', () => {
 describe('extension-bridge — F4: re-discover targets after startWorker', () => {
   test('sendExtensionMessage re-discovers target after SW restart on retry', async () => {
     let getTargetsCallCount = 0
-    let attachCallCount = 0
+    let _attachCallCount = 0
 
     const sessionApi = {
       Runtime: {
@@ -769,21 +819,37 @@ describe('extension-bridge — F4: re-discover targets after startWorker', () =>
     backend.getTargets = mock(async () => {
       getTargetsCallCount++
       if (getTargetsCallCount === 1) {
-        return [{ id: 'sw-old', type: 'service_worker', title: 'Old SW', url: 'chrome-extension://ext-1/sw.js' }]
+        return [
+          {
+            id: 'sw-old',
+            type: 'service_worker',
+            title: 'Old SW',
+            url: 'chrome-extension://ext-1/sw.js',
+          },
+        ]
       }
-      return [{ id: 'sw-new', type: 'service_worker', title: 'New SW', url: 'chrome-extension://ext-1/sw.js' }]
+      return [
+        {
+          id: 'sw-new',
+          type: 'service_worker',
+          title: 'New SW',
+          url: 'chrome-extension://ext-1/sw.js',
+        },
+      ]
     })
 
     // First attach to old target fails, second to new target succeeds
     backend.Target.attachToTarget = mock(async (params: any) => {
-      attachCallCount++
+      _attachCallCount++
       if (params.targetId === 'sw-old') throw new Error('Target closed')
       return { sessionId: 'sw-sess-new' }
     })
 
     backend.session = mock((() => sessionApi) as any)
 
-    const result = await sendExtensionMessage(backend, 'ext-1', { action: 'test' })
+    const result = await sendExtensionMessage(backend, 'ext-1', {
+      action: 'test',
+    })
 
     expect(result).toEqual({ ok: true })
     // Should have called getTargets at least twice (initial + retry re-discover)

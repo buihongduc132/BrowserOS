@@ -1,0 +1,43 @@
+# SOURCE: https://rules.sonarsource.com/typescript/RSPEC-2970/
+#   SonarQube S2970: "Tests should not write to the real home directory"
+# SOURCE: Incident 2026-05-31: pi-acp-agents configure-tui.test.ts wrote to ~/.pi/acp-agents/
+#   → subagent sudo created root-owned dirs → EACCES in subsequent sessions
+#
+# Test files MUST NOT call os.homedir() directly. Use one of:
+#   a) vi.mock("node:os") to redirect homedir() to tmpdir()
+#   b) os.tmpdir() for temp files
+#   c) A temp fixture helper
+#
+# This rule is COMMON (Layer 1) and applies to ALL TypeScript siblings.
+# Opt-out: add file path to .sgignore or create a repo-level override in
+#   src/repositories/<repo>/quality-check/ that lowers severity to hint.
+id: no-homedir-in-test
+language: TypeScript
+message: |
+  homedir() used in test file — tests MUST NOT touch the real home directory.
+  Use os.tmpdir() or mock node:os to redirect homedir() to a temp path.
+severity: error
+note: |
+  Root cause: pi-acp-agents configure-tui.test.ts line 121-122 wrote to
+  ~/.pi/acp-agents/ without mocking homedir(). A subagent's sudo created
+  root-owned dirs that persisted, causing EACCES in later sessions.
+
+  Fix: mock node:os in the test file:
+    vi.mock("node:os", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("node:os")>();
+      return { ...actual, homedir: () => join(actual.tmpdir(), "fake-home") };
+    });
+
+  This rule ONLY matches test files (via files: filter).
+  Production code using homedir() is perfectly valid and NOT flagged.
+rule:
+  pattern: homedir()
+files:
+  - '**/*.test.ts'
+  - '**/*.test.tsx'
+  - '**/*.spec.ts'
+  - '**/*.spec.tsx'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/_test/**'

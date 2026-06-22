@@ -60,7 +60,7 @@ function runtimeSnapshotToHealth(runtime: AgentRuntime): AdapterHealth {
   }
 }
 
-function openclawFallback(adapter: AgentAdapter): AdapterHealth {
+function _openclawFallback(adapter: AgentAdapter): AdapterHealth {
   if (adapter === 'openclaw' || adapter === 'custom')
     return { healthy: true, checkedAt: Date.now() }
   return {

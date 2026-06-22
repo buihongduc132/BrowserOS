@@ -1,5 +1,9 @@
 import type { UIMessage } from 'ai'
-import type { SlashCommand, SlashCommandContext, SlashCommandResult } from './types'
+import type {
+  SlashCommand,
+  SlashCommandContext,
+  SlashCommandResult,
+} from './types'
 
 // ---------------------------------------------------------------------------
 // Registry

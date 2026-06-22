@@ -4,9 +4,6 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
  * Centralized timeout configuration.
- *
- * All values can be overridden via environment variables.
- * Invalid values (non-numeric, negative) fall back to defaults.
  */
 
 import { configStore } from './config-store'
@@ -17,77 +14,34 @@ export const KLAVIS_PROXY_RETRY_BACKOFF_MS = [
 
 export const TIMEOUTS = {
   // Agent/Tool execution
-  get TOOL_CALL() {
-    return configStore.get('TIMEOUTS.TOOL_CALL')
-  },
-  get TOOL_POST_ACTION() {
-    return configStore.get('TIMEOUTS.TOOL_POST_ACTION')
-  },
-  get TEST_PROVIDER() {
-    return configStore.get('TIMEOUTS.TEST_PROVIDER')
-  },
-  get REFINE_PROMPT() {
-    return configStore.get('TIMEOUTS.REFINE_PROMPT')
-  },
+  TOOL_CALL: 120_000,
+  TOOL_POST_ACTION: 2_000,
+  TEST_PROVIDER: 15_000,
+  REFINE_PROMPT: 30_000,
 
   // MCP operations
-  get MCP_DEFAULT() {
-    return configStore.get('TIMEOUTS.MCP_DEFAULT')
-  },
-  get MCP_TRANSPORT_PROBE() {
-    return configStore.get('TIMEOUTS.MCP_TRANSPORT_PROBE')
-  },
-  get MCP_CLIENT_CONNECT() {
-    return configStore.get('TIMEOUTS.MCP_CLIENT_CONNECT')
-  },
+  MCP_DEFAULT: 5_000,
+  MCP_TRANSPORT_PROBE: 5_000,
+  MCP_CLIENT_CONNECT: 15_000,
 
   // CDP connection
-  get CDP_CONNECT() {
-    return configStore.get('TIMEOUTS.CDP_CONNECT')
-  },
-  get CDP_CONNECT_RETRY_DELAY() {
-    return configStore.get('TIMEOUTS.CDP_CONNECT_RETRY_DELAY')
-  },
-  get CDP_RECONNECT_DELAY() {
-    return configStore.get('TIMEOUTS.CDP_RECONNECT_DELAY')
-  },
-  get CDP_KEEPALIVE_INTERVAL() {
-    return configStore.get('TIMEOUTS.CDP_KEEPALIVE_INTERVAL')
-  },
-  get CDP_KEEPALIVE_TIMEOUT() {
-    return configStore.get('TIMEOUTS.CDP_KEEPALIVE_TIMEOUT')
-  },
-  get CDP_REQUEST_TIMEOUT() {
-    return configStore.get('TIMEOUTS.CDP_REQUEST_TIMEOUT')
-  },
+  CDP_CONNECT: 10_000,
+  CDP_CONNECT_RETRY_DELAY: 1_000,
+  CDP_RECONNECT_DELAY: 5_000,
+  CDP_KEEPALIVE_INTERVAL: 30_000,
+  CDP_KEEPALIVE_TIMEOUT: 10_000,
+  CDP_REQUEST_TIMEOUT: 60_000,
 
   // External API calls
-  get KLAVIS_FETCH() {
-    return configStore.get('TIMEOUTS.KLAVIS_FETCH')
-  },
-  get SKILLS_FETCH() {
-    return configStore.get('TIMEOUTS.SKILLS_FETCH')
-  },
-  get SKILLS_SYNC_INTERVAL() {
-    return configStore.get('TIMEOUTS.SKILLS_SYNC_INTERVAL')
-  },
+  KLAVIS_FETCH: 30_000,
 
   // Navigation/DOM
-  get NAVIGATION() {
-    return configStore.get('TIMEOUTS.NAVIGATION')
-  },
-  get PAGE_LOAD_WAIT() {
-    return configStore.get('TIMEOUTS.PAGE_LOAD_WAIT')
-  },
-  get PAGE_LOAD_POLL_INTERVAL() {
-    return configStore.get('TIMEOUTS.PAGE_LOAD_POLL_INTERVAL')
-  },
-  get STABLE_DOM() {
-    return configStore.get('TIMEOUTS.STABLE_DOM')
-  },
-  get FILE_CHOOSER() {
-    return configStore.get('TIMEOUTS.FILE_CHOOSER')
-  },
+  NAVIGATION: 10_000,
+  PAGE_LOAD_WAIT: 30_000,
+  PAGE_LOAD_POLL_INTERVAL: 150,
+  STABLE_DOM: 3_000,
+  FILE_CHOOSER: 3_000,
+  DOWNLOAD: 60_000,
 
   // OAuth
   get OAUTH_FLOW_TTL() {

@@ -1,14 +1,29 @@
 import { TIMEOUTS } from '@browseros/shared/constants/timeouts'
-import type { Browser } from '../browser/browser'
+import type { BrowserSession } from '../browser/core/session'
+import type { SnapshotDiff } from '../browser/core/snapshot/diff'
+import { formatDiffResult } from './browser/diff-format'
+import { formatSnapshotResult } from './browser/snapshot-format'
 
 export type ContentItem =
   | { type: 'text'; text: string }
   | { type: 'image'; data: string; mimeType: string }
 
-export type PostAction =
-  | { type: 'snapshot'; page: number }
+type PostAction =
+  | SnapshotPostAction
   | { type: 'screenshot'; page: number }
+  | DiffPostAction
   | { type: 'pages' }
+
+type SnapshotPostAction = {
+  type: 'snapshot'
+  page: number
+}
+
+type DiffPostAction = {
+  type: 'diff'
+  page: number
+  includeStructured?: boolean
+}
 
 export interface ToolResultMetadata {
   tabId?: number
@@ -23,17 +38,17 @@ export interface ToolResult {
   content: ContentItem[]
   isError?: boolean
   metadata?: ToolResultMetadata
-  structuredContent?: Record<string, unknown>
+  structuredContent?: unknown
 }
 
-interface ToolResponseOptions {
+export interface ToolResponseOptions {
   postActionTimeoutMs?: number
 }
 
 export class ToolResponse {
   private content: ContentItem[] = []
   private hasError = false
-  private structured: Record<string, unknown> = {}
+  private structured: unknown
   private postActions: PostAction[] = []
   private postActionTimeoutMs: number
 
@@ -58,11 +73,27 @@ export class ToolResponse {
   data(key: string, value: unknown): void
   data(obj: Record<string, unknown>): void
   data(keyOrObj: string | Record<string, unknown>, value?: unknown): void {
+    const current = isRecord(this.structured) ? this.structured : {}
     if (typeof keyOrObj === 'string') {
-      this.structured[keyOrObj] = value
+      current[keyOrObj] = value
+      this.structured = current
       return
     }
-    Object.assign(this.structured, keyOrObj)
+    Object.assign(current, keyOrObj)
+    this.structured = current
+  }
+
+  /** Merges a returned ToolResult into this response during incremental tool migration. */
+  appendResult(result: ToolResult): void {
+    this.content.push(...result.content)
+    if (result.isError) this.hasError = true
+    if ('structuredContent' in result) {
+      if (isRecord(result.structuredContent)) {
+        this.data(result.structuredContent)
+      } else {
+        this.structured = result.structuredContent
+      }
+    }
   }
 
   includeSnapshot(page: number): void {
@@ -73,31 +104,53 @@ export class ToolResponse {
     this.postActions.push({ type: 'screenshot', page })
   }
 
+  includeDiff(
+    page: number,
+    options: { includeStructured?: boolean } = {},
+  ): void {
+    this.postActions.push({
+      type: 'diff',
+      page,
+      includeStructured: options.includeStructured,
+    })
+  }
+
   includePages(): void {
     this.postActions.push({ type: 'pages' })
   }
 
-  private async runPostAction(
+  private async runSessionPostAction(
     action: PostAction,
-    browser: Browser,
+    session: BrowserSession,
   ): Promise<void> {
     switch (action.type) {
       case 'snapshot': {
-        const tree = await browser.snapshot(action.page)
-        if (tree) this.text(`[Page ${action.page} snapshot]\n${tree}`)
+        const { text } = await session.observe(action.page).snapshot()
+        const origin = session.pages.getInfo(action.page)?.url ?? 'unknown'
+        await this.appendSnapshotPostAction(action, text, origin)
         return
       }
       case 'screenshot': {
-        const result = await browser.screenshot(action.page, {
+        const { session: pageSession } = await session.pages.getSession(
+          action.page,
+        )
+        const result = await pageSession.Page.captureScreenshot({
           format: 'png',
-          fullPage: false,
+          captureBeyondViewport: false,
         })
         this.text(`[Page ${action.page} screenshot]`)
-        this.image(result.data, result.mimeType)
+        this.image(result.data, 'image/png')
+        return
+      }
+      case 'diff': {
+        const d = await session.observe(action.page).diff()
+        const origin =
+          d.afterUrl ?? session.pages.getInfo(action.page)?.url ?? 'unknown'
+        await this.appendDiffPostAction(action, d, origin)
         return
       }
       case 'pages': {
-        const pages = await browser.listPages()
+        const pages = await session.pages.list()
         if (pages.length === 0) {
           this.text('[Open pages] None')
         } else {
@@ -109,6 +162,34 @@ export class ToolResponse {
         }
         return
       }
+    }
+  }
+
+  private async appendSnapshotPostAction(
+    action: SnapshotPostAction,
+    snapshot: string,
+    origin: string,
+  ): Promise<void> {
+    const formatted = await formatSnapshotResult(snapshot, origin)
+    this.text(`[Page ${action.page} snapshot]\n${formatted.text}`)
+  }
+
+  private async appendDiffPostAction(
+    action: DiffPostAction,
+    diff: SnapshotDiff,
+    origin: string,
+  ): Promise<void> {
+    const formatted = await formatDiffResult(diff, origin)
+    this.text(`[Page ${action.page} diff]\n${formatted.text}`)
+    if (action.includeStructured) {
+      this.data({
+        changed: diff.changed,
+        ...(diff.urlChanged && {
+          urlChanged: true,
+          beforeUrl: diff.beforeUrl,
+          afterUrl: diff.afterUrl,
+        }),
+      })
     }
   }
 
@@ -128,14 +209,15 @@ export class ToolResponse {
     }
   }
 
-  async build(browser: Browser): Promise<ToolResult> {
+  /** Builds a compact browser-tool result after running BrowserSession post-actions. */
+  async buildForSession(session: BrowserSession): Promise<ToolResult> {
     if (this.postActions.length > 0) {
       this.text('\n--- Additional context (auto-included) ---')
     }
 
     for (const action of this.postActions) {
       try {
-        await this.withTimeout(this.runPostAction(action, browser))
+        await this.withTimeout(this.runSessionPostAction(action, session))
       } catch {
         // Post-action failure doesn't fail the tool
       }
@@ -144,11 +226,16 @@ export class ToolResponse {
   }
 
   toResult(): ToolResult {
-    const hasStructured = Object.keys(this.structured).length > 0
     return {
       content: this.content,
       ...(this.hasError && { isError: true }),
-      ...(hasStructured && { structuredContent: this.structured }),
+      ...(this.structured !== undefined && {
+        structuredContent: this.structured,
+      }),
     }
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

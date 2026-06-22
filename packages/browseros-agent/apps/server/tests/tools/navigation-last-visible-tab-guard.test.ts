@@ -25,9 +25,7 @@ function textOf(result: {
     .join('\n')
 }
 
-function makePage(
-  overrides: Partial<PageInfo> & { pageId: number },
-): PageInfo {
+function makePage(overrides: Partial<PageInfo> & { pageId: number }): PageInfo {
   return {
     targetId: `target-${overrides.pageId}`,
     tabId: overrides.pageId * 100,
@@ -102,10 +100,7 @@ describe('close_page last-visible-tab guard', () => {
 
     const result = await executeClosePage(browser, 1)
 
-    assert.ok(
-      !result.isError,
-      `Expected success, got error: ${textOf(result)}`,
-    )
+    assert.ok(!result.isError, `Expected success, got error: ${textOf(result)}`)
     assert.ok(
       wasClosePageCalled(),
       'closePage should have been called after guard passed',
@@ -140,10 +135,7 @@ describe('close_page last-visible-tab guard', () => {
 
     const result = await executeClosePage(browser, 2)
 
-    assert.ok(
-      !result.isError,
-      `Expected success, got error: ${textOf(result)}`,
-    )
+    assert.ok(!result.isError, `Expected success, got error: ${textOf(result)}`)
     assert.ok(wasClosePageCalled(), 'closePage should have been called')
   })
 
@@ -156,10 +148,7 @@ describe('close_page last-visible-tab guard', () => {
 
     const result = await executeClosePage(browser, 1)
 
-    assert.ok(
-      !result.isError,
-      `Expected success, got error: ${textOf(result)}`,
-    )
+    assert.ok(!result.isError, `Expected success, got error: ${textOf(result)}`)
     assert.ok(wasClosePageCalled(), 'closePage should have been called')
   })
 
@@ -229,7 +218,7 @@ describe('close_page last-visible-tab guard', () => {
 
   it('rejects closing a non-existent page ID without crashing', async () => {
     const pages = [makePage({ pageId: 1 })]
-    const { browser, wasClosePageCalled } = createMockBrowser(pages)
+    const { browser } = createMockBrowser(pages)
 
     // Closing a page that doesn't exist in listPages
     const result = await executeClosePage(browser, 999)
@@ -251,7 +240,10 @@ describe('close_page last-visible-tab guard', () => {
 
     const result = await executeClosePage(browser, 1)
 
-    assert.ok(result.isError, 'Expected error — about:blank is still a visible tab')
+    assert.ok(
+      result.isError,
+      'Expected error — about:blank is still a visible tab',
+    )
     assert.ok(
       textOf(result).includes('Cannot close the last visible tab'),
       `Expected last-visible-tab error, got: ${textOf(result)}`,

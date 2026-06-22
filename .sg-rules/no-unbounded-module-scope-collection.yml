@@ -1,0 +1,32 @@
+# SOURCE: Memory leak pattern — module-scope Map/Set that grows per-session/per-request with no eviction.
+# Case study: pi-plugins extensions run inside long-lived pi agent sessions (days/weeks).
+#   session-title-interval/state.ts: `const SESSION_STATES = new Map<string, SessionTitleState>()`
+#   pi-gitnexus-local/gitnexus-cli.ts: `const mcpRpcSessionCache = new Map<string, McpRpcSession>()`
+#   todo-enforcer/session-state.ts: `const sessions = new Map<string, SessionState>()`
+#
+# SOURCE: SonarQube S6439: "Collections should not be assigned to static fields"
+# SOURCE: https://nodejs.org/en/learn/asynchronous-work/prevent-denial-of-service-attacks
+id: no-unbounded-module-scope-collection
+language: TypeScript
+message: "Module-scope Map/Set with no visible eviction — memory leak in long-running processes. Add max size + eviction (LRU, TTL, or clear on session end)."
+severity: warning
+note: |
+  Module-level Maps/Sets persist for the entire lifetime of the process.
+  In CLI agents (pi, ralph) that run for days/weeks, entries accumulate without bound.
+  False positives: Sets of known constants (new Set(["ts", "tsx"])) are safe.
+rule:
+  any:
+    - pattern: const $VAR = new Map()
+    - pattern: const $VAR = new Map($$$ARGS)
+    - pattern: const $VAR = new Set()
+    - pattern: const $VAR = new Set($$$ARGS)
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/scripts/**'
+  - 'test-*.ts'
+  - '**/*.d.ts'
+  - '**/upstream/**'

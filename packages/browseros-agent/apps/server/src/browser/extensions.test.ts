@@ -13,11 +13,10 @@
  *   Happy path
  */
 
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { describe, expect, mock, test } from 'bun:test'
+import type { ExtensionInfo } from '@browseros/cdp-protocol/domains/extensions'
 import type { ProtocolApi } from '@browseros/cdp-protocol/protocol-api'
 import type { CdpBackend, CdpTarget } from './backends/types'
-import type { ExtensionInfo } from '@browseros/cdp-protocol/domains/extensions'
-import { Browser } from './browser'
 import * as extensions from './extensions'
 
 // ── Mock factories ──
@@ -176,7 +175,11 @@ describe('extensions module — Zone 4: error propagation', () => {
     }))
 
     // managed is read-only, so reads are allowed
-    const result = await extensions.getStorageItems(backend, 'ext-id', 'managed')
+    const result = await extensions.getStorageItems(
+      backend,
+      'ext-id',
+      'managed',
+    )
     expect(result).toEqual({ policy: 'value' })
   })
 
@@ -214,60 +217,64 @@ describe('extensions module — Zone 6: protected extensions', () => {
     'nlnihljpboknmfagkikhkdblbedophja', // Controller
   ]
 
-  test.each(PROTECTED_IDS)(
-    'uninstallExtension rejects BrowserOS first-party extension %s',
-    async (id) => {
-      const backend = createMockCdpBackend()
+  test.each(
+    PROTECTED_IDS,
+  )('uninstallExtension rejects BrowserOS first-party extension %s', async (id) => {
+    const backend = createMockCdpBackend()
 
-      await expect(
-        extensions.uninstallExtension(backend, id),
-      ).rejects.toThrow('first-party')
-    },
-  )
+    await expect(extensions.uninstallExtension(backend, id)).rejects.toThrow(
+      'first-party',
+    )
+  })
 
   test('isBrowserOSExtension returns true for first-party IDs', () => {
-    expect(extensions.isBrowserOSExtension('bflpfmnmnokmjhmgnolecpppdbdophmk')).toBe(true)
-    expect(extensions.isBrowserOSExtension('adlpneommgkgeanpaekgoaolcpncohkf')).toBe(true)
-    expect(extensions.isBrowserOSExtension('nlnihljpboknmfagkikhkdblbedophja')).toBe(true)
+    expect(
+      extensions.isBrowserOSExtension('bflpfmnmnokmjhmgnolecpppdbdophmk'),
+    ).toBe(true)
+    expect(
+      extensions.isBrowserOSExtension('adlpneommgkgeanpaekgoaolcpncohkf'),
+    ).toBe(true)
+    expect(
+      extensions.isBrowserOSExtension('nlnihljpboknmfagkikhkdblbedophja'),
+    ).toBe(true)
   })
 
   test('isBrowserOSExtension returns false for third-party IDs', () => {
-    expect(extensions.isBrowserOSExtension('cjpalhdlnbpafiamejdnhcphjbkeiagm')).toBe(false)
+    expect(
+      extensions.isBrowserOSExtension('cjpalhdlnbpafiamejdnhcphjbkeiagm'),
+    ).toBe(false)
     expect(extensions.isBrowserOSExtension('random-extension-id')).toBe(false)
   })
 
-  test.each(PROTECTED_IDS)(
-    'setStorageItems rejects BrowserOS first-party extension %s',
-    async (id) => {
-      const backend = createMockCdpBackend()
+  test.each(
+    PROTECTED_IDS,
+  )('setStorageItems rejects BrowserOS first-party extension %s', async (id) => {
+    const backend = createMockCdpBackend()
 
-      await expect(
-        extensions.setStorageItems(backend, id, 'local', { key: 'val' }),
-      ).rejects.toThrow('first-party')
-    },
-  )
+    await expect(
+      extensions.setStorageItems(backend, id, 'local', { key: 'val' }),
+    ).rejects.toThrow('first-party')
+  })
 
-  test.each(PROTECTED_IDS)(
-    'removeStorageItems rejects BrowserOS first-party extension %s',
-    async (id) => {
-      const backend = createMockCdpBackend()
+  test.each(
+    PROTECTED_IDS,
+  )('removeStorageItems rejects BrowserOS first-party extension %s', async (id) => {
+    const backend = createMockCdpBackend()
 
-      await expect(
-        extensions.removeStorageItems(backend, id, 'local', ['key']),
-      ).rejects.toThrow('first-party')
-    },
-  )
+    await expect(
+      extensions.removeStorageItems(backend, id, 'local', ['key']),
+    ).rejects.toThrow('first-party')
+  })
 
-  test.each(PROTECTED_IDS)(
-    'clearStorageItems rejects BrowserOS first-party extension %s',
-    async (id) => {
-      const backend = createMockCdpBackend()
+  test.each(
+    PROTECTED_IDS,
+  )('clearStorageItems rejects BrowserOS first-party extension %s', async (id) => {
+    const backend = createMockCdpBackend()
 
-      await expect(
-        extensions.clearStorageItems(backend, id, 'local'),
-      ).rejects.toThrow('first-party')
-    },
-  )
+    await expect(
+      extensions.clearStorageItems(backend, id, 'local'),
+    ).rejects.toThrow('first-party')
+  })
 })
 
 // ── Zone 1: Empty / nil inputs ──
@@ -287,11 +294,7 @@ describe('extensions module — Zone 1: empty inputs', () => {
       data: { foo: 'bar', baz: 42 },
     }))
 
-    const result = await extensions.getStorageItems(
-      backend,
-      'ext-id',
-      'local',
-    )
+    const result = await extensions.getStorageItems(backend, 'ext-id', 'local')
 
     expect(result).toEqual({ foo: 'bar', baz: 42 })
     expect(backend.Extensions.getStorageItems).toHaveBeenCalledWith({
@@ -323,7 +326,9 @@ describe('extensions module — Zone 1: empty inputs', () => {
 
   test('getStorageItems returns empty object when CDP returns undefined data', async () => {
     const backend = createMockCdpBackend()
-    backend.Extensions.getStorageItems = mock(async () => ({ data: undefined as any }))
+    backend.Extensions.getStorageItems = mock(async () => ({
+      data: undefined as any,
+    }))
 
     const result = await extensions.getStorageItems(backend, 'ext-id', 'local')
 
@@ -423,7 +428,9 @@ describe('extensions module — L2: listExtensions', () => {
         canModify: true,
       },
     ]
-    backend.Extensions.listExtensions = mock(async () => ({ extensions: extList }))
+    backend.Extensions.listExtensions = mock(async () => ({
+      extensions: extList,
+    }))
 
     const result = await extensions.listExtensions(backend)
 
@@ -460,15 +467,17 @@ describe('extensions module — L2: getExtensionInfo', () => {
     const result = await extensions.getExtensionInfo(backend, 'ext-1')
 
     expect(result).toEqual(info)
-    expect(backend.Extensions.getExtensionInfo).toHaveBeenCalledWith({ id: 'ext-1' })
+    expect(backend.Extensions.getExtensionInfo).toHaveBeenCalledWith({
+      id: 'ext-1',
+    })
   })
 
   test('throws on empty ID', async () => {
     const backend = createMockCdpBackend()
 
-    await expect(
-      extensions.getExtensionInfo(backend, ''),
-    ).rejects.toThrow('Extension ID is required')
+    await expect(extensions.getExtensionInfo(backend, '')).rejects.toThrow(
+      'Extension ID is required',
+    )
   })
 
   test('propagates CDP error for unknown extension', async () => {
@@ -490,7 +499,9 @@ describe('extensions module — L2: enableExtension', () => {
 
     await extensions.enableExtension(backend, 'third-party-ext')
 
-    expect(backend.Extensions.enableExtension).toHaveBeenCalledWith({ id: 'third-party-ext' })
+    expect(backend.Extensions.enableExtension).toHaveBeenCalledWith({
+      id: 'third-party-ext',
+    })
   })
 
   test('succeeds for first-party extension (may have been accidentally disabled)', async () => {
@@ -498,17 +509,22 @@ describe('extensions module — L2: enableExtension', () => {
     backend.Extensions.enableExtension = mock(async () => {})
 
     // Enabling a first-party extension is fine — it might have been accidentally disabled
-    await extensions.enableExtension(backend, 'bflpfmnmnokmjhmgnolecpppdbdophmk')
+    await extensions.enableExtension(
+      backend,
+      'bflpfmnmnokmjhmgnolecpppdbdophmk',
+    )
 
-    expect(backend.Extensions.enableExtension).toHaveBeenCalledWith({ id: 'bflpfmnmnokmjhmgnolecpppdbdophmk' })
+    expect(backend.Extensions.enableExtension).toHaveBeenCalledWith({
+      id: 'bflpfmnmnokmjhmgnolecpppdbdophmk',
+    })
   })
 
   test('throws on empty ID', async () => {
     const backend = createMockCdpBackend()
 
-    await expect(
-      extensions.enableExtension(backend, ''),
-    ).rejects.toThrow('Extension ID is required')
+    await expect(extensions.enableExtension(backend, '')).rejects.toThrow(
+      'Extension ID is required',
+    )
   })
 
   test('propagates CDP error', async () => {
@@ -530,15 +546,17 @@ describe('extensions module — L2: disableExtension', () => {
 
     await extensions.disableExtension(backend, 'third-party-ext')
 
-    expect(backend.Extensions.disableExtension).toHaveBeenCalledWith({ id: 'third-party-ext' })
+    expect(backend.Extensions.disableExtension).toHaveBeenCalledWith({
+      id: 'third-party-ext',
+    })
   })
 
   test('throws on empty ID', async () => {
     const backend = createMockCdpBackend()
 
-    await expect(
-      extensions.disableExtension(backend, ''),
-    ).rejects.toThrow('Extension ID is required')
+    await expect(extensions.disableExtension(backend, '')).rejects.toThrow(
+      'Extension ID is required',
+    )
   })
 
   test('throws on first-party BrowserOS extension', async () => {
@@ -557,9 +575,9 @@ describe('extensions module — L2: disableExtension', () => {
       'nlnihljpboknmfagkikhkdblbedophja',
     ]
     for (const id of ids) {
-      await expect(
-        extensions.disableExtension(backend, id),
-      ).rejects.toThrow('first-party')
+      await expect(extensions.disableExtension(backend, id)).rejects.toThrow(
+        'first-party',
+      )
     }
   })
 

@@ -16,27 +16,7 @@ import { VERSION } from './version'
 
 const portSchema = z.number().int()
 
-const VccConfigSchema = z.object({
-  maxTranscriptLines: z.number().int().nonnegative().optional(),
-  maxGoalLines: z.number().int().nonnegative().optional(),
-  maxFileEntries: z.number().int().nonnegative().optional(),
-  maxCommitEntries: z.number().int().nonnegative().optional(),
-  maxPreferenceLines: z.number().int().nonnegative().optional(),
-  maxOutstandingLines: z.number().int().nonnegative().optional(),
-})
-
-export const CompactionStrategySchema = z.discriminatedUnion('method', [
-  z.object({
-    method: z.literal('default'),
-    customPrompt: z.string().min(1).optional(),
-  }),
-  z.object({
-    method: z.literal('vcc'),
-    vccConfig: VccConfigSchema.optional(),
-  }),
-])
-
-export const ServerConfigSchema = z.object({
+const ServerConfigSchema = z.object({
   cdpPort: portSchema.nullable(),
   serverPort: portSchema,
   agentPort: portSchema,
@@ -44,7 +24,6 @@ export const ServerConfigSchema = z.object({
   resourcesDir: z.string(),
   executionDir: z.string(),
   mcpAllowRemote: z.boolean(),
-  codegenServiceUrl: z.string().optional(),
   instanceClientId: z.string().optional(),
   instanceInstallId: z.string().optional(),
   instanceBrowserosVersion: z.string().optional(),
@@ -68,53 +47,28 @@ interface ParsedCliArgs {
   overrides: PartialConfig
 }
 
-let _resolvedConfigFilePath: string | null = null
-
-/**
- * Returns the absolute path to the config file passed via --config,
- * or null if no config file was specified.
- */
-export function getResolvedConfigFilePath(): string | null {
-  return _resolvedConfigFilePath
-}
-
+/** Loads and validates server config from CLI, file, env, and defaults. */
 export function loadServerConfig(
   argv: string[] = process.argv,
 ): ConfigResult<ServerConfig> {
-  // 1. Parse CLI args
   const cli = parseCliArgs(argv)
   if (!cli.ok) return cli
 
-  // 2. Parse config file (only if --config provided)
   const file = parseConfigFile(cli.value.configPath)
-
-  // Store the resolved config file path for API routes
-  if (cli.value.configPath) {
-    const absPath = path.isAbsolute(cli.value.configPath)
-      ? cli.value.configPath
-      : path.resolve(process.cwd(), cli.value.configPath)
-    _resolvedConfigFilePath = absPath
-  }
   if (!file.ok) return file
 
-  // 3. Parse runtime environment variables
   const runtimeEnv = parseRuntimeEnv()
+  if (!runtimeEnv.ok) return runtimeEnv
 
-  // 4. Merge: Defaults < Env < File < CLI
   const merged = mergeConfigs(
     getDefaults(cli.value.cwd),
-    runtimeEnv,
+    runtimeEnv.value,
     file.value,
     cli.value.overrides,
   )
 
-  // 5. Add build-time inlined values
-  merged.codegenServiceUrl = INLINED_ENV.CODEGEN_SERVICE_URL
-
-  // 6. agentPort is deprecated - always equals serverPort
   merged.agentPort = merged.serverPort
 
-  // 7. Validate with Zod
   const result = ServerConfigSchema.safeParse(merged)
   if (!result.success) {
     const errors = result.error.issues
@@ -126,7 +80,6 @@ export function loadServerConfig(
     }
   }
 
-  // 8. Validate required inlined env vars for production
   const inlinedValidation = validateInlinedEnv()
   if (!inlinedValidation.ok) return inlinedValidation
 
@@ -293,31 +246,36 @@ function parseConfigFile(filePath?: string): ConfigResult<PartialConfig> {
   }
 }
 
-function parseRuntimeEnv(): PartialConfig {
+function parseRuntimeEnv(): ConfigResult<PartialConfig> {
   const cwd = process.cwd()
-  return omitUndefined({
-    cdpPort: process.env.BROWSEROS_CDP_PORT
-      ? safeParseInt(process.env.BROWSEROS_CDP_PORT)
-      : undefined,
-    serverPort: process.env.BROWSEROS_SERVER_PORT
-      ? safeParseInt(process.env.BROWSEROS_SERVER_PORT)
-      : undefined,
-    extensionPort: process.env.BROWSEROS_EXTENSION_PORT
-      ? safeParseInt(process.env.BROWSEROS_EXTENSION_PORT)
-      : undefined,
-    resourcesDir: process.env.BROWSEROS_RESOURCES_DIR
-      ? toAbsolutePath(process.env.BROWSEROS_RESOURCES_DIR, cwd)
-      : undefined,
-    executionDir: process.env.BROWSEROS_EXECUTION_DIR
-      ? toAbsolutePath(process.env.BROWSEROS_EXECUTION_DIR, cwd)
-      : undefined,
-    instanceInstallId: process.env.BROWSEROS_INSTALL_ID,
-    instanceClientId: process.env.BROWSEROS_CLIENT_ID,
-    aiSdkDevtoolsEnabled:
-      process.env.BROWSEROS_AI_SDK_DEVTOOLS === 'true' ? true : undefined,
-    tabOwnershipStrict:
-      process.env.BROWSEROS_TAB_OWNERSHIP_STRICT === 'true' ? true : undefined,
-  })
+  return {
+    ok: true,
+    value: omitUndefined({
+      cdpPort: process.env.BROWSEROS_CDP_PORT
+        ? safeParseInt(process.env.BROWSEROS_CDP_PORT)
+        : undefined,
+      serverPort: process.env.BROWSEROS_SERVER_PORT
+        ? safeParseInt(process.env.BROWSEROS_SERVER_PORT)
+        : undefined,
+      extensionPort: process.env.BROWSEROS_EXTENSION_PORT
+        ? safeParseInt(process.env.BROWSEROS_EXTENSION_PORT)
+        : undefined,
+      resourcesDir: process.env.BROWSEROS_RESOURCES_DIR
+        ? toAbsolutePath(process.env.BROWSEROS_RESOURCES_DIR, cwd)
+        : undefined,
+      executionDir: process.env.BROWSEROS_EXECUTION_DIR
+        ? toAbsolutePath(process.env.BROWSEROS_EXECUTION_DIR, cwd)
+        : undefined,
+      instanceInstallId: process.env.BROWSEROS_INSTALL_ID,
+      instanceClientId: process.env.BROWSEROS_CLIENT_ID,
+      aiSdkDevtoolsEnabled:
+        process.env.BROWSEROS_AI_SDK_DEVTOOLS === 'true' ? true : undefined,
+      tabOwnershipStrict:
+        process.env.BROWSEROS_TAB_OWNERSHIP_STRICT === 'true'
+          ? true
+          : undefined,
+    }),
+  }
 }
 
 function validateInlinedEnv(): ConfigResult<void> {

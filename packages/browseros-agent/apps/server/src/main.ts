@@ -19,7 +19,6 @@ import { INLINED_ENV } from './env'
 import {
   configureClaudeRuntime,
   configureCodexRuntime,
-  getHermesRuntime,
 } from './lib/agents/runtime'
 import {
   cleanOldSessions,
@@ -31,18 +30,10 @@ import {
 import { initializeDb } from './lib/db'
 import { identity } from './lib/identity'
 import { logger } from './lib/logger'
+import { reconcileUrl } from './lib/mcp-manager'
 import { metrics } from './lib/metrics'
 import { isPortInUseError } from './lib/port-binding'
 import { Sentry } from './lib/sentry'
-import { seedSoulTemplate } from './lib/soul'
-import { getOpenClawService } from './services/openclaw/openclaw-service'
-import { migrateBuiltinSkills } from './skills/migrate'
-import {
-  startSkillSync,
-  stopSkillSync,
-  syncBuiltinSkills,
-} from './skills/remote-sync'
-import { registry } from './tools/registry'
 import { VERSION } from './version'
 
 export class Application {
@@ -78,8 +69,7 @@ export class Application {
     }
 
     const browser = new Browser(cdp)
-
-    logger.info(`Loaded ${registry.names().length} unified tools`)
+    const browserSession = browser.session
 
     try {
       await createHttpServer({
@@ -87,11 +77,10 @@ export class Application {
         host: '0.0.0.0',
         version: VERSION,
         browser,
-        registry,
+        browserSession,
         browserosId: identity.getBrowserOSId(),
         executionDir: this.config.executionDir,
         resourcesDir: this.config.resourcesDir,
-        codegenServiceUrl: this.config.codegenServiceUrl,
         aiSdkDevtoolsEnabled: this.config.aiSdkDevtoolsEnabled,
         compaction: this.config.compaction,
         tabOwnershipStrict: this.config.tabOwnershipStrict,
@@ -118,6 +107,32 @@ export class Application {
       })
     }
 
+    // Reconcile every linked agent's BrowserOS MCP URL against the
+    // proxy URL external clients actually reach. The agent server's
+    // own `serverPort` is NOT that URL — in production the browser
+    // proxies `/mcp` from a separately-configured proxy port. We
+    // only reconcile when the launching process passes the public
+    // URL via `BROWSEROS_MCP_PUBLIC_URL`; otherwise we'd rewrite
+    // every agent config with the wrong port and break installs that
+    // were previously working. The UI's install flow records the
+    // correct URL per click; reconcile is the boot-time recovery
+    // path for port drift.
+    const publicMcpUrl = process.env.BROWSEROS_MCP_PUBLIC_URL
+    if (publicMcpUrl) {
+      reconcileUrl({ currentUrl: publicMcpUrl }).catch((err) => {
+        logger.warn(
+          'MCP manager URL reconcile failed; agent configs may be stale',
+          {
+            error: err instanceof Error ? err.message : String(err),
+          },
+        )
+      })
+    } else {
+      logger.debug(
+        'Skipping MCP manager URL reconcile — BROWSEROS_MCP_PUBLIC_URL not set',
+      )
+    }
+
     logger.info(
       `HTTP server listening on http://127.0.0.1:${this.config.serverPort}`,
     )
@@ -132,9 +147,6 @@ export class Application {
 
   stop(reason?: string): void {
     logger.info('Shutting down server...', { reason })
-    getHermesRuntime()
-      ?.executeAction({ type: 'stop' })
-      .catch(() => {})
     removeServerConfigSync()
 
     // Immediate exit without graceful shutdown. Chromium may kill us on update/restart,
@@ -183,6 +195,19 @@ export class Application {
 
     if (!metrics.isEnabled()) {
       logger.warn('Metrics disabled: missing POSTHOG_API_KEY')
+    } else if (
+      !this.config.instanceClientId &&
+      !this.config.instanceInstallId
+    ) {
+      // captureNow short-circuits when no identity is set, so emits
+      // will silently no-op until the deployment supplies one of these.
+      // Surface the cause so a misconfigured instance doesn't quietly
+      // produce zero analytics.
+      logger.warn(
+        'Metrics will skip events: no instance identity. ' +
+          'Set BROWSEROS_CLIENT_ID or BROWSEROS_INSTALL_ID (env) or ' +
+          'instance.client_id / instance.install_id (config) to opt in.',
+      )
     }
 
     if (!INLINED_ENV.SENTRY_DSN) {
