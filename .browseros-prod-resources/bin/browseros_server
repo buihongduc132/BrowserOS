@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# browseros_server wrapper — replaces vendor ELF binary
+# The browser (Chromium) spawns this with CLI flags:
+#   browseros_server --config=... --cdp-port=N --server-port=N --extension-port=N
+#
+# This wrapper translates CLI flags → ENV vars and execs our bun server,
+# which has all custom routes (/config, /compaction, /skills/local/*, etc.)
+
+set -euo pipefail
+
+# Skip OpenClaw (macOS-only container runtime, crashes on Linux)
+export BROWSEROS_SKIP_OPENCLAW=1
+export NODE_ENV=development
+
+# Parse CLI flags into env vars
+for arg in "$@"; do
+    case "$arg" in
+        --config=*)
+            CONFIG_FILE="${arg#--config=}"
+            export BROWSEROS_CONFIG="${CONFIG_FILE}"
+            ;;
+        --cdp-port=*)
+            export BROWSEROS_CDP_PORT="${arg#--cdp-port=}"
+            ;;
+        --server-port=*)
+            export BROWSEROS_SERVER_PORT="${arg#--server-port=}"
+            ;;
+        --extension-port=*)
+            export BROWSEROS_EXTENSION_PORT="${arg#--extension-port=}"
+            ;;
+    esac
+done
+
+# Find the repo root (wrapper is at <repo>/.browseros-prod-resources/bin/)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+# Use bun to run our server code directly
+# The server reads BROWSEROS_SERVER_PORT etc. with highest priority
+SERVER_DIR="${REPO_ROOT}/packages/browseros-agent/apps/server"
+
+# Build the config file env var if provided
+ENV_FLAG=""
+if [ -n "${CONFIG_FILE:-}" ]; then
+    ENV_FLAG="--env-file=${CONFIG_FILE}"
+fi
+
+exec "${HOME}/.bun/bin/bun" ${ENV_FLAG} "${SERVER_DIR}/src/index.ts"

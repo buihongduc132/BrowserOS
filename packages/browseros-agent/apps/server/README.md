@@ -49,7 +49,7 @@ MCP server and AI agent loop powering BrowserOS browser automation. This is the 
 
 ## MCP Tools
 
-53+ tools organized by category:
+Tools organized by category:
 
 | Category | Tools |
 |----------|-------|
@@ -64,7 +64,6 @@ MCP server and AI agent loop powering BrowserOS browser automation. This is the 
 | **History** | `history_search`, `history_recent`, `history_delete`, `history_delete_range` |
 | **Tab Groups** | `group_list`, `group_create`, `group_update`, `group_ungroup`, `group_close` |
 | **Filesystem** | `ls`, `read`, `write`, `edit`, `find`, `grep`, `bash` |
-| **Memory** | `read_core`, `update_core`, `read_soul`, `update_soul`, `search_memory`, `write_memory` |
 | **DOM** | `dom`, `dom_search` |
 | **Console** | `get_console_messages` |
 | **Other** | `browseros_info`, `handle_dialog`, `wait_for`, `download`, `export_pdf`, `output_file`, `nudges` |
@@ -82,15 +81,6 @@ The agent loop uses the [Vercel AI SDK](https://sdk.vercel.ai) to orchestrate mu
 ### Provider Factory
 
 The provider factory (`src/agent/provider-factory.ts`) creates AI SDK providers from runtime configuration, supporting hot-swapping between providers without restart.
-
-## Skills System
-
-Skills are custom instruction sets that shape agent behavior:
-
-- **Catalog** (`src/skills/catalog.ts`) — registry of available skills
-- **Defaults** (`src/skills/defaults/`) — built-in skill definitions
-- **Loader** (`src/skills/loader.ts`) — loads skills from local and remote sources
-- **Remote sync** (`src/skills/remote-sync.ts`) — syncs skills from the BrowserOS cloud
 
 ## Directory Structure
 
@@ -112,15 +102,12 @@ apps/server/
 │   │   ├── navigation.ts
 │   │   ├── input.ts
 │   │   ├── snapshot.ts
-│   │   ├── memory/
 │   │   ├── filesystem/
 │   │   └── ...
-│   ├── skills/                # Skills system
 │   ├── lib/                   # Shared utilities
 │   └── rpc.ts                 # JSON-RPC type definitions
 ├── tests/
 │   ├── tools/                 # Tool-level tests
-│   ├── sdk/                   # SDK integration tests
 │   └── server.integration.test.ts
 └── package.json
 ```
@@ -142,14 +129,13 @@ cp .env.example .env.development
 bun run start
 ```
 
-See the [agent monorepo README](../../README.md) for full environment variable reference and `process-compose` setup.
+See the [agent monorepo README](../../README.md) for full environment variable reference and `dev:watch` setup.
 
 ### Testing
 
 ```bash
 bun run test:tools          # Tool-level tests
 bun run test:integration    # Full integration tests (requires running BrowserOS)
-bun run test:sdk            # SDK integration tests
 ```
 
 ### Building

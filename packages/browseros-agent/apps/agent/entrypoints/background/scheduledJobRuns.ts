@@ -149,7 +149,6 @@ export const scheduledJobRuns = async () => {
 
   let runningMissedJobs = false
 
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: TODO(dani) refactor to reduce complexity
   const runMissedJobs = async () => {
     if (runningMissedJobs) return
     runningMissedJobs = true

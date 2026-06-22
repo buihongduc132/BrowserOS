@@ -1,0 +1,25 @@
+# SOURCE: coding-guard internal — enforces discriminated session types per verifier V1 R2
+# SOURCE: https://www.typescriptlang.org/docs/handbook/typescript-in-5-minutes-func.html#discriminated-unions
+# BUILT_ON: https://ast-grep.com/
+id: no-session-type-confusion
+message: "Do not use AcpSessionMeta for assistant conversations or vice versa — use the correct discriminated type"
+severity: error
+language: TypeScript
+note: |
+  The session repo uses discriminated types: AcpSessionMeta for ACP agent sessions
+  and AssistantConversation for assistant conversations. These must never be mixed.
+  Use repo.listSessions() for ACP and repo.listConversations() for assistant.
+rule:
+  any:
+    - pattern: |
+        const $VAR: AcpSessionMeta = $REPO.listConversations($$$)
+    - pattern: |
+        const $VAR: AssistantConversation = $REPO.listSessions($$$)
+    - pattern: |
+        const $VAR: AcpSessionMeta[] = $REPO.listConversations($$$)
+    - pattern: |
+        const $VAR: AssistantConversation[] = $REPO.listSessions($$$)
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'

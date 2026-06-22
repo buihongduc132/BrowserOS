@@ -1,12 +1,49 @@
-import { mkdtempSync } from 'node:fs'
-import { createServer } from 'node:net'
-import { tmpdir } from 'node:os'
+import { existsSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { TEST_PORTS } from '@browseros/shared/constants/ports'
 
-const DEFAULT_BINARY_PATH =
-  process.env.BROWSEROS_BINARY ??
-  '/Applications/BrowserOS.app/Contents/MacOS/BrowserOS'
+/**
+ * Resolve the BrowserOS binary path with platform-aware fallbacks.
+ *
+ * Priority:
+ * 1. BROWSEROS_BINARY env var (explicit override, used by CI)
+ * 2. BROWSEROS_APP_PATH env var (shared with launch scripts)
+ * 3. CI wrapper path (.ci/bin/browseros within the repo)
+ * 4. Platform defaults:
+ *    - macOS: /Applications/BrowserOS.app/Contents/MacOS/BrowserOS
+ *    - Linux: ~/Downloads/alta/BrowserOS.AppImage
+ */
+function resolveBinaryPath(): string {
+  // 1. Explicit override (CI sets this)
+  if (process.env.BROWSEROS_BINARY) return process.env.BROWSEROS_BINARY
+
+  // 2. Shared with scripts/launch/instance.sh
+  if (process.env.BROWSEROS_APP_PATH) return process.env.BROWSEROS_APP_PATH
+
+  // 3. CI wrapper (repo-relative)
+  const ciWrapper = join(
+    import.meta.dirname,
+    '..',
+    '..',
+    '..',
+    '..',
+    '.ci',
+    'bin',
+    'browseros',
+  )
+  if (existsSync(ciWrapper)) return ciWrapper
+
+  // 4. Platform defaults
+  if (process.platform === 'darwin') {
+    return '/Applications/BrowserOS.app/Contents/MacOS/BrowserOS'
+  }
+
+  // Linux: match scripts/launch/instance.sh default
+  return join(homedir(), 'Downloads', 'alta', 'BrowserOS.AppImage')
+}
+
+const DEFAULT_BINARY_PATH = resolveBinaryPath()
 const PORT_SCAN_RANGE = 100
 
 export interface RuntimePorts {

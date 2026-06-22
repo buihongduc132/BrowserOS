@@ -6,6 +6,10 @@
  * Centralized timeout configuration.
  */
 
+export const KLAVIS_PROXY_RETRY_BACKOFF_MS = [
+  5_000, 10_000, 20_000, 40_000, 60_000,
+] as const
+
 export const TIMEOUTS = {
   // Agent/Tool execution
   TOOL_CALL: 120_000,
@@ -28,8 +32,6 @@ export const TIMEOUTS = {
 
   // External API calls
   KLAVIS_FETCH: 30_000,
-  SKILLS_FETCH: 15_000,
-  SKILLS_SYNC_INTERVAL: 45 * 60_000,
 
   // Navigation/DOM
   NAVIGATION: 10_000,
@@ -37,6 +39,7 @@ export const TIMEOUTS = {
   PAGE_LOAD_POLL_INTERVAL: 150,
   STABLE_DOM: 3_000,
   FILE_CHOOSER: 3_000,
+  DOWNLOAD: 60_000,
 
   // OAuth
   OAUTH_FLOW_TTL: 300_000,

@@ -1,8 +1,7 @@
 /**
  * BrowserOS App Manager
  *
- * Manages BrowserOS lifecycle for eval workers.
- * Mirrors scripts/dev/start.ts --manual mode with per-worker isolation:
+ * Manages BrowserOS lifecycle for eval workers, with per-worker isolation:
  *
  *   1. Kill ports
  *   2. Launch Chrome directly with per-worker user-data-dir and ports
@@ -14,8 +13,11 @@
  */
 
 import {
+  closeSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -23,12 +25,27 @@ import {
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { type Subprocess, spawn, spawnSync } from 'bun'
-import type { EvalPorts } from '../utils/dev-config'
 import { sleep } from '../utils/sleep'
+
+export interface EvalPorts {
+  cdp: number
+  server: number
+  extension: number
+}
 
 const MAX_RESTART_ATTEMPTS = 3
 const CDP_WAIT_TIMEOUT_MS = 30_000
-const SERVER_HEALTH_TIMEOUT_MS = 30_000
+// Bumped from 30s → 90s while debugging dev-CI startup. Dev's server module
+// graph is ~108 files larger than main's; cold-cache module load on a CI
+// runner can take much longer than the original 30s budget allowed.
+const SERVER_HEALTH_TIMEOUT_MS = 90_000
+
+// Where per-worker server stderr is written. Captured (rather than ignored)
+// so eval-weekly.yml can upload these as workflow artifacts on failure for
+// post-mortem debugging. Path is also referenced in the workflow's artifact
+// upload step.
+const SERVER_LOG_DIR =
+  process.env.BROWSEROS_SERVER_LOG_DIR || '/tmp/browseros-server-logs'
 
 const MONOREPO_ROOT = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -48,6 +65,7 @@ export class BrowserOSAppManager {
   private ports: EvalPorts
   private chromeProc: Subprocess | null = null
   private serverProc: Subprocess | null = null
+  private serverLogFd: number | null = null
   private tempDir: string | null = null
   private readonly workerIndex: number
   private readonly loadExtensions: boolean
@@ -107,9 +125,9 @@ export class BrowserOSAppManager {
   }
 
   /**
-   * Launch Chrome + Server — mirrors start.ts --manual mode.
+   * Launch Chrome + Server.
    *
-   * Chrome flags match startManualBrowser() in scripts/dev/start.ts:
+   * Chrome flags:
    *   --no-first-run, --no-default-browser-check, --use-mock-keychain
    *   --disable-browseros-server  (we run our own server)
    *   --disable-browseros-extensions  (we load them explicitly if needed)
@@ -175,18 +193,38 @@ export class BrowserOSAppManager {
       BROWSEROS_CDP_PORT: String(cdp),
       BROWSEROS_SERVER_PORT: String(server),
       BROWSEROS_EXTENSION_PORT: String(extension),
-      VITE_BROWSEROS_SERVER_PORT: String(server),
     }
 
+    // Capture both stdout and stderr to a per-worker file so we can
+    // post-mortem startup hangs. The server uses pino which writes logs to
+    // stdout by default — capturing stderr alone misses everything. The
+    // eval-weekly workflow uploads /tmp/browseros-server-logs/ as a workflow
+    // artifact on failure.
+    // Open the per-worker log file under SERVER_LOG_DIR. If the directory
+    // can't be created or the file can't be opened (e.g. unwritable custom
+    // BROWSEROS_SERVER_LOG_DIR), fall back to /dev/null so spawn still works.
+    const logPath = join(SERVER_LOG_DIR, `server-W${this.workerIndex}.log`)
+    let logFd: number
+    try {
+      mkdirSync(SERVER_LOG_DIR, { recursive: true })
+      logFd = openSync(logPath, 'a')
+    } catch {
+      logFd = openSync('/dev/null', 'w')
+    }
+    this.serverLogFd = logFd
+
+    // `start:ci` skips `--watch` (no file-watcher overhead in CI). Falls back
+    // to the regular `start` script outside CI for the dev-watch experience.
+    const startScript = process.env.CI ? 'start:ci' : 'start'
     this.serverProc = spawn({
-      cmd: ['bun', 'run', '--filter', '@browseros/server', 'start'],
+      cmd: ['bun', 'run', '--filter', '@browseros/server', startScript],
       cwd: MONOREPO_ROOT,
-      stdout: 'ignore',
-      stderr: 'ignore',
+      stdout: logFd,
+      stderr: logFd,
       env: serverEnv,
     })
     console.log(
-      `  [W${this.workerIndex}] Server started (PID: ${this.serverProc.pid})`,
+      `  [W${this.workerIndex}] Server started (PID: ${this.serverProc.pid}, logs → ${logPath})`,
     )
 
     // --- Wait for Server Health ---
@@ -238,6 +276,18 @@ export class BrowserOSAppManager {
     // Kill server first (graceful → force)
     await this.killProcess(this.serverProc)
     this.serverProc = null
+
+    // Close the parent's copy of the server log fd. Child kept its own dup
+    // until it exited above, so closing here doesn't truncate any output.
+    // Without this we'd leak one fd per restart attempt across all workers.
+    if (this.serverLogFd !== null) {
+      try {
+        closeSync(this.serverLogFd)
+      } catch {
+        // already closed or invalid — ignore
+      }
+      this.serverLogFd = null
+    }
 
     // Kill Chrome (graceful → force)
     await this.killProcess(this.chromeProc)
@@ -314,7 +364,12 @@ export class BrowserOSAppManager {
       )
       return
     }
-    const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'))
+    let manifest: Record<string, unknown>
+    try {
+      manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'))
+    } catch {
+      return
+    }
     manifest.nopecha = { ...manifest.nopecha, key: apiKey }
     writeFileSync(manifestPath, JSON.stringify(manifest, null, 2))
     console.log('[BROWSEROS] NopeCHA API key patched')

@@ -25,14 +25,13 @@ curl -fsSL https://cdn.browseros.com/cli/install.sh | bash
 ## Quick Start
 
 ```bash
-# Download BrowserOS
-browseros-cli install
+# Download BrowserOS from https://browseros.com
 
 # Start BrowserOS
 browseros-cli launch
 
-# Auto-configure MCP settings for your AI tools
-browseros-cli init --auto
+# Configure MCP settings with the Server URL from BrowserOS settings
+browseros-cli init http://127.0.0.1:9000/mcp
 
 # Verify everything is working
 browseros-cli health

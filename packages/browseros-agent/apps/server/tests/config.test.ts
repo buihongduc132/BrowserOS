@@ -19,7 +19,6 @@ describe('loadServerConfig', () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browseros-config-test-'))
     originalEnv = { ...process.env }
 
-    // Clear relevant env vars
     delete process.env.BROWSEROS_CDP_PORT
     delete process.env.BROWSEROS_SERVER_PORT
     delete process.env.BROWSEROS_EXTENSION_PORT
@@ -49,7 +48,6 @@ describe('loadServerConfig', () => {
       if (!result.ok) return
       assert.strictEqual(result.value.cdpPort, 9222)
       assert.strictEqual(result.value.serverPort, 9223)
-      // agentPort is deprecated - always equals serverPort
       assert.strictEqual(result.value.agentPort, 9223)
       assert.strictEqual(result.value.extensionPort, 9224)
       assert.strictEqual(result.value.mcpAllowRemote, false)

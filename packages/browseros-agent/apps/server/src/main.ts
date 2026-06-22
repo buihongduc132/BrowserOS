@@ -8,7 +8,6 @@
  * Manages server lifecycle: initialization, startup, and shutdown.
  */
 
-import type { Database } from 'bun:sqlite'
 import fs from 'node:fs'
 import path from 'node:path'
 import { EXIT_CODES } from '@browseros/shared/constants/exit-codes'
@@ -18,30 +17,27 @@ import { Browser } from './browser/browser'
 import type { ServerConfig } from './config'
 import { INLINED_ENV } from './env'
 import {
+  configureClaudeRuntime,
+  configureCodexRuntime,
+} from './lib/agents/runtime'
+import {
   cleanOldSessions,
   ensureBrowserosDir,
+  getDbPath,
   removeServerConfigSync,
   writeServerConfig,
 } from './lib/browseros-dir'
 import { initializeDb } from './lib/db'
 import { identity } from './lib/identity'
 import { logger } from './lib/logger'
+import { reconcileUrl } from './lib/mcp-manager'
 import { metrics } from './lib/metrics'
 import { isPortInUseError } from './lib/port-binding'
 import { Sentry } from './lib/sentry'
-import { seedSoulTemplate } from './lib/soul'
-import { migrateBuiltinSkills } from './skills/migrate'
-import {
-  startSkillSync,
-  stopSkillSync,
-  syncBuiltinSkills,
-} from './skills/remote-sync'
-import { registry } from './tools/registry'
 import { VERSION } from './version'
 
 export class Application {
   private config: ServerConfig
-  private db: Database | null = null
 
   constructor(config: ServerConfig) {
     this.config = config
@@ -54,6 +50,8 @@ export class Application {
       resourcesDir: path.resolve(this.config.resourcesDir),
     })
 
+    configureClaudeRuntime()
+    configureCodexRuntime()
     await this.initCoreServices()
 
     if (!this.config.cdpPort) {
@@ -71,8 +69,7 @@ export class Application {
     }
 
     const browser = new Browser(cdp)
-
-    logger.info(`Loaded ${registry.names().length} unified tools`)
+    const browserSession = browser.session
 
     try {
       await createHttpServer({
@@ -80,11 +77,10 @@ export class Application {
         host: '0.0.0.0',
         version: VERSION,
         browser,
-        registry,
+        browserSession,
         browserosId: identity.getBrowserOSId(),
         executionDir: this.config.executionDir,
         resourcesDir: this.config.resourcesDir,
-        codegenServiceUrl: this.config.codegenServiceUrl,
         aiSdkDevtoolsEnabled: this.config.aiSdkDevtoolsEnabled,
 
         onShutdown: () => this.stop('shutdown-endpoint'),
@@ -96,6 +92,7 @@ export class Application {
     try {
       await writeServerConfig({
         server_port: this.config.serverPort,
+        cdp_port: this.config.cdpPort ?? undefined,
         url: `http://127.0.0.1:${this.config.serverPort}`,
         server_version: VERSION,
         browseros_version: this.config.instanceBrowserosVersion,
@@ -108,6 +105,32 @@ export class Application {
       })
     }
 
+    // Reconcile every linked agent's BrowserOS MCP URL against the
+    // proxy URL external clients actually reach. The agent server's
+    // own `serverPort` is NOT that URL — in production the browser
+    // proxies `/mcp` from a separately-configured proxy port. We
+    // only reconcile when the launching process passes the public
+    // URL via `BROWSEROS_MCP_PUBLIC_URL`; otherwise we'd rewrite
+    // every agent config with the wrong port and break installs that
+    // were previously working. The UI's install flow records the
+    // correct URL per click; reconcile is the boot-time recovery
+    // path for port drift.
+    const publicMcpUrl = process.env.BROWSEROS_MCP_PUBLIC_URL
+    if (publicMcpUrl) {
+      reconcileUrl({ currentUrl: publicMcpUrl }).catch((err) => {
+        logger.warn(
+          'MCP manager URL reconcile failed; agent configs may be stale',
+          {
+            error: err instanceof Error ? err.message : String(err),
+          },
+        )
+      })
+    } else {
+      logger.debug(
+        'Skipping MCP manager URL reconcile — BROWSEROS_MCP_PUBLIC_URL not set',
+      )
+    }
+
     logger.info(
       `HTTP server listening on http://127.0.0.1:${this.config.serverPort}`,
     )
@@ -116,14 +139,12 @@ export class Application {
     )
 
     this.logStartupSummary()
-    startSkillSync()
 
     metrics.log('http_server.started', { version: VERSION })
   }
 
   stop(reason?: string): void {
     logger.info('Shutting down server...', { reason })
-    stopSkillSync()
     removeServerConfigSync()
 
     // Immediate exit without graceful shutdown. Chromium may kill us on update/restart,
@@ -141,19 +162,19 @@ export class Application {
     this.configureLogDirectory()
     await ensureBrowserosDir()
     await cleanOldSessions()
-    await seedSoulTemplate()
-    await migrateBuiltinSkills()
-    await syncBuiltinSkills()
 
-    const dbPath = path.join(
-      this.config.executionDir || this.config.resourcesDir,
-      'browseros.db',
-    )
-    this.db = initializeDb(dbPath)
+    initializeDb({
+      dbPath: getDbPath(),
+      resourcesDir: this.config.resourcesDir,
+    })
 
     identity.initialize({
       installId: this.config.instanceInstallId,
-      db: this.db,
+      statePath: path.join(
+        this.config.executionDir,
+        'identity',
+        'browseros-id.json',
+      ),
     })
 
     const browserosId = identity.getBrowserOSId()
@@ -172,6 +193,19 @@ export class Application {
 
     if (!metrics.isEnabled()) {
       logger.warn('Metrics disabled: missing POSTHOG_API_KEY')
+    } else if (
+      !this.config.instanceClientId &&
+      !this.config.instanceInstallId
+    ) {
+      // captureNow short-circuits when no identity is set, so emits
+      // will silently no-op until the deployment supplies one of these.
+      // Surface the cause so a misconfigured instance doesn't quietly
+      // produce zero analytics.
+      logger.warn(
+        'Metrics will skip events: no instance identity. ' +
+          'Set BROWSEROS_CLIENT_ID or BROWSEROS_INSTALL_ID (env) or ' +
+          'instance.client_id / instance.install_id (config) to opt in.',
+      )
     }
 
     if (!INLINED_ENV.SENTRY_DSN) {

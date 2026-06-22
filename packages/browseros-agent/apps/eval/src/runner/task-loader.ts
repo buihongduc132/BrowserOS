@@ -18,17 +18,6 @@ export class TaskLoadError extends Error {
   }
 }
 
-export class TaskValidationError extends Error {
-  constructor(
-    message: string,
-    public readonly lineNumber: number,
-    public readonly validationErrors: z.ZodError,
-  ) {
-    super(message)
-    this.name = 'TaskValidationError'
-  }
-}
-
 // ============================================================================
 // Task Loader
 // ============================================================================
@@ -145,7 +134,7 @@ function createSingleTask(query: string, startUrl?: string): TaskLoadResult {
     query_id: `single-${Date.now()}`,
     dataset: 'manual',
     query: query.trim(),
-    graders: ['fara_alignment'],
+    graders: ['performance_grader'],
     start_url: startUrl,
     metadata: {
       original_task_id: 'manual',

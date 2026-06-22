@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# setup — Idempotent bootstrap using the Go CLI
+# The Go CLI handles deps install + agent code generation.
+# We also ensure .env files and desktop entries exist.
+
+REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+AGENT_DIR="${REPO_ROOT}/packages/browseros-agent"
+
+# ── .env.development (ensure exists) ──
+for app in agent server; do
+  ENV_FILE="${AGENT_DIR}/apps/${app}/.env.development"
+  if [[ ! -f "$ENV_FILE" ]]; then
+    EXAMPLE="${AGENT_DIR}/apps/${app}/.env.example"
+    if [[ -f "$EXAMPLE" ]]; then
+      cp "$EXAMPLE" "$ENV_FILE"
+      echo "  ✓ Created .env.development for ${app}"
+    else
+      touch "$ENV_FILE"
+      echo "  ✓ Created empty .env.development for ${app}"
+    fi
+  fi
+done
+
+# ── Desktop entries ──
+bash "${REPO_ROOT}/scripts/setup-desktop-entries.sh" 2>/dev/null || true
+
+# ── Go CLI setup ──
+mise run browseros:dev setup
+
+# ── Build dev extension ──
+echo ""
+echo "=== Building dev extension ==="
+mise run browseros:build-dev
+
+echo ""
+echo "=== Setup complete ==="

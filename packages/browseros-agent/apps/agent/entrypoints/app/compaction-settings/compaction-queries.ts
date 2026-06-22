@@ -110,3 +110,101 @@ export function useCompactionConfig() {
     isResetting: resetMutation.isPending,
   }
 }
+
+// ---------------------------------------------------------------------------
+// On-demand compaction trigger
+// ---------------------------------------------------------------------------
+
+export interface CompactConversationResult {
+  ok: boolean
+  compactedMessageCount?: number
+  originalMessageCount?: number
+  error?: string
+}
+
+async function triggerCompact(
+  baseUrl: string,
+  conversationId: string,
+): Promise<CompactConversationResult> {
+  const res = await fetch(`${baseUrl}/compaction/compact`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ conversationId }),
+  })
+  const data = await res.json()
+  if (!res.ok) {
+    throw Object.assign(new Error(data.error ?? `HTTP ${res.status}`), {
+      status: res.status,
+      data,
+    })
+  }
+  return data
+}
+
+export function useCompactConversation() {
+  const {
+    baseUrl,
+    isLoading: urlLoading,
+    error: urlError,
+  } = useAgentServerUrl()
+
+  const mutation = useMutation<
+    CompactConversationResult,
+    Error & { status?: number; data?: unknown },
+    { conversationId: string }
+  >({
+    mutationFn: ({ conversationId }) =>
+      triggerCompact(baseUrl as string, conversationId),
+  })
+
+  return {
+    compact: mutation.mutateAsync,
+    compactAsync: mutation.mutateAsync,
+    isCompacting: mutation.isPending,
+    data: mutation.data,
+    error: mutation.error ?? urlError,
+    isLoading: urlLoading,
+    reset: mutation.reset,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Compaction status polling
+// ---------------------------------------------------------------------------
+
+export interface CompactionStatus {
+  compacting: boolean
+}
+
+async function fetchCompactionStatus(
+  baseUrl: string,
+  conversationId: string,
+): Promise<CompactionStatus> {
+  const res = await fetch(
+    `${baseUrl}/compaction/compact/status?conversationId=${encodeURIComponent(conversationId)}`,
+  )
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export function useCompactionStatus(conversationId: string | undefined) {
+  const {
+    baseUrl,
+    isLoading: urlLoading,
+    error: urlError,
+  } = useAgentServerUrl()
+
+  const query = useQuery<CompactionStatus, Error>({
+    queryKey: ['compaction-status', baseUrl, conversationId],
+    queryFn: () =>
+      fetchCompactionStatus(baseUrl as string, conversationId as string),
+    enabled: !!baseUrl && !!conversationId && !urlLoading,
+    refetchInterval: (query) => (query.state.data?.compacting ? 1000 : false),
+  })
+
+  return {
+    compacting: query.data?.compacting ?? false,
+    isLoading: query.isLoading || urlLoading,
+    error: query.error ?? urlError,
+  }
+}

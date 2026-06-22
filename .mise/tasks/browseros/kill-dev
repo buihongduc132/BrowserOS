@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# kill-dev — Stop BrowserOS dev instance
+# Delegates to the Go CLI (browseros-dev cleanup).
+# The Go CLI only touches DEV ports (from defaultLocalPorts in ports.go).
+# PROD ports are NEVER affected.
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "${SCRIPT_DIR}/../../../scripts/ports.sh"
+
+# Safety check: verify we're only about to touch DEV ports
+echo "[kill-dev] Will clear DEV ports: ${DEV_CDP_PORT}/${DEV_SERVER_PORT}/${DEV_EXTENSION_PORT}"
+
+mise run browseros:dev -- cleanup --yes

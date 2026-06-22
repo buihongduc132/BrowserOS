@@ -12,9 +12,17 @@ function validateRule(rule: ResourceRule): void {
   if (!rule.name || rule.name.trim().length === 0) {
     throw new Error('Manifest rule is missing name')
   }
-  if (!rule.source.key || !rule.destination) {
+  const hasSourcePath =
+    (rule.source.type === 'r2' && rule.source.key) ||
+    (rule.source.type === 'local' && rule.source.path)
+  if (!hasSourcePath || !rule.destination) {
     throw new Error(
-      `Manifest rule ${rule.name} is missing source key or destination`,
+      `Manifest rule ${rule.name} is missing source path or destination`,
+    )
+  }
+  if (rule.recursive && rule.source.type !== 'local') {
+    throw new Error(
+      `Manifest rule ${rule.name} uses recursive with non-local source`,
     )
   }
 }
@@ -24,16 +32,21 @@ function parseSource(raw: unknown): ResourceRule['source'] {
     throw new Error('Manifest source must be an object')
   }
   const source = raw as Record<string, unknown>
-  if (source.type !== 'r2') {
-    throw new Error(
-      `Unsupported source type in manifest: ${String(source.type)}`,
-    )
+  if (source.type === 'r2') {
+    const key = source.key
+    if (typeof key !== 'string' || key.length === 0) {
+      throw new Error('Manifest source key is required')
+    }
+    return { type: 'r2', key }
   }
-  const key = source.key
-  if (typeof key !== 'string' || key.length === 0) {
-    throw new Error('Manifest source key is required')
+  if (source.type === 'local') {
+    const path = source.path
+    if (typeof path !== 'string' || path.length === 0) {
+      throw new Error('Manifest source path is required')
+    }
+    return { type: 'local', path }
   }
-  return { type: 'r2', key }
+  throw new Error(`Unsupported source type in manifest: ${String(source.type)}`)
 }
 
 function parseRule(raw: unknown): ResourceRule {
@@ -46,6 +59,7 @@ function parseRule(raw: unknown): ResourceRule {
     source: parseSource(item.source),
     destination: String(item.destination ?? ''),
     executable: item.executable === true,
+    recursive: item.recursive === true,
   }
   if (isStringArray(item.os)) {
     rule.os = item.os as ResourceRule['os']
@@ -58,7 +72,12 @@ function parseRule(raw: unknown): ResourceRule {
 }
 
 export function loadManifest(path: string): ResourceManifest {
-  const raw = JSON.parse(readFileSync(path, 'utf-8')) as Record<string, unknown>
+  let raw: Record<string, unknown>
+  try {
+    raw = JSON.parse(readFileSync(path, 'utf-8')) as Record<string, unknown>
+  } catch (e) {
+    throw new Error(`Failed to parse manifest ${path}: ${e}`)
+  }
   if (!Array.isArray(raw.resources)) {
     throw new Error(`Manifest is missing resources array: ${path}`)
   }

@@ -113,7 +113,13 @@ do {
         new GetObjectCommand({ Bucket: bucket, Key: key }),
       )
       const body = await res.Body?.transformToString()
-      if (body) manifests.push(JSON.parse(body))
+      if (body) {
+        try {
+          manifests.push(JSON.parse(body))
+        } catch {
+          console.warn(`  Invalid manifest at ${key}, skipping`)
+        }
+      }
     } catch {
       console.warn(`  Failed to read ${key}, skipping`)
     }

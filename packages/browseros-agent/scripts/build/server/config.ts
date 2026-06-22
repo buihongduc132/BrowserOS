@@ -7,12 +7,12 @@ import type { BuildConfig } from './types'
 
 const REQUIRED_PROD_VARS = [
   'BROWSEROS_CONFIG_URL',
-  'CODEGEN_SERVICE_URL',
   'POSTHOG_API_KEY',
   'SENTRY_DSN',
 ]
 const INLINED_ENV_VARS = [
   ...REQUIRED_PROD_VARS,
+  'AGENT_RUNNER_JWT_SECRET',
   'NODE_ENV',
   'LOG_LEVEL',
 ] as const
@@ -21,8 +21,12 @@ const PROD_ENV_TEMPLATE_PATH = join('apps', 'server', '.env.production.example')
 
 function readServerVersion(rootDir: string): string {
   const pkgPath = join(rootDir, 'apps/server/package.json')
-  const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
-  return pkg.version
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
+    return pkg.version
+  } catch {
+    return 'unknown'
+  }
 }
 
 function pickEnv(name: string, fileEnv: Record<string, string>): string {
@@ -55,7 +59,7 @@ function buildInlineEnv(
   const inlineEnv: Record<string, string> = {}
   for (const key of INLINED_ENV_VARS) {
     const value = process.env[key] ?? fileEnv[key]
-    if (value !== undefined) {
+    if (value !== undefined && value.trim().length > 0) {
       inlineEnv[key] = value
     }
   }
