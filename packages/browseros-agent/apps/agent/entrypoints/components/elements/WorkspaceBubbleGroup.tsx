@@ -1,4 +1,4 @@
-import { type FC } from 'react'
+import type { FC } from 'react'
 import { WorkspaceBubble } from './WorkspaceBubble'
 
 export interface WorkspaceBubbleGroupProps {
@@ -16,7 +16,10 @@ export const WorkspaceBubbleGroup: FC<WorkspaceBubbleGroupProps> = ({
 }) => {
   if (workspaces.length === 0) {
     return (
-      <span className="inline-flex items-center text-muted-foreground" title="No workspace">
+      <span
+        className="inline-flex items-center text-muted-foreground"
+        title="No workspace"
+      >
         🌐
       </span>
     )
@@ -26,7 +29,7 @@ export const WorkspaceBubbleGroup: FC<WorkspaceBubbleGroupProps> = ({
   const overflow = workspaces.length - maxVisible
 
   return (
-    <span className="inline-flex items-center gap-1 flex-wrap">
+    <span className="inline-flex flex-wrap items-center gap-1">
       {visible.map((ws) => (
         <WorkspaceBubble
           key={ws.id}
@@ -37,7 +40,7 @@ export const WorkspaceBubbleGroup: FC<WorkspaceBubbleGroupProps> = ({
         />
       ))}
       {overflow > 0 && (
-        <span className="inline-flex items-center text-xs text-muted-foreground font-medium">
+        <span className="inline-flex items-center font-medium text-muted-foreground text-xs">
           +{overflow}
         </span>
       )}

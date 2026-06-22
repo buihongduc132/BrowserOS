@@ -1,0 +1,11 @@
+id: no-unused-state-destructuring
+language: TypeScript
+# DISABLED: ast-grep cannot detect "variable referenced nowhere else in file".
+# Use @typescript-eslint/no-unused-vars with argsIgnorePattern: "^_" instead.
+rule:
+  pattern: 'const [$STATE, $SETTER] = useState($$$)'
+constraints:
+  SETTER:
+    regex: "^set[A-Z]"
+severity: info
+message: "(DISABLED) useState setter may be unused — use @typescript-eslint/no-unused-vars"

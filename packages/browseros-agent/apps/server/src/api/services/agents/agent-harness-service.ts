@@ -6,40 +6,35 @@
 
 import {
   AcpxRuntime,
-  type OpenclawGatewayAccessor,
-} from '../../../lib/agents/acpx-runtime'
+  unwrapBrowserosAcpUserMessage,
+} from '../../../lib/agents/acpx/runtime'
 import {
-  type ActiveTurnInfo,
-  type TurnFrame,
-  TurnRegistry,
-} from '../../../lib/agents/active-turn-registry'
+  type AgentDefinition,
+  type AgentSessionId,
+  MAIN_AGENT_SESSION_ID,
+} from '../../../lib/agents/agent-types'
 import type {
   AgentStore,
   CreateAgentInput,
-} from '../../../lib/agents/agent-store'
-import type { AgentDefinition } from '../../../lib/agents/agent-types'
-import { DbAgentStore } from '../../../lib/agents/db-agent-store'
-import {
-  getHermesHarnessHostDir,
-  writeHermesPerAgentProvider,
-} from '../../../lib/agents/hermes/hermes-paths'
-import { getHermesProviderMapping } from '../../../lib/agents/hermes/hermes-provider-map'
+} from '../../../lib/agents/storage/agent-store'
+import { DbAgentStore } from '../../../lib/agents/storage/db-agent-store'
 import {
   FileMessageQueue,
   type QueuedMessage,
   type QueuedMessageAttachment,
-} from '../../../lib/agents/message-queue'
-import { AgentSessionStore } from '../../../agent/agent-session-store'
-import { writeHermesPerAgentProvider } from '../hermes/hermes-paths'
-import { getHermesProviderMapping } from '../hermes/hermes-provider-map'
+} from '../../../lib/agents/storage/message-queue'
+import {
+  type ActiveTurnInfo,
+  type TurnFrame,
+  TurnRegistry,
+} from '../../../lib/agents/turns/active-turn-registry'
 
 export {
   MessageQueueFullError,
   type QueuedMessage,
   type QueuedMessageAttachment,
-} from '../../../lib/agents/message-queue'
+} from '../../../lib/agents/storage/message-queue'
 
-import { rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import type {
   AgentHistoryPage,
@@ -52,10 +47,11 @@ import { logger } from '../../../lib/logger'
 
 export type AgentLiveness = 'working' | 'idle' | 'asleep' | 'error'
 
-export interface AgentActivity {
-  status: AgentLiveness
-  /** Wall-clock ms; null when the agent has never been used. */
-  lastUsedAt: number | null
+type SessionActivity = {
+  sessionId: AgentSessionId
+  status: 'working' | 'error'
+  lastEventAt: number
+  lastError?: string
 }
 
 export interface AgentDefinitionWithActivity extends AgentDefinition {
@@ -77,6 +73,8 @@ export interface AgentDefinitionWithActivity extends AgentDefinition {
   /** Last error message when status === 'error'; null otherwise. */
   lastError: string | null
   lastErrorAt: number | null
+  /** Most recent persisted session for this agent; null until first use. */
+  latestSessionId: AgentSessionId | null
   /** When non-null, an in-flight turn this row can be resumed from. */
   activeTurnId: string | null
   /** Persistent FIFO queue of messages waiting to run for this agent. */
@@ -92,6 +90,10 @@ const ZERO_BUCKETS = (): number[] =>
  * enrichment time; no timer cleanup necessary.
  */
 const ASLEEP_THRESHOLD_MS = 15 * 60 * 1000
+
+function activityKey(agentId: string, sessionId: AgentSessionId): string {
+  return `${agentId}\u0000${sessionId}`
+}
 
 /**
  * Per-turn event the harness emits to subscribers. Lets services that
@@ -112,21 +114,10 @@ export type TurnLifecycleListener = (
   event: TurnLifecycleEvent,
 ) => void
 
-export type HarnessManagedVmAdapter = Extract<
-  AgentDefinition['adapter'],
-  'hermes'
->
-
-/** Starts harness-owned VM/container runtimes at the agent creation boundary. */
-export type EnsureVmRuntimeReady = (
-  adapter: HarnessManagedVmAdapter,
-) => Promise<void>
-
 export class AgentHarnessService {
   private readonly agentStore: AgentStore
   private readonly runtime: AgentRuntime
   private readonly browserosDir: string
-  private readonly ensureVmRuntimeReady: EnsureVmRuntimeReady | null
   private readonly turnRegistry: TurnRegistry
   private readonly messageQueue: FileMessageQueue
   private readonly turnLifecycleListeners = new Set<TurnLifecycleListener>()
@@ -134,10 +125,7 @@ export class AgentHarnessService {
   // `lastUsedAt` survives via the acpx session record's `lastUsedAt`,
   // and an idle/asleep agent post-restart will read fine from the
   // record's timestamp without ever flipping to `working`).
-  private readonly activity = new Map<
-    string,
-    { status: 'working' | 'error'; lastEventAt: number; lastError?: string }
-  >()
+  private readonly activity = new Map<string, SessionActivity>()
 
   constructor(
     deps: {
@@ -146,10 +134,8 @@ export class AgentHarnessService {
       browserosDir?: string
       resourcesDir?: string
       browserosServerPort?: number
-      ensureVmRuntimeReady?: EnsureVmRuntimeReady
       turnRegistry?: TurnRegistry
       messageQueue?: FileMessageQueue
-      producedFilesStore?: ProducedFilesStore
     } = {},
   ) {
     this.browserosDir = deps.browserosDir ?? getBrowserosDir()
@@ -161,13 +147,17 @@ export class AgentHarnessService {
         resourcesDir: deps.resourcesDir,
         browserosServerPort: deps.browserosServerPort,
       })
-    this.ensureVmRuntimeReady = deps.ensureVmRuntimeReady ?? null
     this.turnRegistry = deps.turnRegistry ?? new TurnRegistry()
-    this.messageQueue = deps.messageQueue ?? new FileMessageQueue()
-    this.browserosDir = deps.browserosDir
-    if (deps.producedFilesStore) {
-      this.explicitProducedFilesStore = deps.producedFilesStore
-    }
+    this.messageQueue =
+      deps.messageQueue ??
+      new FileMessageQueue({
+        filePath: join(
+          this.browserosDir,
+          'agents',
+          'harness',
+          'message-queues.json',
+        ),
+      })
     // Drain any agents whose queue file survived a restart. The check
     // for `getActiveFor` inside `maybeStartNextFromQueue` guards
     // against double-firing if the in-memory turn registry happens to
@@ -207,19 +197,30 @@ export class AgentHarnessService {
     ])
     const now = Date.now()
     return agents.map((agent) => {
-      const live = this.activity.get(agent.id)
       const snapshot = snapshots.get(agent.id) ?? null
-      const lastUsedAt = snapshot?.lastUsedAt ?? null
-      const activeTurn = this.turnRegistry.getActiveFor(agent.id, 'main')
-      // NOTE: listAgentsWithActivity intentionally always queries 'main'
-      // for the listing view. Per-session active turns are available via
-      // getActiveTurn(agentId, sessionId).
+      const liveLatest = this.getLatestActivity(agent.id)
+      const liveWins =
+        liveLatest != null &&
+        (!snapshot?.lastUsedAt || liveLatest.lastEventAt >= snapshot.lastUsedAt)
+      const latestSessionId = liveWins
+        ? liveLatest.sessionId
+        : (snapshot?.sessionId ?? null)
+      const live = latestSessionId
+        ? this.activity.get(activityKey(agent.id, latestSessionId))
+        : liveLatest
+      const lastUsedAt = liveWins
+        ? liveLatest.lastEventAt
+        : (snapshot?.lastUsedAt ?? null)
+      const activeTurn = latestSessionId
+        ? this.turnRegistry.getActiveFor(agent.id, latestSessionId)
+        : null
       return {
         ...agent,
         pinned: agent.pinned ?? false,
         status: deriveStatus(live, lastUsedAt, now),
         lastUsedAt,
-        lastUserMessage: snapshot?.lastUserMessage ?? null,
+        lastUserMessage:
+          activeTurn?.prompt ?? snapshot?.lastUserMessage ?? null,
         cwd: snapshot?.cwd ?? null,
         tokens: snapshot?.tokens ?? null,
         turnsByDay: ZERO_BUCKETS(),
@@ -227,6 +228,7 @@ export class AgentHarnessService {
         lastError: live?.status === 'error' ? (live.lastError ?? null) : null,
         lastErrorAt:
           live?.status === 'error' ? (live.lastEventAt ?? null) : null,
+        latestSessionId,
         activeTurnId: activeTurn?.turnId ?? null,
         queue: queueSnapshot[agent.id] ?? [],
       }
@@ -259,20 +261,45 @@ export class AgentHarnessService {
   private async fetchRowSnapshot(
     agent: AgentDefinition,
   ): Promise<AgentRowSnapshot | null> {
+    if (typeof this.runtime.getLatestRowSnapshot === 'function') {
+      return this.runtime.getLatestRowSnapshot(agent)
+    }
     if (typeof this.runtime.getRowSnapshot === 'function') {
-      return this.runtime.getRowSnapshot({ agent, sessionId: 'main' })
+      const snapshot = await this.runtime.getRowSnapshot({
+        agent,
+        sessionId: MAIN_AGENT_SESSION_ID,
+      })
+      return snapshot
+        ? {
+            ...snapshot,
+            sessionId: snapshot.sessionId ?? MAIN_AGENT_SESSION_ID,
+          }
+        : null
     }
     // Legacy fallback: derive only `lastUsedAt` from the history page.
-    // NOTE: fetchRowSnapshot is used for agent listing (always 'main').
-    const page = await this.runtime.getHistory({ agent, sessionId: 'main' })
+    const page = await this.runtime.getHistory({
+      agent,
+      sessionId: MAIN_AGENT_SESSION_ID,
+    })
     const last = page.items.at(-1)?.createdAt
     if (typeof last !== 'number' || !Number.isFinite(last)) return null
     return {
+      sessionId: MAIN_AGENT_SESSION_ID,
       cwd: null,
       lastUsedAt: last,
       lastUserMessage: null,
       tokens: null,
     }
+  }
+
+  private getLatestActivity(agentId: string): SessionActivity | undefined {
+    const prefix = `${agentId}\u0000`
+    let latest: SessionActivity | undefined
+    for (const [key, entry] of this.activity.entries()) {
+      if (!key.startsWith(prefix)) continue
+      if (!latest || entry.lastEventAt > latest.lastEventAt) latest = entry
+    }
+    return latest
   }
 
   /**
@@ -308,26 +335,44 @@ export class AgentHarnessService {
     }
   }
 
-  /** Mark `agentId` as actively running a turn. */
-  notifyTurnStarted(agentId: string): void {
-    this.activity.set(agentId, { status: 'working', lastEventAt: Date.now() })
+  /** Mark an agent session as actively running a turn. */
+  notifyTurnStarted(
+    agentId: string,
+    sessionId: AgentSessionId = MAIN_AGENT_SESSION_ID,
+  ): void {
+    this.activity.set(activityKey(agentId, sessionId), {
+      sessionId,
+      status: 'working',
+      lastEventAt: Date.now(),
+    })
   }
 
-  /** Clear the working flag. `error` keeps the row badged as needing attention. */
+  /** Clear the session working flag. `error` keeps that session badged as needing attention. */
   notifyTurnEnded(
     agentId: string,
+    sessionId: AgentSessionId = MAIN_AGENT_SESSION_ID,
     outcome: { ok: boolean; error?: string } = { ok: true },
   ): void {
+    const key = activityKey(agentId, sessionId)
     if (!outcome.ok) {
-      this.activity.set(agentId, {
+      this.activity.set(key, {
+        sessionId,
         status: 'error',
         lastEventAt: Date.now(),
         lastError: outcome.error,
       })
     } else {
-      // Successful turn — drop the in-memory entry. Liveness will be
-      // derived from the session record's `lastUsedAt` on next read.
-      this.activity.delete(agentId)
+      // Successful turn — clear working only when this same session has no
+      // remaining running turn.
+      if (this.turnRegistry.getActiveFor(agentId, sessionId)) {
+        this.activity.set(key, {
+          sessionId,
+          status: 'working',
+          lastEventAt: Date.now(),
+        })
+      } else {
+        this.activity.delete(key)
+      }
     }
     // The queue drain runs on every turn-end (success or failure) so
     // a queued message is the next thing to run. Fire-and-forget; any
@@ -346,19 +391,19 @@ export class AgentHarnessService {
   private async maybeStartNextFromQueue(agentId: string): Promise<void> {
     const next = await this.messageQueue.popOldest(agentId)
     if (!next) return
+    const sessionId = next.sessionId ?? MAIN_AGENT_SESSION_ID
     // Race guard: a turn may have started between `popOldest` and now
     // (e.g. the user typed and clicked Send directly between cancel
     // and the drain). Put the message back at the head and let the
     // next turn-end retry.
-    if (this.turnRegistry.getActiveFor(agentId, 'main')) {
+    if (this.turnRegistry.getActiveFor(agentId, sessionId)) {
       await this.messageQueue.pushFront(agentId, next)
       return
     }
     try {
-      // Queue drain always uses 'main' session — queue messages are
-      // not session-aware.
       await this.startTurn({
         agentId,
+        sessionId,
         message: next.message,
         attachments: next.attachments,
       })
@@ -390,11 +435,13 @@ export class AgentHarnessService {
    */
   async enqueueMessage(input: {
     agentId: string
+    sessionId?: AgentSessionId
     message: string
     attachments?: ReadonlyArray<QueuedMessageAttachment>
   }): Promise<QueuedMessage> {
     const agent = await this.requireAgent(input.agentId)
     const queued = await this.messageQueue.append(agent.id, {
+      sessionId: input.sessionId,
       message: input.message,
       attachments: input.attachments,
     })
@@ -402,9 +449,12 @@ export class AgentHarnessService {
     // time (e.g. the user enqueued during the brief window between
     // turns), pop it back off and start it directly. Avoids the
     // queue sitting idle while the agent is also idle.
-    // Defensive drain: check 'main' session only (queue is not
-    // session-aware).
-    if (!this.turnRegistry.getActiveFor(agent.id, 'main')) {
+    if (
+      !this.turnRegistry.getActiveFor(
+        agent.id,
+        input.sessionId ?? MAIN_AGENT_SESSION_ID,
+      )
+    ) {
       void this.maybeStartNextFromQueue(agent.id)
     }
     return queued
@@ -426,116 +476,7 @@ export class AgentHarnessService {
   }
 
   async createAgent(input: CreateAgentInput): Promise<AgentDefinition> {
-    if (input.adapter === 'hermes') {
-      // Validate before touching the store so we don't leave an orphan
-      // record on the unhappy path.
-      assertHermesProviderInputValid(input)
-    }
-
-    const agent = await this.agentStore.create(input)
-
-    if (agent.adapter === 'hermes') {
-      try {
-        await this.writeHermesPerAgentProvider(agent.id, input)
-        await this.ensureVmRuntimeReady?.(agent.adapter)
-      } catch (err) {
-        await this.agentStore.delete(agent.id).catch(() => {})
-        await this.deleteHermesPerAgentProvider(agent.id).catch(
-          (cleanupErr) => {
-            logger.warn('Hermes provider config cleanup failed', {
-              agentId: agent.id,
-              error:
-                cleanupErr instanceof Error
-                  ? cleanupErr.message
-                  : String(cleanupErr),
-            })
-          },
-        )
-        throw err
-      }
-      return agent
-    }
-
-    if (agent.adapter === 'custom') {
-      // Custom agents need no OpenClaw/Hermes provisioning — the command
-      // is stored in adapterConfigJson and resolved at runtime.
-      return agent
-    }
-
-    if (agent.adapter !== 'openclaw') {
-      return agent
-    }
-
-    if (!this.openclawProvisioner) {
-      // Compensating delete keeps the harness store consistent with
-      // the failure mode the caller will see (no agent created).
-      await this.agentStore.delete(agent.id).catch(() => {})
-      throw new OpenClawProvisionerUnavailableError()
-    }
-
-    try {
-      await this.openclawProvisioner.createAgent({
-        name: agent.id,
-        providerType: input.providerType,
-        providerName: input.providerName,
-        baseUrl: input.baseUrl,
-        apiKey: input.apiKey,
-        modelId: input.modelId,
-        supportsImages: input.supportsImages,
-      })
-      return agent
-    } catch (err) {
-      logger.warn(
-        'OpenClaw gateway provisioning failed; rolling back harness record',
-        {
-          agentId: agent.id,
-          error: err instanceof Error ? err.message : String(err),
-        },
-      )
-      await this.agentStore.delete(agent.id).catch((delErr) => {
-        logger.error('Compensating delete failed after provisioning error', {
-          agentId: agent.id,
-          error: delErr instanceof Error ? delErr.message : String(delErr),
-        })
-      })
-      throw err
-    }
-  }
-
-  /**
-   * Write Hermes' per-agent config.yaml + .env into the on-host home
-   * dir. Caller must have already run assertHermesProviderInputValid;
-   * any throw here is a real I/O failure and must roll back the agent
-   * record.
-   */
-  private async writeHermesPerAgentProvider(
-    agentId: string,
-    input: CreateAgentInput,
-  ): Promise<void> {
-    // Non-null assertions are safe: assertHermesProviderInputValid ran
-    // first and rejects when any required field is missing.
-    const mapping = getHermesProviderMapping(input.providerType as string)
-    if (!mapping) {
-      throw new HermesProviderConfigInvalidError(
-        `Provider type "${input.providerType}" is not supported by Hermes`,
-      )
-    }
-    await writeHermesPerAgentProvider({
-      browserosDir: this.browserosDir,
-      agentId,
-      providerId: mapping.hermesProvider,
-      envVarName: mapping.envVarName,
-      apiKey: (input.apiKey as string).trim(),
-      modelId: (input.modelId as string).trim(),
-      baseUrl: input.baseUrl?.trim() || mapping.defaultBaseUrl,
-    })
-  }
-
-  private async deleteHermesPerAgentProvider(agentId: string): Promise<void> {
-    await rm(join(getHermesHarnessHostDir(this.browserosDir), agentId), {
-      recursive: true,
-      force: true,
-    })
+    return this.agentStore.create(input)
   }
 
   async deleteAgent(agentId: string): Promise<boolean> {
@@ -552,13 +493,7 @@ export class AgentHarnessService {
    */
   async updateAgent(
     agentId: string,
-    patch: {
-      name?: string
-      pinned?: boolean
-      customCommand?: string
-      customArgs?: string[]
-      customLabel?: string
-    },
+    patch: { name?: string; pinned?: boolean },
   ): Promise<AgentDefinition | null> {
     if (patch.name !== undefined) {
       const trimmed = patch.name.trim()
@@ -576,20 +511,7 @@ export class AgentHarnessService {
       }
       patch = { ...patch, name: trimmed }
     }
-
-    // When custom fields are present on a 'custom' adapter agent,
-    // re-serialize adapterConfigJson. The AgentStore interface only
-    // accepts name/pinned in its patch, so custom field updates
-    // require agent-store.ts to be extended (see M16). For now,
-    // the patch carries the fields but the store update only applies
-    // name/pinned. The full adapterConfigJson re-serialization will
-    // land when agent-store.ts is updated in the follow-up.
-    void (patch.customCommand ?? patch.customArgs ?? patch.customLabel)
-
-    return this.agentStore.update(agentId, {
-      name: patch.name,
-      pinned: patch.pinned,
-    })
+    return this.agentStore.update(agentId, patch)
   }
 
   getAgent(agentId: string): Promise<AgentDefinition | null> {
@@ -598,19 +520,9 @@ export class AgentHarnessService {
 
   async getHistory(
     agentId: string,
-    sessionId: string = 'main',
+    sessionId: AgentSessionId = MAIN_AGENT_SESSION_ID,
   ): Promise<AgentHistoryPage> {
     const agent = await this.requireAgent(agentId)
-    // OpenClaw agents persist conversation in the gateway, not in the
-    // AcpxRuntime's local session record. Reading the local record
-    // would miss autonomous (cron / hook / channel) turns. Route
-    // through the provisioner so the panel sees the full history.
-    if (
-      agent.adapter === 'openclaw' &&
-      this.openclawProvisioner?.getAgentHistory
-    ) {
-      return this.openclawProvisioner.getAgentHistory(agentId)
-    }
     return this.runtime.getHistory({ agent, sessionId })
   }
 
@@ -624,13 +536,13 @@ export class AgentHarnessService {
    */
   async startTurn(input: {
     agentId: string
+    sessionId?: AgentSessionId
     message: string
     attachments?: ReadonlyArray<{ mediaType: string; data: string }>
     cwd?: string
-    sessionId?: string
   }): Promise<{ turnId: string; frames: ReadableStream<TurnFrame> }> {
     const agent = await this.requireAgent(input.agentId)
-    const sessionId = input.sessionId ?? 'main'
+    const sessionId = input.sessionId ?? MAIN_AGENT_SESSION_ID
 
     const existing = this.turnRegistry.getActiveFor(agent.id, sessionId)
     if (existing) {
@@ -640,7 +552,7 @@ export class AgentHarnessService {
     const turn = this.turnRegistry.register(agent.id, sessionId, {
       prompt: input.message,
     })
-    this.notifyTurnStarted(agent.id)
+    this.notifyTurnStarted(agent.id, sessionId)
     this.emitTurnLifecycle(agent, { type: 'turn_started' })
 
     // Kick off the runtime call in the background. The per-turn
@@ -679,10 +591,17 @@ export class AgentHarnessService {
    */
   getActiveTurn(
     agentId: string,
-    sessionId: string = 'main',
+    sessionId: AgentSessionId = MAIN_AGENT_SESSION_ID,
   ): ActiveTurnInfo | null {
     const turn = this.turnRegistry.getActiveFor(agentId, sessionId)
-    return turn ? this.turnRegistry.describe(turn.turnId) : null
+    if (!turn) return null
+    const info = this.turnRegistry.describe(turn.turnId)
+    if (!info?.prompt) return info
+    // Chat UIs that attach to an in-flight turn render this prompt as the
+    // user bubble (new-tab agent view). Strip the browser-context /
+    // <USER_QUERY> scaffolding so it shows only the user's question —
+    // same read-time unwrap getHistory applies.
+    return { ...info, prompt: unwrapBrowserosAcpUserMessage(info.prompt) }
   }
 
   /**
@@ -692,6 +611,7 @@ export class AgentHarnessService {
    */
   cancelTurn(input: {
     agentId: string
+    sessionId?: AgentSessionId
     turnId?: string
     reason?: string
   }): boolean {
@@ -699,7 +619,7 @@ export class AgentHarnessService {
       input.turnId ??
       this.turnRegistry.getActiveFor(
         input.agentId,
-        (input as { sessionId?: string }).sessionId ?? 'main',
+        input.sessionId ?? MAIN_AGENT_SESSION_ID,
       )?.turnId
     if (!turnId) return false
     return this.turnRegistry.cancel(turnId, input.reason)
@@ -714,6 +634,7 @@ export class AgentHarnessService {
    */
   async send(input: {
     agentId: string
+    sessionId?: AgentSessionId
     message: string
     attachments?: ReadonlyArray<{ mediaType: string; data: string }>
     cwd?: string
@@ -745,35 +666,13 @@ export class AgentHarnessService {
   ): Promise<void> {
     const turn = this.turnRegistry.get(turnId)
     if (!turn) return
+    const sessionId = turn.sessionId
     let lastErrorMessage: string | undefined
 
-    // Bracket openclaw turns with a workspace snapshot so any file the
-    // agent produces during the turn is attributable back to it (rail
-    // + inline artifact UX). Adapter-gated for v1 — Claude / Codex
-    // write to the user's host filesystem and don't need this; their
-    // outputs are already visible via the user's own tools.
-    const isOpenclaw = agent.adapter === 'openclaw'
-    const workspaceDir = isOpenclaw ? this.resolveSafeWorkspaceDir(agent) : null
-    const producedFilesStore = workspaceDir
-      ? this.tryGetProducedFilesStore()
-      : null
-    const workspaceSnapshot =
-      workspaceDir && producedFilesStore
-        ? await this.snapshotWorkspaceForTurn(
-            agent,
-            workspaceDir,
-            producedFilesStore,
-          )
-        : null
-
     try {
-      // Derive sessionId from the turn's registry entry so the runtime
-      // call uses the correct session.
-      const turnEntry = this.turnRegistry.get(turnId)
-      const runtimeSessionId = turnEntry?.sessionId ?? 'main'
       const upstream = await this.runtime.send({
         agent,
-        sessionId: runtimeSessionId,
+        sessionId,
         sessionKey: agent.sessionKey,
         message: input.message,
         attachments: input.attachments,
@@ -825,28 +724,7 @@ export class AgentHarnessService {
         })
       }
     } finally {
-      // Attribute any files the agent produced during this turn. We
-      // run on success, error, AND inside `finally` so an upstream
-      // failure mid-turn that still managed to write files doesn't
-      // lose them. We skip only when the user explicitly cancelled —
-      // in that case the side effects shouldn't be surfaced as
-      // "outputs you asked for."
-      if (
-        workspaceDir &&
-        workspaceSnapshot !== null &&
-        producedFilesStore &&
-        !turn.abortController.signal.aborted
-      ) {
-        await this.attributeTurnFiles({
-          producedFilesStore,
-          workspaceDir,
-          before: workspaceSnapshot,
-          agent,
-          turnId,
-          turnPrompt: input.message,
-        })
-      }
-      this.notifyTurnEnded(agent.id, {
+      this.notifyTurnEnded(agent.id, sessionId, {
         ok: lastErrorMessage === undefined,
         error: lastErrorMessage,
       })
@@ -898,48 +776,6 @@ export class InvalidAgentUpdateError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'InvalidAgentUpdateError'
-  }
-}
-
-/**
- * Thrown when a Hermes adapter agent is created without a complete
- * provider config (provider type, API key, model id; base URL when the
- * provider mapping requires it). Surfaces as a 400 in the route layer.
- */
-export class HermesProviderConfigInvalidError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'HermesProviderConfigInvalidError'
-  }
-}
-
-function assertHermesProviderInputValid(input: CreateAgentInput): void {
-  const providerType = input.providerType?.trim()
-  if (!providerType) {
-    throw new HermesProviderConfigInvalidError(
-      'Hermes agent requires providerType (pick a provider configured in BrowserOS AI Settings)',
-    )
-  }
-  const mapping = getHermesProviderMapping(providerType)
-  if (!mapping) {
-    throw new HermesProviderConfigInvalidError(
-      `Provider type "${providerType}" is not supported by Hermes`,
-    )
-  }
-  if (!input.apiKey?.trim()) {
-    throw new HermesProviderConfigInvalidError(
-      'Hermes agent requires apiKey from the selected provider',
-    )
-  }
-  if (!input.modelId?.trim()) {
-    throw new HermesProviderConfigInvalidError(
-      'Hermes agent requires modelId from the selected provider',
-    )
-  }
-  if (mapping.requiresBaseUrl && !input.baseUrl?.trim()) {
-    throw new HermesProviderConfigInvalidError(
-      `Provider type "${providerType}" requires baseUrl`,
-    )
   }
 }
 

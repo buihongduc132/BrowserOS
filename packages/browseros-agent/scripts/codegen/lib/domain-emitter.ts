@@ -7,7 +7,6 @@ import {
   type RefResolver,
 } from './type-emitter'
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: codegen — linear iteration over types/commands/events
 export function emitDomainFile(domain: ProtocolDomain): string {
   const lines: string[] = []
   const localTypeNames = new Set((domain.types ?? []).map((t) => t.id))

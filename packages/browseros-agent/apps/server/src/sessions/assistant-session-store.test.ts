@@ -8,7 +8,6 @@ import { Database } from 'bun:sqlite'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { and, desc, eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator'
 import * as schema from '../lib/db/schema'
@@ -243,7 +242,7 @@ describe('AssistantSessionStore', () => {
 
   describe('update partial fields', () => {
     it('only updated fields change, others remain', async () => {
-      const now = Date.now()
+      const _now = Date.now()
       await store.create({ id: 's1', title: 'Original', mode: 'chat' })
 
       await store.update('s1', { title: 'Updated', messageCount: 5 })

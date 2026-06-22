@@ -33,9 +33,10 @@ export function createAgentSessionRoutes(deps: {
       const cursor = url.searchParams.get('cursor') ?? undefined
       const limitRaw = url.searchParams.get('limit')
       const limit = limitRaw ? Number.parseInt(limitRaw, 10) : undefined
-      const cappedLimit = limit != null && Number.isFinite(limit)
-        ? Math.min(limit, 200)
-        : undefined
+      const cappedLimit =
+        limit != null && Number.isFinite(limit)
+          ? Math.min(limit, 200)
+          : undefined
 
       const sessions = await sessionStore.listSessions(agentId, {
         search,
@@ -66,7 +67,8 @@ export function createAgentSessionRoutes(deps: {
 
       const updates: Parameters<typeof sessionStore.updateSessionMeta>[2] = {}
       if (typeof body.title === 'string') updates.title = body.title
-      if (Number.isInteger(body.turnCount) && body.turnCount >= 0) updates.turnCount = body.turnCount
+      if (Number.isInteger(body.turnCount) && body.turnCount >= 0)
+        updates.turnCount = body.turnCount
       if (typeof body.lastMessagePreview === 'string')
         updates.lastMessagePreview = body.lastMessagePreview
       if (typeof body.lastMessageAt === 'number')
@@ -80,7 +82,11 @@ export function createAgentSessionRoutes(deps: {
         return c.json({ error: 'No editable fields supplied' }, 400)
       }
 
-      const session = await sessionStore.updateSessionMeta(agentId, sessionId, updates)
+      const session = await sessionStore.updateSessionMeta(
+        agentId,
+        sessionId,
+        updates,
+      )
       if (!session) return c.json({ error: 'Session not found' }, 404)
       return c.json({ session })
     })

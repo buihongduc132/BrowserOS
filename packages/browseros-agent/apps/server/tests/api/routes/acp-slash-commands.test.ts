@@ -5,14 +5,12 @@
 
 import { describe, expect, it } from 'bun:test'
 import {
-  dispatchCommand,
-  getAllAcpCommands,
-  getAcpCommand,
-  registerAcpCommand,
-  clearAcpCommands,
-  toAvailableCommands,
   type AcpCommandContext,
-  type AcpCommandResult,
+  dispatchCommand,
+  getAcpCommand,
+  getAllAcpCommands,
+  registerAcpCommand,
+  toAvailableCommands,
 } from '../../../src/api/routes/acp-slash-commands'
 
 // Re-register builtins after clear (for isolation)
@@ -82,10 +80,10 @@ describe('acp-slash-commands', () => {
     })
 
     it('handles multiline args with [\\s\\S]* regex', async () => {
-      const result = await dispatchCommand(
-        '/compact first line\nsecond line',
-        { ...baseCtx, args: '' },
-      )
+      const result = await dispatchCommand('/compact first line\nsecond line', {
+        ...baseCtx,
+        args: '',
+      })
       expect(result.type).toBe('handled')
       if (result.type === 'handled') {
         expect(result.response).toContain('first line\nsecond line')

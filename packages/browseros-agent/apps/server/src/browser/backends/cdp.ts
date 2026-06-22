@@ -23,7 +23,7 @@ interface CdpVersion {
 const LOOPBACK_DISCOVERY_HOSTS = ['127.0.0.1', 'localhost', '[::1]'] as const
 type LoopbackDiscoveryHost = (typeof LOOPBACK_DISCOVERY_HOSTS)[number]
 
-interface CdpBackendConfig {
+export interface CdpBackendConfig {
   port: number
   exitOnReconnectFailure?: boolean
 }
@@ -38,6 +38,7 @@ class CdpBackend implements ICdpBackend {
   private messageId = 0
   private pending = new Map<number, PendingRequest>()
   private connected = false
+  private epoch = 0
   private disconnecting = false
   private reconnecting = false
   private reconnectRequested = false
@@ -114,6 +115,7 @@ class CdpBackend implements ICdpBackend {
         opened = true
         this.ws = ws
         this.connected = true
+        this.epoch += 1
         this.disconnecting = false
         resolve()
       }
@@ -364,6 +366,10 @@ class CdpBackend implements ICdpBackend {
     return this.connected
   }
 
+  connectionEpoch(): number {
+    return this.epoch
+  }
+
   session(sessionId: string): ProtocolApi {
     let cached = this.sessionCache.get(sessionId)
     if (!cached) {
@@ -469,13 +475,25 @@ class CdpBackend implements ICdpBackend {
   }
 
   private handleMessage(data: string): void {
-    const message = JSON.parse(data) as {
+    let message: {
       id?: number
       method?: string
       params?: unknown
       result?: unknown
       error?: { message: string; code: number }
       sessionId?: string
+    }
+    try {
+      message = JSON.parse(data) as {
+        id?: number
+        method?: string
+        params?: unknown
+        result?: unknown
+        error?: { message: string; code: number }
+        sessionId?: string
+      }
+    } catch {
+      return
     }
 
     // Route responses to pending requests

@@ -10,6 +10,20 @@ import { browseros_info } from './browseros-info'
 import { get_console_logs } from './console'
 import { get_dom, search_dom } from './dom'
 import {
+  clear_extension_storage,
+  disable_extension,
+  enable_extension,
+  get_extension_info,
+  get_extension_storage,
+  list_extensions,
+  list_messageable_extensions,
+  load_unpacked_extension,
+  remove_extension_storage,
+  send_extension_message,
+  set_extension_storage,
+  uninstall_extension,
+} from './extensions'
+import {
   delete_history_range,
   delete_history_url,
   get_recent_history,
@@ -47,20 +61,6 @@ import {
   wait_for,
 } from './navigation'
 import { suggest_app_connection, suggest_schedule } from './nudges'
-import {
-  clear_extension_storage,
-  disable_extension,
-  enable_extension,
-  get_extension_info,
-  get_extension_storage,
-  list_extensions,
-  list_messageable_extensions,
-  load_unpacked_extension,
-  remove_extension_storage,
-  send_extension_message,
-  set_extension_storage,
-  uninstall_extension,
-} from './extensions'
 import { download_file, save_pdf, save_screenshot } from './page-actions'
 import {
   evaluate_script,

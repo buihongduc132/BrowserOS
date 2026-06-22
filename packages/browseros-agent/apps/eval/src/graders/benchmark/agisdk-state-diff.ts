@@ -107,16 +107,17 @@ export class AgisdkStateDiffGrader implements Grader {
     const finishUrl = `${origin}/finish`
 
     // Navigate browser to /finish page (state diff is rendered client-side)
-    await callMcpTool(mcpEndpoint, 'navigate_page', {
+    await callMcpTool(mcpEndpoint, 'navigate', {
       url: finishUrl,
       page: 1,
+      action: 'url',
     })
 
     // Wait for the page to render, then extract JSON from <pre> element
-    const result = await callMcpTool(mcpEndpoint, 'evaluate_script', {
+    const result = await callMcpTool(mcpEndpoint, 'run', {
       page: 1,
-      expression: `
-        new Promise((resolve, reject) => {
+      code: `
+        return await new Promise((resolve, reject) => {
           let attempts = 0;
           const check = () => {
             const pre = document.querySelector('pre');
@@ -140,7 +141,11 @@ export class AgisdkStateDiffGrader implements Grader {
       throw new Error('No text content returned from /finish page')
     }
 
-    return JSON.parse(textContent.text) as Record<string, unknown>
+    try {
+      return JSON.parse(textContent.text) as Record<string, unknown>
+    } catch {
+      throw new Error('Invalid JSON in finish page response')
+    }
   }
 
   private runPythonEvaluator(
