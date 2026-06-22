@@ -6,26 +6,51 @@
 
 import { StreamableHTTPTransport } from '@hono/mcp'
 import { Hono } from 'hono'
-import type { Browser } from '../../browser/browser'
+import type { BrowserSession } from '../../browser/core/session'
 import { logger } from '../../lib/logger'
 import { metrics } from '../../lib/metrics'
 import { Sentry } from '../../lib/sentry'
-import { getMonitoringService } from '../../monitoring/service'
-import type { ToolRegistry } from '../../tools/tool-registry'
-import type { GlobalAclPolicyService } from '../services/acl/global-acl-policy'
-import { resolveAclPolicyForMcpRequest } from '../services/acl/resolve-acl-policy'
-import type { KlavisProxyRef } from '../services/klavis/strata-proxy'
+import type { KlavisService } from '../services/klavis'
 import { createMcpServer } from '../services/mcp/mcp-server'
 import type { Env } from '../types'
 
+export const MANAGED_MCP_SERVERS_HEADER = 'X-BrowserOS-Managed-Mcp-Servers'
+
 interface McpRouteDeps {
   version: string
-  registry: ToolRegistry
-  browser: Browser
-  executionDir: string
-  resourcesDir: string
-  policyService: GlobalAclPolicyService
-  klavisRef?: KlavisProxyRef
+  browserSession: BrowserSession
+  klavis?: KlavisService
+}
+
+function parseOptionalNumber(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined
+  const n = Number(value)
+  // CDP window ids are integers; `Number.isFinite('1.5')` would be true
+  // and silently route to a non-integer that CDP rejects with an opaque
+  // protocol error. Require an integer at the parse boundary.
+  return Number.isInteger(n) ? n : undefined
+}
+
+/** Parses the internal ACP managed-connector scope header. */
+export function parseManagedMcpServersHeader(
+  value: string | undefined,
+): string[] {
+  if (!value?.trim()) {
+    return []
+  }
+  const out: string[] = []
+  for (const part of value.split(',')) {
+    if (!part) continue
+    try {
+      const decoded = decodeURIComponent(part)
+      if (decoded) {
+        out.push(decoded)
+      }
+    } catch {
+      return []
+    }
+  }
+  return out
 }
 
 export function createMcpRoutes(deps: McpRouteDeps) {
@@ -40,30 +65,26 @@ export function createMcpRoutes(deps: McpRouteDeps) {
 
   app.post('/', async (c) => {
     const scopeId = c.req.header('X-BrowserOS-Scope-Id') || 'ephemeral'
-    const monitoringService = getMonitoringService()
-    const explicitAgentId =
-      c.req.query('agentId') ??
-      c.req.header('X-BrowserOS-Agent-Id') ??
-      undefined
-    const activeSession =
-      monitoringService.resolveSessionForMcpRequest(explicitAgentId)
-    const agentId = activeSession?.agentId
     metrics.log('mcp.request', { scopeId })
-    const aclRules = await resolveAclPolicyForMcpRequest({
-      policyService: deps.policyService,
-    })
-    const monitoringSessionId = activeSession?.monitoringSessionId
-    const observer =
-      monitoringSessionId && agentId
-        ? monitoringService.createObserver(monitoringSessionId, agentId)
-        : undefined
+
+    const defaultWindowId = parseOptionalNumber(
+      c.req.header('X-BrowserOS-Default-Window-Id'),
+    )
+    const defaultTabGroupId =
+      c.req.header('X-BrowserOS-Default-Tab-Group-Id') ?? undefined
+    const selectedServerNames = parseManagedMcpServersHeader(
+      c.req.header(MANAGED_MCP_SERVERS_HEADER),
+    )
 
     // Per-request server + transport: no shared state, no race conditions,
     // no ID collisions. Required by MCP SDK 1.26.0+ security fix (GHSA-345p-7cg4-v4c7).
     const mcpServer = createMcpServer({
-      ...deps,
-      aclRules,
-      observer,
+      version: deps.version,
+      browserSession: deps.browserSession,
+      klavis: deps.klavis,
+      connectorScope: { selectedServerNames },
+      defaultWindowId,
+      defaultTabGroupId,
     })
     const transport = new StreamableHTTPTransport({
       sessionIdGenerator: undefined,
@@ -77,9 +98,6 @@ export function createMcpRoutes(deps: McpRouteDeps) {
       Sentry.withScope((scope) => {
         scope.setTag('route', 'mcp')
         scope.setTag('scopeId', scopeId)
-        if (agentId) {
-          scope.setTag('agentId', agentId)
-        }
         Sentry.captureException(error)
       })
       logger.error('Error handling MCP request', {

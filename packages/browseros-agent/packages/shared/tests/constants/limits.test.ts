@@ -10,27 +10,14 @@
  * process.env is read at import time with the overridden value.
  */
 
-import path from 'node:path'
 import { describe, expect, it } from 'bun:test'
+import path from 'node:path'
+
+import { spawnWithEnv } from './test-utils'
 
 const LIMITS_MODULE_PATH = JSON.stringify(
   path.resolve(import.meta.dir, '../../src/constants/limits.ts'),
 )
-
-async function spawnWithEnv(envOverrides: Record<string, string>, code: string): Promise<string> {
-  const proc = Bun.spawn(['bun', '-e', code], {
-    env: { ...process.env, ...envOverrides, NO_COLOR: '1', FORCE_COLOR: '0' },
-    stdout: 'pipe',
-    stderr: 'pipe',
-  })
-  await proc.exited
-  const stdout = await new Response(proc.stdout).text()
-  if (proc.exitCode !== 0) {
-    const stderr = await new Response(proc.stderr).text()
-    throw new Error(`Child process exited ${proc.exitCode}: ${stderr}\n${stdout}`)
-  }
-  return stdout.trim()
-}
 
 // ---------------------------------------------------------------------------
 // Default values
@@ -38,7 +25,12 @@ async function spawnWithEnv(envOverrides: Record<string, string>, code: string):
 
 describe('AGENT_LIMITS defaults', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { AGENT_LIMITS } = require('../../src/constants/limits.ts') as typeof import('../../src/constants/limits')
+  const { AGENT_LIMITS } =
+    require('../../src/constants/limits.ts') as typeof import('../../src/constants/limits')
+
+  it('exports exactly 23 keys', () => {
+    expect(Object.keys(AGENT_LIMITS)).toHaveLength(23)
+  })
 
   it('has correct default MAX_TURNS', () => {
     expect(AGENT_LIMITS.MAX_TURNS).toBe(100)
@@ -55,7 +47,12 @@ describe('AGENT_LIMITS defaults', () => {
 
 describe('TOOL_LIMITS defaults', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { TOOL_LIMITS } = require('../../src/constants/limits.ts') as typeof import('../../src/constants/limits')
+  const { TOOL_LIMITS } =
+    require('../../src/constants/limits.ts') as typeof import('../../src/constants/limits')
+
+  it('exports exactly 3 keys', () => {
+    expect(Object.keys(TOOL_LIMITS)).toHaveLength(3)
+  })
 
   it('has correct default FILESYSTEM_READ_MAX_LINES', () => {
     expect(TOOL_LIMITS.FILESYSTEM_READ_MAX_LINES).toBe(500)
@@ -72,7 +69,8 @@ describe('TOOL_LIMITS defaults', () => {
 
 describe('AGENT_LIMITS non-overridable defaults', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { AGENT_LIMITS } = require('../../src/constants/limits.ts') as typeof import('../../src/constants/limits')
+  const { AGENT_LIMITS } =
+    require('../../src/constants/limits.ts') as typeof import('../../src/constants/limits')
 
   it('has correct COMPRESSION_MIN_HEADROOM', () => {
     expect(AGENT_LIMITS.COMPRESSION_MIN_HEADROOM).toBe(10_000)
@@ -119,6 +117,10 @@ describe('CDP_LIMITS defaults', () => {
 describe('CONTENT_LIMITS defaults', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { CONTENT_LIMITS } = require('../../src/constants/limits.ts')
+
+  it('exports exactly 6 keys', () => {
+    expect(Object.keys(CONTENT_LIMITS)).toHaveLength(6)
+  })
 
   it('has correct BODY_CONTEXT_SIZE', () => {
     expect(CONTENT_LIMITS.BODY_CONTEXT_SIZE).toBe(10_000)
@@ -201,5 +203,79 @@ describe('AGENT_LIMITS negative env fallback', () => {
       `const { AGENT_LIMITS } = require(${LIMITS_MODULE_PATH}); console.log(AGENT_LIMITS.MAX_TURNS)`,
     )
     expect(Number(result)).toBe(100)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Edge cases — zero, float, empty, whitespace, overflow
+// ---------------------------------------------------------------------------
+
+describe('AGENT_LIMITS edge-case env handling', () => {
+  it('falls back to default when env is zero', async () => {
+    const result = await spawnWithEnv(
+      { BROWSEROS_LIMIT_MAX_TURNS: '0' },
+      `const { AGENT_LIMITS } = require(${LIMITS_MODULE_PATH}); console.log(AGENT_LIMITS.MAX_TURNS)`,
+    )
+    expect(Number(result)).toBe(100)
+  })
+
+  it('falls back to default when env is a float', async () => {
+    const result = await spawnWithEnv(
+      { BROWSEROS_LIMIT_MAX_TURNS: '1.5' },
+      `const { AGENT_LIMITS } = require(${LIMITS_MODULE_PATH}); console.log(AGENT_LIMITS.MAX_TURNS)`,
+    )
+    expect(Number(result)).toBe(100)
+  })
+
+  it('falls back to default when env is empty string', async () => {
+    const result = await spawnWithEnv(
+      { BROWSEROS_LIMIT_MAX_TURNS: '' },
+      `const { AGENT_LIMITS } = require(${LIMITS_MODULE_PATH}); console.log(AGENT_LIMITS.MAX_TURNS)`,
+    )
+    expect(Number(result)).toBe(100)
+  })
+
+  it('falls back to default when env is whitespace-only', async () => {
+    const result = await spawnWithEnv(
+      { BROWSEROS_LIMIT_MAX_TURNS: '  \t' },
+      `const { AGENT_LIMITS } = require(${LIMITS_MODULE_PATH}); console.log(AGENT_LIMITS.MAX_TURNS)`,
+    )
+    expect(Number(result)).toBe(100)
+  })
+
+  it('falls back to default when env exceeds MAX_SAFE_INTEGER', async () => {
+    const result = await spawnWithEnv(
+      { BROWSEROS_LIMIT_MAX_TURNS: '99999999999999999999' },
+      `const { AGENT_LIMITS } = require(${LIMITS_MODULE_PATH}); console.log(AGENT_LIMITS.MAX_TURNS)`,
+    )
+    expect(Number(result)).toBe(100)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Structural integrity checks
+// ---------------------------------------------------------------------------
+
+describe('AGENT_LIMITS structural checks', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { AGENT_LIMITS } =
+    require('../../src/constants/limits.ts') as typeof import('../../src/constants/limits')
+
+  it('all AGENT_LIMITS values are positive finite numbers', () => {
+    for (const [_key, value] of Object.entries(AGENT_LIMITS)) {
+      expect(typeof value).toBe('number')
+      expect(value).toBeGreaterThan(0)
+      expect(Number.isFinite(value)).toBe(true)
+    }
+  })
+
+  it('all TOOL_LIMITS values are positive finite numbers', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { TOOL_LIMITS } = require('../../src/constants/limits.ts')
+    for (const [_key, value] of Object.entries(TOOL_LIMITS)) {
+      expect(typeof value).toBe('number')
+      expect(value).toBeGreaterThan(0)
+      expect(Number.isFinite(value)).toBe(true)
+    }
   })
 })

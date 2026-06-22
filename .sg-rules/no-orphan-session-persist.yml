@@ -1,0 +1,37 @@
+# SOURCE: coding-guard internal — enforces alongside pattern (persist + render must be paired)
+# SOURCE: https://react.dev/learn/you-might-not-need-an-effect#syncing-data-from-the-system
+# BUILT_ON: https://ast-grep.com/
+id: no-orphan-session-persist
+message: "repo persistence call must be paired with React state update — no orphan persist without render"
+severity: warning
+language: TypeScript
+note: |
+  The session repo uses an "alongside" pattern: repo.appendMessage() should
+  be called next to the React state update (e.g., setTurns()) in the same
+  handler. Persisting without rendering, or rendering without persisting,
+  leads to state/storage drift.
+  
+  This is a soft check — it flags functions that have repo calls without
+  any setState-like call in the same scope.
+rule:
+  any:
+    - pattern: |
+        function $FN($$$) {
+          $$$
+          $REPO.appendMessage($$$)
+          $$$
+        }
+    - pattern: |
+        function $FN($$$) {
+          $$$
+          $REPO.saveCompleteConversation($$$)
+          $$$
+        }
+constraints:
+  FN:
+    regex: 'process.*Event|on.*Event|handle.*Stream|processStream'
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/local-session-repo.ts'

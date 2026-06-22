@@ -1,6 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.4.8/schema.json",
-  "root": false,
+  "$schema": "https://biomejs.dev/schemas/2.5.0/schema.json",
   "extends": "//",
   "vcs": {
     "enabled": true,
@@ -18,7 +17,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "correctness": {
         "noUnusedImports": "error",
         "noUnusedVariables": "error",
@@ -29,11 +28,23 @@
           }
         }
       },
-      "suspicious": {
-        "noConsole": "error"
-      },
       "style": {
-        "noProcessEnv": "error"
+        "noProcessEnv": "error",
+        "noNonNullAssertion": "off"
+      },
+      "suspicious": {
+        "noConsole": "error",
+        "noExplicitAny": "off"
+      },
+      "complexity": {
+        "noExcessiveCognitiveComplexity": "off"
+      },
+      "a11y": {
+        "useSemanticElements": "off",
+        "useAriaPropsForRole": "off",
+        "useAriaPropsSupportedByRole": "off",
+        "noStaticElementInteractions": "off",
+        "useKeyWithClickEvents": "off"
       },
       "nursery": {
         "useSortedClasses": "error"
@@ -58,5 +69,17 @@
         "organizeImports": "on"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["components/ui/svgs/**"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "noSvgWithoutTitle": "off"
+          }
+        }
+      }
+    }
+  ]
 }

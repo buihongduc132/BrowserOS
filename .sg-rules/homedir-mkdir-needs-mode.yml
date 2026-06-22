@@ -1,0 +1,55 @@
+# SOURCE: Incident 2026-05-31: pi-acp-agents mkdirSync on ~/.pi/acp-agents/runtime/
+#   created without explicit mode → root-owned dir persisted from subagent sudo
+#   → EACCES on next session start
+# SOURCE: https://nodejs.org/api/fs.html#fsmkdirsyncpath-options
+#   "mode defaults to 0o777 for new dirs, but recursive mkdirSync does NOT
+#    change permissions on existing dirs."
+#
+# Production code that creates directories under homedir() MUST:
+#   1. Pass explicit mode: mkdirSync(path, { recursive: true, mode: 0o755 })
+#   2. Follow with chmodSync as a guard against root-owned pre-existing dirs
+#   3. (Recommended) statSync + check uid ownership
+#
+# This rule catches mkdirSync calls where:
+#   - Path is join(homedir(), ...) directly inline
+#   - Options do NOT include mode: property
+#
+# This rule is COMMON (Layer 1) and applies to ALL TypeScript siblings.
+# Opt-out: add file path to .sgignore or create a repo-level override.
+id: homedir-mkdir-needs-mode
+language: TypeScript
+message: |
+  mkdirSync on homedir() path without explicit mode — if root pre-created the dir,
+  it stays root-owned 755 (readable but not writable). Add mode: 0o755 and chmodSync guard.
+severity: warning
+note: |
+  Node.js mkdirSync with recursive: true does NOT change permissions on existing
+  directories. If a previous process (e.g. sudo) created the directory as root:root,
+  the dir persists with 755 — readable by all but writable only by root.
+
+  This causes EACCES when the real user tries to write files into it later.
+
+  Fix pattern:
+    mkdirSync(path, { recursive: true, mode: 0o755 });
+    try { chmodSync(path, 0o755); } catch { /* not owner, but dir may be usable */ }
+
+  For the ownership check (stronger):
+    const stat = statSync(path);
+    if (stat.uid !== process.uid) {
+      console.warn(`WARNING: ${path} owned by uid ${stat.uid}, but process runs as ${process.uid}`);
+    }
+
+  This rule matches inline join(homedir(), ...) patterns only.
+  Variable indirection (const base = join(homedir(), ...); mkdirSync(base, ...))
+  is NOT caught — use the mode+chmod pattern proactively in all homedir mkdir code.
+rule:
+  pattern: "mkdirSync(join(homedir(), $$$), { recursive: true })"
+ignores:
+  - '**/*.test.ts'
+  - '**/*.test.tsx'
+  - '**/*.spec.ts'
+  - '**/*.spec.tsx'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/_test/**'

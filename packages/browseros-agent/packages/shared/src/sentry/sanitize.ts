@@ -56,7 +56,6 @@ export function sanitize<T>(obj: T): T {
  * - Extra data
  * - Local variables captured in stack frames
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Sentry event type varies by SDK
 export function sanitizeEvent<E>(event: E): E {
   const e = event as Record<string, any>
 

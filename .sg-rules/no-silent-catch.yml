@@ -1,0 +1,25 @@
+# SOURCE: coding-guard internal — catches silently swallowed promise rejections
+# SOURCE: https://eslint.org/en/latest/rules/no-empty — ESLint no-empty (analog for async)
+# BUILT_ON: https://ast-grep.com/
+id: no-silent-catch
+message: "Silent .catch() swallows errors — log, report, or handle the rejection"
+severity: warning
+language: TypeScript
+note: |
+  Flags .catch() handlers that either do nothing (() => {}), return null,
+  or return an empty object. These silently swallow errors making debugging
+  extremely difficult. At minimum, add a console.error or analytics track.
+rule:
+  any:
+    - pattern: $PROMISE.catch(() => {})
+    - pattern: $PROMISE.catch(() => null)
+    - pattern: $PROMISE.catch(function() {})
+ignores:
+  - '**/*.test.ts'
+  - '**/*.test.tsx'
+  - '**/*.spec.ts'
+  - '**/*.spec.tsx'
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/__tests__/**'
+  - '**/metrics/track.ts'

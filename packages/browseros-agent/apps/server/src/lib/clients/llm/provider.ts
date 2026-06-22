@@ -21,6 +21,7 @@ import { logger } from '../../logger'
 import { createOpenRouterCompatibleFetch } from '../../openrouter-fetch'
 import { createCodexFetch } from '../oauth/codex-fetch'
 import { createCopilotFetch } from '../oauth/copilot-fetch'
+import { createGeminiComputerUseFetch } from './gemini-computer-use-fetch'
 import {
   createMockBrowserOSLanguageModel,
   shouldUseMockBrowserOSLLM,
@@ -41,7 +42,12 @@ function createOpenAIModel(config: ResolvedLLMConfig): LanguageModel {
 
 function createGoogleModel(config: ResolvedLLMConfig): LanguageModel {
   if (!config.apiKey) throw new Error('Google provider requires apiKey')
-  return createGoogleGenerativeAI({ apiKey: config.apiKey })(config.model)
+  const fetch = createGeminiComputerUseFetch(config.model)
+  return createGoogleGenerativeAI({
+    apiKey: config.apiKey,
+    ...(config.baseUrl && { baseURL: config.baseUrl }),
+    ...(fetch && { fetch }),
+  })(config.model)
 }
 
 function createOpenRouterModel(config: ResolvedLLMConfig): LanguageModel {
@@ -152,6 +158,16 @@ function createMoonshotModel(config: ResolvedLLMConfig): LanguageModel {
   })(config.model)
 }
 
+function createMinimaxModel(config: ResolvedLLMConfig): LanguageModel {
+  if (!config.baseUrl) throw new Error('Minimax provider requires baseUrl')
+  if (!config.apiKey) throw new Error('Minimax provider requires apiKey')
+  return createOpenAICompatible({
+    name: 'minimax',
+    baseURL: config.baseUrl,
+    apiKey: config.apiKey,
+  })(config.model)
+}
+
 function createQwenCodeModel(config: ResolvedLLMConfig): LanguageModel {
   if (!config.apiKey) throw new Error('Qwen Code requires OAuth authentication')
   return createOpenAICompatible({
@@ -173,8 +189,7 @@ function createGitHubCopilotModel(config: ResolvedLLMConfig): LanguageModel {
 }
 
 function createChatGPTProModel(config: ResolvedLLMConfig): LanguageModel {
-  if (!config.apiKey)
-    throw new Error('ChatGPT Plus/Pro requires OAuth authentication')
+  if (!config.apiKey) throw new Error('ChatGPT requires OAuth authentication')
   return createOpenAI({
     apiKey: config.apiKey,
     fetch: createCodexFetch(config.accountId) as typeof globalThis.fetch,
@@ -196,6 +211,7 @@ const PROVIDER_FACTORIES: Record<string, ProviderFactory> = {
   [LLM_PROVIDERS.CHATGPT_PRO]: createChatGPTProModel,
   [LLM_PROVIDERS.GITHUB_COPILOT]: createGitHubCopilotModel,
   [LLM_PROVIDERS.QWEN_CODE]: createQwenCodeModel,
+  [LLM_PROVIDERS.MINIMAX]: createMinimaxModel,
 }
 
 export function createLLMProvider(config: ResolvedLLMConfig): LanguageModel {

@@ -1,7 +1,4 @@
-/**
- * Backend-aligned provider types (matches AIProvider enum in backend)
- * @public
- */
+/** AI settings provider config types. Most API-backed values match backend AIProvider. */
 export type ProviderType =
   | 'anthropic'
   | 'openai'
@@ -17,6 +14,16 @@ export type ProviderType =
   | 'chatgpt-pro'
   | 'github-copilot'
   | 'qwen-code'
+  | 'codex'
+  | 'claude-code'
+  | 'acp-custom'
+  | 'remote-hermes'
+
+// Mirror of @browseros/shared/constants/hermes REMOTE_HERMES_PROVIDER_TYPE.
+// Re-declared locally because the agent UI is a WXT/Vite extension and
+// doesn't take a runtime dep on the shared package — keeping a single
+// string literal here avoids scattering 'remote-hermes' across components.
+export const REMOTE_HERMES_PROVIDER_TYPE = 'remote-hermes' as const
 
 /**
  * LLM Provider configuration
@@ -61,8 +68,16 @@ export interface LlmProviderConfig {
   sessionToken?: string
 
   // ChatGPT Pro (Codex) fields
-  reasoningEffort?: 'none' | 'low' | 'medium' | 'high'
+  reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
   reasoningSummary?: 'auto' | 'concise' | 'detailed'
+
+  // ACP-backed providers (claude-code, codex, acp-custom). agent id
+  // resolves through acpx's registry; command is only set for
+  // acp-custom; workspace is the fixed-path cwd picked at provider-
+  // create time.
+  acpAgentId?: string
+  acpCommand?: string
+  acpFixedWorkspacePath?: string
 }
 
 /**

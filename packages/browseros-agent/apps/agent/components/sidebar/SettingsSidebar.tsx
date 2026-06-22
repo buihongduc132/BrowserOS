@@ -4,20 +4,22 @@ import {
   Bot,
   Compass,
   CreditCard,
+  Layers,
   MessageSquare,
   Palette,
   RotateCcw,
-  Search,
   Server,
+  Settings2,
   ShieldAlert,
   ShieldCheck,
+  Terminal,
 } from 'lucide-react'
 import type { FC } from 'react'
 import { NavLink } from 'react-router'
 import { ThemeToggle } from '@/components/elements/theme-toggle'
 import { Feature } from '@/lib/browseros/capabilities'
-import { useCapabilities } from '@/lib/browseros/useCapabilities'
 import { cn } from '@/lib/utils'
+import { useCapabilities } from '@/modules/browseros/capabilities.hooks'
 
 type BaseNavItem = {
   name: string
@@ -62,13 +64,12 @@ const primarySettingsSections: NavSection[] = [
   {
     label: 'Provider Settings',
     items: [
-      { name: 'BrowserOS AI', to: '/settings/ai', icon: Bot },
+      { name: 'AI & Agents', to: '/settings/ai', icon: Bot },
       {
         name: 'Chat & Council Provider',
         to: '/settings/chat',
         icon: MessageSquare,
       },
-      { name: 'Search Provider', to: '/settings/search', icon: Search },
     ],
   },
   {
@@ -78,7 +79,11 @@ const primarySettingsSections: NavSection[] = [
         name: 'Customize BrowserOS',
         to: '/settings/customization',
         icon: Palette,
-        feature: Feature.CUSTOMIZATION_SUPPORT,
+      },
+      {
+        name: 'Reset Data',
+        to: '/settings/reset-data',
+        icon: RotateCcw,
       },
       {
         name: 'Tool Approvals',
@@ -87,6 +92,7 @@ const primarySettingsSections: NavSection[] = [
         feature: Feature.ALPHA_FEATURES_SUPPORT,
       },
       { name: 'BrowserOS as MCP', to: '/settings/mcp', icon: Server },
+      { name: 'ACL Rules', to: '/settings/acl', icon: ShieldAlert },
       {
         name: 'ACL Rules',
         to: '/settings/acl',
@@ -99,6 +105,9 @@ const primarySettingsSections: NavSection[] = [
         icon: CreditCard,
         feature: Feature.CREDITS_SUPPORT,
       },
+      { name: 'Advanced Config', to: '/settings/advanced', icon: Settings2 },
+      { name: 'Compaction', to: '/settings/compaction', icon: Layers },
+      { name: 'Commands', to: '/settings/commands', icon: Terminal },
     ],
   },
 ]

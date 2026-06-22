@@ -1038,14 +1038,14 @@ interface SpeechRecognition extends EventTarget {
   lang: string
   start(): void
   stop(): void
-  // biome-ignore lint/suspicious/noExplicitAny: this is needed for shadcn
   onstart: ((this: SpeechRecognition, ev: Event) => any) | null
-  // biome-ignore lint/suspicious/noExplicitAny: this is needed for shadcn
   onend: ((this: SpeechRecognition, ev: Event) => any) | null
-  onresult: // biome-ignore lint/suspicious/noExplicitAny: this is needed for shadcn
-  ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => any) | null
-  onerror: // biome-ignore lint/suspicious/noExplicitAny: this is needed for shadcn
-  ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => any) | null
+  onresult:
+    | ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => any)
+    | null
+  onerror:
+    | ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => any)
+    | null
 }
 
 interface SpeechRecognitionEvent extends Event {

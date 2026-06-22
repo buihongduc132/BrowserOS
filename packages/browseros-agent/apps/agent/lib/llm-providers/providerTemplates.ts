@@ -1,4 +1,5 @@
 import { getModelsDevProvider } from './models-dev'
+import { CHATGPT_PROVIDER_DISPLAY_NAME } from './provider-display-names'
 import type { ProviderType } from './types'
 
 /**
@@ -46,12 +47,20 @@ function enrichTemplate(
  */
 export const providerTemplates: ProviderTemplate[] = [
   {
+    id: 'remote-hermes',
+    name: 'Remote Hermes',
+    defaultBaseUrl: '',
+    defaultModelId: 'default',
+    supportsImages: false,
+    contextWindow: 200000,
+  },
+  {
     id: 'chatgpt-pro',
-    name: 'ChatGPT Plus/Pro',
+    name: CHATGPT_PROVIDER_DISPLAY_NAME,
     defaultBaseUrl: 'https://chatgpt.com/backend-api',
-    defaultModelId: 'gpt-5.3-codex',
+    defaultModelId: 'gpt-5.5',
     supportsImages: true,
-    contextWindow: 400000,
+    contextWindow: 1050000,
     setupGuideUrl: 'https://docs.browseros.com/features/chatgpt-pro-oauth',
   },
   {
@@ -140,16 +149,42 @@ export const providerTemplates: ProviderTemplate[] = [
     setupGuideUrl:
       'https://docs.aws.amazon.com/bedrock/latest/userguide/getting-started.html',
   }),
+  enrichTemplate('minimax', {
+    defaultModelId: 'MiniMax-M2.7',
+    apiKeyUrl:
+      'https://platform.minimax.io/user-center/basic-information/interface-key',
+    setupGuideUrl: 'https://platform.minimax.io/docs/guides/models-intro',
+  }),
 ]
+
+export const MINIMAX_REGIONS = {
+  chinese: {
+    api: 'https://api.minimaxi.com/v1',
+    apiKeyUrl:
+      'https://platform.minimaxi.com/user-center/basic-information/interface-key',
+    setupGuideUrl: 'https://platform.minimaxi.com/document',
+  },
+  international: {
+    api: 'https://api.minimax.io/v1',
+    apiKeyUrl:
+      'https://platform.minimax.io/user-center/basic-information/interface-key',
+    setupGuideUrl: 'https://platform.minimax.io/docs/guides/models-intro',
+  },
+} as const
+
+export type MinimaxRegion = keyof typeof MINIMAX_REGIONS
 
 /**
  * Provider type options for select dropdowns
  * @public
  */
 export const providerTypeOptions: { value: ProviderType; label: string }[] = [
-  { value: 'chatgpt-pro', label: 'ChatGPT Plus/Pro' },
+  { value: 'remote-hermes', label: 'Remote Hermes' },
+  { value: 'chatgpt-pro', label: CHATGPT_PROVIDER_DISPLAY_NAME },
   { value: 'github-copilot', label: 'GitHub Copilot' },
   { value: 'qwen-code', label: 'Qwen Code' },
+  { value: 'codex', label: 'Codex' },
+  { value: 'claude-code', label: 'Claude Code' },
   { value: 'moonshot', label: 'Moonshot AI' },
   { value: 'anthropic', label: 'Anthropic' },
   { value: 'openai', label: 'OpenAI' },
@@ -161,6 +196,7 @@ export const providerTypeOptions: { value: ProviderType; label: string }[] = [
   { value: 'lmstudio', label: 'LM Studio' },
   { value: 'bedrock', label: 'AWS Bedrock' },
   { value: 'browseros', label: 'BrowserOS' },
+  { value: 'minimax', label: 'MiniMax' },
 ]
 
 /**
@@ -177,10 +213,14 @@ export const getProviderTemplate = (
  * Default base URLs for each provider type
  * Auto-fills when user selects a provider type
  */
-export const DEFAULT_BASE_URLS: Record<ProviderType, string> = {
+const DEFAULT_BASE_URLS: Record<ProviderType, string> = {
+  'remote-hermes': '',
   'chatgpt-pro': 'https://chatgpt.com/backend-api',
   'github-copilot': 'https://api.githubcopilot.com',
   'qwen-code': 'https://portal.qwen.ai/v1',
+  codex: '',
+  'claude-code': '',
+  'acp-custom': '',
   moonshot: 'https://api.moonshot.ai/v1',
   anthropic: 'https://api.anthropic.com/v1',
   openai: 'https://api.openai.com/v1',
@@ -192,6 +232,7 @@ export const DEFAULT_BASE_URLS: Record<ProviderType, string> = {
   lmstudio: 'http://localhost:1234/v1',
   bedrock: '',
   browseros: '',
+  minimax: MINIMAX_REGIONS.chinese.api,
 }
 
 /**

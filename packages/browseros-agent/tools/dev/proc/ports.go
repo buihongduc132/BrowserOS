@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"time"
 )
 
@@ -27,7 +28,8 @@ const (
 	randomPortMax = 9999
 )
 
-var defaultLocalPorts = Ports{CDP: 9000, Server: 9100, Extension: 9300}
+// These MUST match scripts/ports.sh DEV_*_PORT values. Single source of truth.
+var defaultLocalPorts = Ports{CDP: 9010, Server: 9011, Extension: 9012}
 
 func DefaultLocalPorts() Ports {
 	return defaultLocalPorts
@@ -130,7 +132,11 @@ func (r *PortReservations) ReleaseAll() {
 }
 
 func KillPort(port int) {
-	exec.Command("sh", "-c", fmt.Sprintf("lsof -ti:%d | xargs kill -9 2>/dev/null || true", port)).Run()
+	if runtime.GOOS == "linux" {
+		exec.Command("sh", "-c", fmt.Sprintf("fuser -k %d/tcp 2>/dev/null || true", port)).Run()
+	} else {
+		exec.Command("sh", "-c", fmt.Sprintf("lsof -ti:%d | xargs kill -9 2>/dev/null || true", port)).Run()
+	}
 }
 
 func KillPortAndWait(port int, timeout time.Duration) error {
@@ -162,7 +168,6 @@ func BuildEnv(p Ports, nodeEnv string) []string {
 		fmt.Sprintf("BROWSEROS_CDP_PORT=%d", p.CDP),
 		fmt.Sprintf("BROWSEROS_SERVER_PORT=%d", p.Server),
 		fmt.Sprintf("BROWSEROS_EXTENSION_PORT=%d", p.Extension),
-		fmt.Sprintf("VITE_BROWSEROS_SERVER_PORT=%d", p.Server),
 		fmt.Sprintf("NODE_ENV=%s", nodeEnv),
 	)
 	return env

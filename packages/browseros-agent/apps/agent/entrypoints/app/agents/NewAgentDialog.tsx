@@ -1,4 +1,4 @@
-import { AlertCircle, Loader2 } from 'lucide-react'
+import { AlertCircle, CheckCircle, Loader2, TriangleAlert } from 'lucide-react'
 import type { FC } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -23,19 +23,37 @@ import type {
   HarnessAgentAdapter,
 } from './agent-harness-types'
 import type { CreateAgentRuntime, ProviderOption } from './agents-page-types'
-import { ProviderSelector } from './OpenClawControls'
-import {
-  type OpenClawCliProvider,
-  type OpenClawCliProviderAuthStatus,
-  OpenClawCliProviderStatusPanel,
-} from './openclaw-cli-providers'
+import { ProviderSelector } from './ProviderSelector'
+
+/** Probe result badge — extracted to reduce parent complexity */
+const ProbeResultBadge: FC<{
+  result: { healthy: boolean; error?: string } | null
+}> = ({ result: _result }) => {
+  if (!_result) return null
+  if (_result.healthy) {
+    return (
+      <span className="flex items-center gap-1 text-green-600 text-sm">
+        <CheckCircle className="size-4" /> ACP ready
+      </span>
+    )
+  }
+  return (
+    <span className="flex items-center gap-1 text-sm text-yellow-600">
+      <TriangleAlert className="size-4" /> {_result.error ?? 'Probe failed'}
+    </span>
+  )
+}
 
 interface NewAgentDialogProps {
   adapters: HarnessAdapterDescriptor[]
-  canManageOpenClaw: boolean
   createError: string | null
   createRuntime: CreateAgentRuntime
   creating: boolean
+  customCommand?: string
+  customArgs?: string
+  customLabel?: string
+  customProbeResult?: { healthy: boolean; error?: string } | null
+  customProbeLoading?: boolean
   defaultProviderId: string
   harnessAdapterId: HarnessAgentAdapter
   harnessModelId: string
@@ -44,13 +62,6 @@ interface NewAgentDialogProps {
   hermesSelectedProviderId: string
   name: string
   open: boolean
-  providers: ProviderOption[]
-  selectedCliProvider: OpenClawCliProvider | undefined
-  selectedProviderId: string
-  cliAuthError: Error | null
-  cliAuthLoading: boolean
-  cliAuthStatus: OpenClawCliProviderAuthStatus | undefined
-  onConnectCliProvider: () => void
   onCreate: () => void
   onOpenChange: (open: boolean) => void
   onRuntimeChange: (runtime: CreateAgentRuntime) => void
@@ -60,14 +71,23 @@ interface NewAgentDialogProps {
   onHermesProviderChange: (providerId: string) => void
   onNameChange: (name: string) => void
   onProviderChange: (providerId: string) => void
+  onCustomCommandChange?: (command: string) => void
+  onCustomArgsChange?: (args: string) => void
+  onCustomLabelChange?: (label: string) => void
+  onProbeCustom?: () => void
+  onImportAcpx?: () => void
 }
 
 export const NewAgentDialog: FC<NewAgentDialogProps> = ({
   adapters,
-  canManageOpenClaw,
   createError,
   createRuntime,
   creating,
+  customCommand = '',
+  customArgs = '',
+  customLabel = '',
+  customProbeResult = null,
+  customProbeLoading = false,
   defaultProviderId,
   harnessAdapterId,
   harnessModelId,
@@ -76,13 +96,6 @@ export const NewAgentDialog: FC<NewAgentDialogProps> = ({
   hermesSelectedProviderId,
   name,
   open,
-  providers,
-  selectedCliProvider,
-  selectedProviderId,
-  cliAuthError,
-  cliAuthLoading,
-  cliAuthStatus,
-  onConnectCliProvider,
   onCreate,
   onOpenChange,
   onRuntimeChange,
@@ -91,30 +104,38 @@ export const NewAgentDialog: FC<NewAgentDialogProps> = ({
   onHarnessReasoningChange,
   onHermesProviderChange,
   onNameChange,
-  onProviderChange,
+  onProviderChange: _onProviderChange,
+  onCustomCommandChange = () => {},
+  onCustomArgsChange = () => {},
+  onCustomLabelChange: _onCustomLabelChange = () => {},
+  onProbeCustom = () => {},
+  onImportAcpx = () => {},
 }) => {
   const selectedHarnessAdapter =
     adapters.find((adapter) => adapter.id === harnessAdapterId) ?? adapters[0]
-  const isHarnessRuntime = createRuntime !== 'openclaw'
   const isHermesRuntime = createRuntime === 'hermes'
-  const isClassicHarnessRuntime = isHarnessRuntime && !isHermesRuntime
-  const openClawBlocked = createRuntime === 'openclaw' && !canManageOpenClaw
-  const cliBlocked =
+  const isCustomRuntime = createRuntime === 'custom'
+  const isClassicHarnessRuntime =
+    isHarnessRuntime && !isHermesRuntime && !isCustomRuntime
+  const _openClawBlocked = createRuntime === 'openclaw' && !canManageOpenClaw
+  const _cliBlocked =
     createRuntime === 'openclaw' &&
     !!selectedCliProvider &&
     !cliAuthStatus?.loggedIn
   const hermesBlocked =
     isHermesRuntime &&
     (hermesProviders.length === 0 || !hermesSelectedProviderId)
+  const customBlocked = isCustomRuntime && !customCommand.trim()
   const canCreate =
     Boolean(name.trim()) &&
     !creating &&
-    !openClawBlocked &&
-    !cliBlocked &&
     !hermesBlocked &&
+    !customBlocked &&
     (createRuntime === 'openclaw'
       ? providers.length > 0
-      : Boolean(selectedHarnessAdapter))
+      : createRuntime === 'custom'
+        ? customCommand.trim().length > 0
+        : Boolean(selectedHarnessAdapter))
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -138,9 +159,7 @@ export const NewAgentDialog: FC<NewAgentDialogProps> = ({
               id="agent-name"
               value={name}
               onChange={(event) => onNameChange(event.target.value)}
-              placeholder={
-                createRuntime === 'openclaw' ? 'research-agent' : 'Review bot'
-              }
+              placeholder="Review bot"
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && canCreate) onCreate()
               }}
@@ -153,13 +172,13 @@ export const NewAgentDialog: FC<NewAgentDialogProps> = ({
               value={createRuntime}
               onValueChange={(value) => {
                 if (
-                  value === 'openclaw' ||
                   value === 'claude' ||
                   value === 'codex' ||
-                  value === 'hermes'
+                  value === 'hermes' ||
+                  value === 'custom'
                 ) {
                   onRuntimeChange(value)
-                  if (value !== 'openclaw') onHarnessAdapterChange(value)
+                  onHarnessAdapterChange(value)
                 }
               }}
             >
@@ -175,39 +194,6 @@ export const NewAgentDialog: FC<NewAgentDialogProps> = ({
               </SelectContent>
             </Select>
           </div>
-
-          {createRuntime === 'openclaw' ? (
-            <>
-              {openClawBlocked ? (
-                <Alert>
-                  <AlertCircle className="size-4" />
-                  <AlertTitle>OpenClaw is not ready</AlertTitle>
-                  <AlertDescription>
-                    Start or set up the OpenClaw gateway before creating an
-                    OpenClaw agent.
-                  </AlertDescription>
-                </Alert>
-              ) : null}
-
-              <ProviderSelector
-                providers={providers}
-                defaultProviderId={defaultProviderId}
-                selectedId={selectedProviderId}
-                onSelect={onProviderChange}
-                hideApiKeyHint={!!selectedCliProvider}
-              />
-
-              {selectedCliProvider ? (
-                <OpenClawCliProviderStatusPanel
-                  provider={selectedCliProvider}
-                  status={cliAuthStatus}
-                  loading={cliAuthLoading}
-                  fetchError={cliAuthError}
-                  onConnect={onConnectCliProvider}
-                />
-              ) : null}
-            </>
-          ) : null}
 
           {isHermesRuntime ? (
             <ProviderSelector
@@ -258,6 +244,66 @@ export const NewAgentDialog: FC<NewAgentDialogProps> = ({
                     )}
                   </SelectContent>
                 </Select>
+              </div>
+            </>
+          ) : null}
+
+          {isCustomRuntime ? (
+            <>
+              <div className="grid gap-2">
+                <Label htmlFor="custom-command">Command</Label>
+                <Input
+                  id="custom-command"
+                  value={customCommand}
+                  onChange={(event) =>
+                    onCustomCommandChange(event.target.value)
+                  }
+                  placeholder="e.g., gemini, ./bin/my-acp, npx opencode-ai acp"
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && canCreate) onCreate()
+                  }}
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="custom-args">Args</Label>
+                <Input
+                  id="custom-args"
+                  value={customArgs}
+                  onChange={(event) => onCustomArgsChange(event.target.value)}
+                  placeholder="--acp, --profile ci"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="custom-label">Display Name</Label>
+                <Input
+                  id="custom-label"
+                  value={customLabel}
+                  onChange={(event) => onCustomLabelChange(event.target.value)}
+                  placeholder="Optional label shown in the agent rail"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onProbeCustom}
+                  disabled={customProbeLoading || !customCommand.trim()}
+                >
+                  {customProbeLoading ? (
+                    <Loader2 className="mr-1 size-3 animate-spin" />
+                  ) : null}
+                  TEST
+                </Button>
+                <ProbeResultBadge result={customProbeResult} />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={onImportAcpx}>
+                  Import from acpx
+                </Button>
               </div>
             </>
           ) : null}

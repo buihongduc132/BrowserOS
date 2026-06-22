@@ -92,7 +92,6 @@ export const MemoryViewer: FC = () => {
   }
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: mouseEnter for background refetch
     <div
       className="rounded-xl border border-border bg-card shadow-sm"
       onMouseEnter={() => {

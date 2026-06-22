@@ -1,0 +1,36 @@
+# SOURCE: coding-guard internal — codified from verifier loop Round 1-3 reject
+# SOURCE: PR #18/#19 — memStore.close/has/get called with wrong arg count
+# BUILT_ON: https://ast-grep.com/
+id: no-single-arg-session-store-call
+message: "AgentSessionStore methods (close, has, get) require (agentId, sessionId) — single-arg call breaks composite key"
+severity: error
+language: TypeScript
+note: |
+  After PR #18, AgentSessionStore.close(), .has(), .get() all take two
+  arguments: (agentId, sessionId). Passing only sessionId causes the
+  composite key to be "undefined::<sessionId>" which never matches an
+  existing session — sessions leak permanently.
+
+  This was the #1 verifier reject across 3 rounds: the service file used
+  memStore.close(sessionId) instead of memStore.close(agentId, sessionId).
+
+  If calling from a context where only sessionId is available, look up
+  the agentId from the session metadata first.
+rule:
+  any:
+    - pattern: |
+        $STORE.close($SESSION_ID)
+    - pattern: |
+        $STORE.has($SESSION_ID)
+    - pattern: |
+        $STORE.get($SESSION_ID)
+constraints:
+  STORE:
+    regex: 'memStore|sessionStore|agentSessionStore'
+  SESSION_ID:
+    regex: '^(sessionId|session\.id|id)$'
+ignores:
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
+  - '**/test/**'
+  - '**/tests/**'

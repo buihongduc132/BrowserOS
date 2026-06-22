@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# restart-dev — Kill, rebuild, restart BrowserOS dev instance
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "${SCRIPT_DIR}/../../../scripts/ports.sh"
+
+echo "[restart-dev] Killing dev (ports ${DEV_CDP_PORT}/${DEV_SERVER_PORT}/${DEV_EXTENSION_PORT})..."
+mise run browseros:kill-dev
+mise run browseros:start-dev
